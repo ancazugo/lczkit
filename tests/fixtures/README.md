@@ -1,6 +1,17 @@
 # Test fixtures
 
-Empty in Phase 0. This directory will hold a small (~3x3 km), CI-committable Overture extract
-and clipped land-cover raster for a DFC2017 city, built once `OvertureSource` and the raster
-pipeline exist to construct and validate it (Phase 1 / Phase 4), so ground-truth LCZ polygons
-are available for validation. See CLAUDE.md's "Test strategy" section.
+## `overture/`
+
+A real ~3x3 km Overture extract for central Berlin (Mitte — spans the Spree river, Museum
+Island, and Alexanderplatz), release `2026-07-22.0`, built by `scripts/build_overture_fixture.py`.
+Four raw, uncleaned, EPSG:4326 GeoParquet layers: `buildings.parquet`, `streets.parquet`,
+`waterlines.parquet`, `waterbodies.parquet`. Re-run that script to refresh the fixture (e.g.
+against a newer release).
+
+This bbox has **not** been cross-checked against official DFC2017 tile boundaries — it was
+chosen as a real, feature-dense Berlin extract sufficient for Phase 1's cleaning-pipeline
+tests. Phase 6 (validation against the Demuzere global LCZ map / DFC2017 ground truth) should
+confirm alignment before relying on it for accuracy reporting, not just structural testing.
+
+Land-cover raster fixture is still deferred to Phase 4. See CLAUDE.md's "Test strategy"
+section.
