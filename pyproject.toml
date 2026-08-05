@@ -6,7 +6,11 @@ readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
 dependencies = [
+    "duckdb>=1.5.5",
     "geopandas>=1.1.4",
+    "geoplanar>=0.6.0",
+    "neatnet>=0.1.6",
+    "pyarrow>=25.0.0",
     "pydantic>=2.13.4",
     "python-dotenv>=1.2.2",
 ]
@@ -30,6 +34,12 @@ python_version = "3.12"
 mypy_path = "src"
 strict = true
 warn_unused_ignores = true
+
+# Neither package ships type stubs or a py.typed marker, and no types-* stub package exists
+# for either on PyPI.
+[[tool.mypy.overrides]]
+module = ["geoplanar", "neatnet"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -20,6 +20,45 @@ def _default_run_id() -> str:
     return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
 
 
+class OvertureConfig(BaseModel):
+    """Configuration for `OvertureSource` (Phase 1)."""
+
+    release: str | None = None
+    """Pinned Overture release string, e.g. "2026-07-22.0". Never "latest" — `OvertureSource`
+    raises if this is unset."""
+
+    source_dir_name: str = "Overture_Maps"
+    """Name of the subdirectory under `input/` that `OvertureSource` caches into. Matches the
+    directory already used by other projects sharing `DATA_DIR`, not CLAUDE.md's diagram
+    spelling ("Overture")."""
+
+
+class CleaningConfig(BaseModel):
+    """Configurable thresholds for the Phase 1 building-cleaning pipeline.
+
+    None of these have a literature-derived default — Majer & Fleischmann (arXiv:2603.00132)
+    Supplementary D, the paper CLAUDE.md names as the cleaning spec, describes the
+    corresponding operations only qualitatively. They are left unset here; the cleaning
+    pipeline raises if used before being explicitly configured.
+    """
+
+    building_max_area_m2: float | None = None
+    """Footprints larger than this are dropped as implausible."""
+
+    building_min_area_m2: float | None = None
+    """Footprints smaller than this are absorbed into a touching larger neighbour, or dropped
+    if they touch nothing."""
+
+    building_merge_limit_m2: float | None = None
+    """`geoplanar.merge_overlaps`' `merge_limit` — overlapping polygons smaller than this are
+    merged into a neighbour regardless of overlap size."""
+
+    building_overlap_limit: float | None = None
+    """`geoplanar.merge_overlaps`' `overlap_limit` (0-1 ratio) — polygons larger than
+    `building_merge_limit_m2` are merged only if the shared overlap exceeds this fraction of
+    their area."""
+
+
 class Settings(BaseModel):
     """Resolved configuration for a single lczkit run.
 
@@ -29,6 +68,8 @@ class Settings(BaseModel):
 
     data_dir: Path
     run_id: str = Field(default_factory=_default_run_id)
+    overture: OvertureConfig = Field(default_factory=OvertureConfig)
+    cleaning: CleaningConfig = Field(default_factory=CleaningConfig)
 
     @field_validator("data_dir")
     @classmethod
