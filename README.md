@@ -15,7 +15,15 @@ See `CLAUDE.md` for the full project specification and phase plan.
 ## Status
 
 Phase 0 (skeleton) — project layout, the five pluggable-source `Protocol`s, the CRS
-enforcement helper, and the `Settings` config model. No data pipeline exists yet.
+enforcement helper, and the `Settings` config model.
+
+Phase 1 (vector ingestion and cleaning) — `OvertureSource` (DuckDB-backed, reading
+bbox-filtered GeoParquet from Overture's S3), the building-cleaning pipeline (invalid-geometry
+repair, multipolygon explosion, oversized-footprint and non-polygon removal, overlap
+resolution and small-building absorption via `geoplanar`), street simplification via
+`neatnet`, cross-layer topology cleanup, and a structured cleaning report.
+
+No spatial-unit generation, height cascade, land cover, or classification exists yet.
 
 ## Setup
 
