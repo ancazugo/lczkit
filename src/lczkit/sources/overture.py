@@ -1,6 +1,6 @@
 """`VectorSource` backed by DuckDB spatial+httpfs reads of Overture's S3 GeoParquet.
 
-Cached locally, keyed on `(release, bbox, theme)`, under
+Cached locally, keyed on `(release, bbox, layer)`, under
 `settings.source_dir(settings.overture.source_dir_name)`. A cache hit never touches DuckDB or
 the network — the file being present on disk *is* the cache.
 """
@@ -32,7 +32,7 @@ def bbox_key(bbox: BBox) -> str:
 
 
 class OvertureSource:
-    """Reads `buildings`, `streets`, and `water` layers from a pinned Overture release."""
+    """Reads `buildings`, `streets`, `rail`, and `water` layers from a pinned Overture release."""
 
     def __init__(self, settings: Settings) -> None:
         release = settings.overture.release
@@ -51,6 +51,7 @@ class OvertureSource:
         """Building footprints intersecting `bbox`. Columns: `id`, `height`, `num_floors`,
         `sources`."""
         return self._read_theme(
+            layer="buildings",
             theme="buildings",
             type_="building",
             bbox=bbox,
@@ -62,11 +63,25 @@ class OvertureSource:
         """Road segments intersecting `bbox`: `subtype = 'road'`, excluding `class =
         'service'`."""
         return self._read_theme(
+            layer="streets",
             theme="transportation",
             type_="segment",
             bbox=bbox,
             columns="id, subtype, class",
             where="subtype = 'road' AND class IS DISTINCT FROM 'service'",
+        )
+
+    def rail(self, bbox: BBox) -> gpd.GeoDataFrame:
+        """Rail segments intersecting `bbox`: `subtype = 'rail'`, no `class` filter — CLAUDE.md
+        names rail as a barrier type for Phase 2's `EnclosureUnits` but does not describe any
+        sub-filtering of it, unlike streets' `class != 'service'`."""
+        return self._read_theme(
+            layer="rail",
+            theme="transportation",
+            type_="segment",
+            bbox=bbox,
+            columns="id, subtype, class",
+            where="subtype = 'rail'",
         )
 
     def water(self, bbox: BBox) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
@@ -79,6 +94,7 @@ class OvertureSource:
         """
         excluded = ", ".join(f"'{subtype}'" for subtype in _WATER_EXCLUDED_SUBTYPES)
         gdf = self._read_theme(
+            layer="water",
             theme="base",
             type_="water",
             bbox=bbox,
@@ -95,13 +111,17 @@ class OvertureSource:
         )
         return waterlines, waterbodies
 
-    def _cache_path(self, theme: str, type_: str, bbox: BBox) -> Path:
-        return self._cache_dir / self._release / bbox_key(bbox) / f"{theme}_{type_}.parquet"
+    def _cache_path(self, layer: str, bbox: BBox) -> Path:
+        return self._cache_dir / self._release / bbox_key(bbox) / f"{layer}.parquet"
 
     def _read_theme(
-        self, *, theme: str, type_: str, bbox: BBox, columns: str, where: str
+        self, *, layer: str, theme: str, type_: str, bbox: BBox, columns: str, where: str
     ) -> gpd.GeoDataFrame:
-        cache_path = self._cache_path(theme, type_, bbox)
+        """`layer` names the cache file; `theme`/`type_` select the Overture S3 partition to
+        query. They diverge for `streets`/`rail`, which both read `transportation/segment` —
+        keying the cache on `(theme, type_)` alone would let the two silently overwrite each
+        other's cached file."""
+        cache_path = self._cache_path(layer, bbox)
         if cache_path.exists():
             gdf = gpd.read_parquet(cache_path)
             if not isinstance(gdf, gpd.GeoDataFrame):

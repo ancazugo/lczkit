@@ -41,6 +41,7 @@ class FixtureVectorSource:
     def __init__(self) -> None:
         self._buildings = gpd.read_parquet(FIXTURES_DIR / "buildings.parquet")
         self._streets = gpd.read_parquet(FIXTURES_DIR / "streets.parquet")
+        self._rail = gpd.read_parquet(FIXTURES_DIR / "rail.parquet")
         self._waterlines = gpd.read_parquet(FIXTURES_DIR / "waterlines.parquet")
         self._waterbodies = gpd.read_parquet(FIXTURES_DIR / "waterbodies.parquet")
 
@@ -51,6 +52,10 @@ class FixtureVectorSource:
     def streets(self, bbox: BBox) -> gpd.GeoDataFrame:
         minx, miny, maxx, maxy = bbox
         return self._streets.cx[minx:maxx, miny:maxy].reset_index(drop=True)
+
+    def rail(self, bbox: BBox) -> gpd.GeoDataFrame:
+        minx, miny, maxx, maxy = bbox
+        return self._rail.cx[minx:maxx, miny:maxy].reset_index(drop=True)
 
     def water(self, bbox: BBox) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
         minx, miny, maxx, maxy = bbox

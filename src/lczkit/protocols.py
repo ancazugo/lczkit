@@ -46,6 +46,14 @@ class VectorSource(Protocol):
         """
         ...
 
+    def rail(self, bbox: BBox) -> gpd.GeoDataFrame:
+        """Return rail-network segments intersecting `bbox`, as LineStrings.
+
+        Added in Phase 2: `EnclosureUnits` needs rail as a barrier layer alongside streets and
+        waterbodies, and Phase 1 never had a reason to fetch it.
+        """
+        ...
+
 
 class HeightSource(Protocol):
     """One tier of the building-height cascade.

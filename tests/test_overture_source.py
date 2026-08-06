@@ -49,7 +49,7 @@ def test_cache_hit_never_touches_network(tmp_path: Path, monkeypatch: pytest.Mon
         geometry=[box(0, 0, 1, 1)],
         crs="EPSG:4326",
     )
-    cache_path = source._cache_path("buildings", "building", bbox)
+    cache_path = source._cache_path("buildings", bbox)
     cache_path.parent.mkdir(parents=True)
     cached.to_parquet(cache_path)
 
@@ -61,6 +61,24 @@ def test_cache_hit_never_touches_network(tmp_path: Path, monkeypatch: pytest.Mon
     result = source.buildings(bbox)
 
     assert list(result["id"]) == ["a"]
+
+
+def test_streets_and_rail_cache_to_distinct_files(tmp_path: Path) -> None:
+    """`streets()` and `rail()` both read `theme=transportation/type=segment`; the cache must
+    key on more than `(theme, type_)` or one silently overwrites the other's cached file."""
+    source = OvertureSource(_settings(tmp_path))
+    bbox: BBox = (13.39, 52.50, 13.41, 52.51)
+
+    assert source._cache_path("streets", bbox) != source._cache_path("rail", bbox)
+
+
+@pytest.mark.network
+def test_rail_only_returns_rail_subtype(tmp_path: Path) -> None:
+    source = OvertureSource(_settings(tmp_path))
+
+    rail = source.rail(SMALL_BBOX)
+
+    assert (rail["subtype"] == "rail").all()
 
 
 @pytest.mark.network
