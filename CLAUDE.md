@@ -170,8 +170,19 @@ The pydantic config model is the main deliverable here. It must: load `.env` via
 `python-dotenv`, resolve and validate `DATA_DIR`, expose `input_dir`, `output_dir`,
 `source_dir(name)` and the resolved `run_dir`, create `output/lczkit/<run_id>/` if absent, and
 fail with a clear message if `DATA_DIR` is unset or unreachable. It must **not** create or
-modify anything under `input/`. Add `.env` and `docs/references/` to `.gitignore`; commit a
-`.env.example`.
+modify anything under `input/`. Commit a `.env.example`.
+
+`.gitignore` must ignore **PDFs, not the references directory**. Copyrighted PDFs stay out;
+`docs/references/README.md`, `references.bib` and **everything in `docs/references/tables/`**
+are committed. The transcribed tables are the authority for numeric lookups — a checkout
+without them is a checkout that cannot reproduce a classification.
+
+```gitignore
+.env
+docs/references/**/*.pdf
+docs/references/datasets/
+!docs/references/tables/
+```
 
 *Acceptance:* `pytest` runs green on an empty test suite with no `DATA_DIR` set; CI passes on a
 clean checkout; protocols import cleanly; config round-trips to and from JSON; config raises a
@@ -319,11 +330,20 @@ MVP datasets: ESA WorldCover v200 (pervious / impervious / water) and ETH 10 m c
 ### Phase 5 — Urban canopy parameters (~5 days)
 
 From momepy:
-- building surface fraction (coverage area ratio)
 - aspect ratio and street openness via `momepy.street_profile()` with heights attached
 
-Computed here:
-- height of roughness elements — area-weighted mean and standard deviation of building height
+Computed here (momepy 1.0 has no functional equivalent for these):
+- **building surface fraction** — from a building/unit overlay, not `momepy.AreaRatio`, which
+  was class-API and is gone in 1.0. The overlay is required regardless, to match the building
+  splitting rule established in Phase 3.
+- **`Hr`, height of roughness elements — the GEOMETRIC mean of building heights**, per Stewart
+  & Oke and Bernard et al. (2024) Table 1. **Not** the area-weighted arithmetic mean. The two
+  diverge materially in units mixing tall and short buildings, and the Stewart & Oke ranges
+  that Phase 6 normalises against were defined for the geometric mean — using the arithmetic
+  mean would introduce a systematic, silent bias precisely in heterogeneous units. Floor
+  heights at a small positive value before taking logs.
+- `h_mean_area_weighted` and `h_std` as **secondary** columns. They are not `Hr` and must not be
+  used for classification, but the deferred roughness work (Macdonald, Kanda) needs them.
 - pervious / impervious / tree fractions from Phase 4
 - building count, mean building area
 - terrain roughness class from the Davenport lookup
@@ -334,6 +354,14 @@ Computed here:
   separates a distribution warehouse from a refinery. Without it LCZ 10 is unreachable and the
   package will silently never emit it. Combine the two evidence sources with a documented rule
   and record which contributed.
+
+  **Known limitation, must be documented in the field docs and the manifest:** Overture exposes
+  a single `industrial` value, with no heavy/light split. GeoClimate keys LCZ 10 on OSM's
+  `HEAVY INDUSTRY` against light industry and commercial; that distinction does not survive
+  Overture's schema normalisation. A light-industrial estate and a refinery are therefore
+  indistinguishable here. This is the cost of Overture's normalised enums — the same
+  normalisation that removes the need for a tag-mapping table also discards semantic detail
+  OSM carried. `warehouse` stays excluded; it is an LCZ 8 example.
 
 **Sky view factor is explicitly deferred.** It is the single most expensive component and is
 strongly correlated with aspect ratio, which we have. Document this omission prominently in
@@ -352,12 +380,47 @@ prototypes, return the **full 17-way distance vector** plus `lcz_primary`, `lcz_
 and a `uniqueness` measure. Hard labelling is a downstream convenience function — the
 distance vector is the primary output.
 
+**Per-parameter weights are config, not assumptions.** The metric must accept a weight vector.
+Ship two presets and make the active one appear in the manifest:
+- `bernard2024` (default) — the published defaults: SVF 4, H/W 3, `FB` 8, `FI` 0, `FP` 0,
+  `Hr` 6, z₀ 0.5. Note that impervious and pervious fractions carry **zero** weight, on the
+  stated grounds that they are secondary and usually inaccurate in urban areas.
+- `equal` — uniform weights, for comparison.
+
+**Before adopting `bernard2024`, check how the natural classes (A–G) are classified in the
+paper.** Zero weight on `FI`/`FP` cannot plausibly apply to the vegetated and water types,
+which are defined almost entirely by land cover — so either the weights apply only to the built
+classes, or the natural types are handled by a separate branch. Resolve this from the paper and
+record the answer; do not infer it. If it turns out the weights apply globally, say so loudly,
+because it would mean Phase 4's entire raster pipeline is near-decorative for classification,
+and that is a finding worth surfacing rather than burying.
+
+**Null parameter policy.** Some units legitimately have null parameters — `aspect_ratio` is null
+wherever no street reaches a building, which occurs in a small but nonzero share of units.
+Handle by **weighted partial distance**: sum over available parameters only, renormalising by
+the sum of their weights, so units are compared on a common scale. Do not impute, and do not
+drop the unit. Record per unit: `n_params_used`, and the names of the missing parameters. Units
+falling below a configurable minimum parameter count are labelled but flagged low-confidence via
+`uniqueness`. This policy is shared with the LCZ 10 rule below and with validation.
+
 **LCZ 10 disambiguation.** Morphological distance alone cannot separate LCZ 8 from LCZ 10.
 Apply `industrial_fraction` as a post-distance rule: where a unit's nearest prototypes are 8 and
 10 and `industrial_fraction` exceeds a configurable threshold, prefer 10. Keep this as an
 explicit, documented, configurable rule applied *after* the distance computation — do not fold
 a functional attribute into the morphological distance metric, where it would silently distort
 every other class. Record in the output whether the rule fired for a given unit.
+
+Because Overture cannot distinguish heavy from light industry (see Phase 5), **set the default
+threshold conservatively so the rule under-triggers rather than over-triggers.** A missing LCZ 10
+is a visible gap; a light-industrial estate mislabelled as heavy industry is an invisible error
+that propagates into any model consuming the map.
+
+**Second fixture required.** The Berlin fixture cannot validate this rule — it contains far too
+few industrial buildings and parcels for the discrimination to be observable, and the existing
+integration test correctly asserts that smallness so a green suite is not mistaken for evidence.
+Add a small second fixture over an area with genuine heavy industry (Rotterdam, Duisburg and
+Houston are candidates) before claiming the rule works. Synthetic tests establish the mechanism;
+only a real fixture establishes that it discriminates.
 
 **Output.** GeoParquet using LCZ Generator integer codes (1–10 built, 11–17 for A–G) and the
 standard Demuzere colour table, so results drop into existing tooling. Plus a JSON manifest
@@ -506,6 +569,24 @@ Demuzere et al. (2022), *JOSS* 7(76), 4432 — W2W / WRF export
 
 ---
 
+## Resolved discrepancies
+
+Where this spec and a source paper disagreed, the ruling is recorded here so it is not
+relitigated each session. **When a new discrepancy appears, flag it and stop — do not
+reconcile silently.** That flagging behaviour is working; keep it.
+
+| Issue | Ruling | Phase |
+|---|---|---|
+| `Hr` — spec said area-weighted arithmetic mean; Bernard et al. (2024) Table 1 says geometric mean | **Paper wins.** Geometric mean. The Stewart & Oke ranges were defined for it; the arithmetic mean biases heterogeneous units silently. Area-weighted mean retained as a secondary column for deferred roughness work. | 5 |
+| `momepy.AreaRatio` removed in momepy 1.0 | Compute building surface fraction from a building/unit overlay. The overlay was required anyway to match Phase 3's splitting rule. Spec corrected — momepy's genuine role in Phase 5 is `street_profile()`. | 5 |
+| `docs/references/` gitignored wholesale, hiding committed `tables/` | Spec bug, corrected. Ignore PDFs, not the directory. `tables/`, `README.md` and `references.bib` are committed. | 0 |
+| Null `aspect_ratio` where no street reaches a building | Weighted partial distance with renormalisation. No imputation, no dropping. | 6 |
+| Overture has no heavy/light industry split | Accepted limitation, documented, conservative threshold. Not solvable within Overture's schema. | 5, 6 |
+| `momepy.describe_agg` unused | Correct call — it requires numba (absent) and offers only one-building-to-one-unit semantics. | 5 |
+| `gpd.overlay` `keep_geom_type` warning | Correct not to silence package-wide, which would mask real geometry-type problems. If the noise becomes a problem, scope suppression to the specific call site with a comment explaining why it is benign there. | 3, 5 |
+
+---
+
 ## Deferred — do not build unless asked
 
 Vector ray-cast sky view factor · roughness length and displacement height (Macdonald / Kanda)
@@ -513,7 +594,9 @@ Vector ray-cast sky view factor · roughness length and displacement height (Mac
 imputation) · ML classifier trained on So2Sat LCZ42 / DFC2017 · fuzzy or continuous LCZ output
 · W2W / WRF export · OSM as an alternative `VectorSource` · tessellation-based building-level
 units · dask-geopandas scaling · CLI · deck.gl overlay for buildings (only if MapLibre
-`fill-extrusion` proves insufficient) · run-comparison views in the site
+`fill-extrusion` proves insufficient) · run-comparison views in the site · OSM `industrial=*`
+subtags as supplementary heavy/light industry evidence (arrives with the deferred OSM source;
+the only realistic route to the distinction Overture discards)
 
 ---
 
