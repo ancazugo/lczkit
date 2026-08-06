@@ -5,7 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import geopandas as gpd
+import numpy as np
 import pytest
+import rasterio
+from rasterio.transform import from_origin
 
 from lczkit.protocols import BBox
 
@@ -73,3 +76,39 @@ class FixtureVectorSource:
 @pytest.fixture(scope="session")
 def fixture_vector_source() -> FixtureVectorSource:
     return FixtureVectorSource()
+
+
+def write_height_raster(
+    path: Path,
+    values: np.ndarray,
+    *,
+    origin: tuple[float, float],
+    cell_size_m: float,
+    crs: str,
+    nodata: float = -9999.0,
+) -> Path:
+    """Write a single-band float32 GeoTIFF for the height-cascade tests, returning `path`.
+
+    Height rasters are synthesised rather than committed. Unlike the Overture fixture there is
+    no real product to clip — none of the tier 2-4 datasets (Google Open Buildings 2.5D, WSF-3D,
+    GHS-BUILT-H) is present on this system — so any committed file would be invented data in
+    binary form, able to drift silently from the code that made it. Generating it here keeps the
+    values readable in the test that asserts on them, and still exercises the real rasterio read.
+
+    `origin` is the *top-left* corner, matching `rasterio.transform.from_origin`.
+    """
+    array = np.asarray(values, dtype="float32")
+    with rasterio.open(
+        path,
+        "w",
+        driver="GTiff",
+        height=array.shape[0],
+        width=array.shape[1],
+        count=1,
+        dtype="float32",
+        crs=crs,
+        transform=from_origin(origin[0], origin[1], cell_size_m, cell_size_m),
+        nodata=nodata,
+    ) as dst:
+        dst.write(array, 1)
+    return path

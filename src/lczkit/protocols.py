@@ -76,8 +76,24 @@ class HeightSource(Protocol):
 
     A cascade runs a sequence of `HeightSource` tiers over the same buildings layer; each
     tier fills `height` only for the rows it can resolve, tagging every row it touches with
-    `height_source` (the tier's name) and `height_confidence`.
+    `height_source` and `height_confidence`.
     """
+
+    @property
+    def name(self) -> str:
+        """Short identifier for this tier, used to label it in the cascade report."""
+        ...
+
+    @property
+    def height_sources(self) -> tuple[str, ...]:
+        """Every `height_source` tag this tier can write.
+
+        Usually one, matching `name` — but a tier resolving a row by more than one route
+        distinguishes them here, so the per-unit tier fractions can report a fixed set of
+        columns determined by the configured cascade rather than by which routes happened to
+        fire on a given city.
+        """
+        ...
 
     def fill(self, buildings: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         """Return `buildings` with `height`, `height_source`, and `height_confidence`
