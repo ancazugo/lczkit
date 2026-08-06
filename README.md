@@ -114,7 +114,69 @@ expected cost of their different reduction semantics rather than an error in eit
 counts whole pixels by centre. `tests/test_landcover_earthengine_live.py` measures this against
 live Earth Engine; those tests are marked `network` and skipped by default, so CI stays offline.
 
-No urban canopy parameters or classification exist yet.
+Phase 5 (urban canopy parameters) — `lczkit.ucp.compute_parameters()` returns one row per
+`unit_id` carrying sixteen columns, every one of them described in `lczkit.ucp.registry` with its
+unit of measurement and the source that defines it. A test asserts the registry and the
+implementation agree in both directions, so a column cannot be added without documenting it.
+
+| Parameter | Unit | Source |
+|---|---|---|
+| `building_surface_fraction` | fraction | Stewart & Oke (2012) |
+| `impervious_surface_fraction` | fraction | Stewart & Oke (2012) |
+| `pervious_surface_fraction` | fraction | Stewart & Oke (2012) |
+| `tree_fraction`, `water_fraction` | fraction | Bernard et al. (2024) Table 1 |
+| `height_of_roughness_elements_m` | m | Bernard et al. (2024) Table 1 |
+| `h_mean_area_weighted`, `h_std` (secondary) | m | computed here |
+| `aspect_ratio` | dimensionless | Stewart & Oke (2012), via `momepy.street_profile()` |
+| `street_openness` | fraction | momepy |
+| `street_width_m` | m | momepy |
+| `building_count` | count | computed here |
+| `mean_building_area_m2` | m² | computed here |
+| `industrial_fraction` | fraction | computed here |
+| `industrial_fraction_buildings`, `industrial_fraction_land_use` | fraction | computed here |
+| `industrial_evidence` | category | computed here |
+
+Five things about this phase are worth knowing before relying on it:
+
+- **`Hr` is the geometric mean of building height, and only `Hr` may be classified on.** Stewart &
+  Oke's height of roughness elements is `exp(mean(log h))` — Bernard et al. (2024) Table 1 — and
+  the LCZ property ranges Phase 6 normalises against were defined for that quantity. The arithmetic
+  mean sits above it whenever a unit mixes tall and short buildings, so substituting one for the
+  other would bias exactly the heterogeneous units where classification is hardest, and would do it
+  silently. `h_mean_area_weighted` and `h_std` ship as **secondary** columns for the deferred
+  roughness work (Macdonald, Kanda); both are marked as such in the registry.
+- **Two of Stewart & Oke's seven morphological properties are not computed.** *Sky view factor* is
+  deferred as the single most expensive component, and it is strongly correlated with aspect ratio,
+  which this phase does compute; Bernard et al. (2018), `10.3390/cli6030060`, is the preferred
+  route when it is picked up, because vector ray-launching needs no DSM. *Terrain roughness* is
+  deferred too: the Davenport et al. (2000) table maps a roughness class to a roughness length z₀,
+  and deriving z₀ from morphology is a separate piece of work — one that Bernard et al. weight at
+  0.5 in their distance metric against 8 for building fraction and 6 for mean height, so its
+  absence costs the classification little. Both omissions are recorded in
+  `lczkit.ucp.registry.NOT_COMPUTED`, so they reach the manifest rather than living only here.
+- **The surface fractions are not Phase 4's fractions.** Phase 4 emits disjoint classes summing to
+  1.0, because the `RasterSource` protocol requires it. Stewart & Oke do not partition the surface
+  the same way, and this phase re-partitions to match them: tree cover and water fold into
+  `pervious_surface_fraction` (their table puts both LCZ A and LCZ G at 90%+ pervious, so neither
+  class is otherwise reachable), and the building share comes *out* of `impervious_surface_fraction`
+  (a 10 m built-up class is measured from above and contains the roofs). Building, impervious and
+  pervious then sum to 1.0. The exception is a unit carrying more footprint than the raster calls
+  built up, where the subtraction clips at zero and the three sum above 1.0 — a visible signal that
+  the vector and raster layers disagree there.
+- **Buildings reach units two different ways, and that is deliberate.** Area quantities split
+  footprints at unit boundaries, matching what Phase 3's `height_completeness` already does, so a
+  building straddling two grid cells contributes to both in proportion. Object quantities —
+  `building_count` and `mean_building_area_m2` — move whole buildings to the unit containing their
+  representative point, because half a building is not a building. On a 100 m grid the two
+  populations genuinely differ, and a test asserts they still do.
+- **`industrial_fraction` is the only route to LCZ 10, and Overture cannot fully supply it.**
+  GeoClimate separates heavy industry from light industry and commercial; Overture offers a single
+  `industrial` value across both `subtype` and `class`, so a light-industrial estate and a refinery
+  are indistinguishable here. `warehouse` is deliberately *not* counted as industrial — it is the
+  LCZ 8 case CLAUDE.md names. The Berlin fixture holds 36 industrial buildings of 6195 and 2
+  industrial parcels of 1559, enough to exercise the plumbing and not enough to validate the rule.
+
+No classification exists yet.
 
 ## Setup
 
