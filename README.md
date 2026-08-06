@@ -40,8 +40,9 @@ score. A tier-1 height is therefore not a synonym for a surveyed one, and the di
 reports the difference rather than averaging it away.
 
 Phase 2 (spatial units) — `EnclosureUnits` (`momepy.enclosures()` over streets, rail, and
-waterbodies as barriers — large vegetation patches are not yet a barrier, since no land-cover
-source exists until Phase 4), `GridUnits` (a 100 m regular grid aligned to the local UTM CRS's
+waterbodies as barriers; `assemble_barriers` accepts a `vegetation` layer, but nothing derives
+one yet — Phase 4 supplies the land-cover source it would come from, and wiring the two together
+is Phase 2 work still outstanding), `GridUnits` (a 100 m regular grid aligned to the local UTM CRS's
 own coordinate origin, not to the query bbox, so the same real-world cell always gets the same
 `unit_id`), and `aggregate()` (`"majority"` / `"area_weighted"`) for moving attribute columns
 between the two. `OvertureSource` gained a `rail()` layer in this phase, alongside its existing
@@ -72,7 +73,48 @@ Three things about this phase are worth knowing before relying on it:
   than scattering. In a city with low `height_completeness` that pattern is the data behaving
   as documented, not a bug. Phase 6's validation measures it directly.
 
-No land cover, urban canopy parameters, or classification exist yet.
+Phase 4 (raster and land cover) — the `RasterSource` protocol, with two backends returning a
+fractions table keyed by `unit_id`: `LocalRasterSource` (a COG on disk, reduced with
+`exactextract`'s exact cell-coverage weighting) and `EarthEngineSource` (`reduceRegions` with
+`frequencyHistogram`, batched, cached under `input/GEE/`). Both reduce the same class mapping
+declared once in config, so their tables are schema-identical by construction. Two MVP datasets
+ship configured: ESA WorldCover v200 and ETH 10 m canopy height. The class-to-fraction mapping is
+config, never hardcoded.
+
+Three things about this phase are worth knowing before relying on it:
+
+- **`frac_tree` is carved *out* of `frac_pervious`, not contained in it.** The protocol requires
+  fractions summing to 1.0, so the classes are disjoint. Stewart & Oke (2012) count trees *within*
+  the pervious surface fraction — LCZ A, dense trees, is 90%+ pervious — so anything reproducing
+  their parameter must add the two together. This is the easiest place in the package to
+  undercount silently.
+- **ETH canopy height masks built-up land and water, and that is not the same as "unobserved".**
+  Lang et al. (2023) mask built-up areas, snow, ice and permanent water out of the product and set
+  those cells to 255. Over the Berlin fixture that is 93% of built-up cells and 78% of the whole
+  tile. Dropping them from the denominator reports central Berlin as ~96% tree cover; counting them
+  as non-tree, which is what the mask means, gives ~22%. Each dataset therefore declares a
+  `nodata_policy`.
+- **The two tree estimates are not independent, and `canopy_frac_tree` reads high.** Lang et al.
+  derive that mask *from ESA WorldCover*, so the cells the canopy product declines to measure are
+  exactly the ones WorldCover calls built up, snow/ice or water — treating the two columns as
+  corroborating evidence would be double-counting one source. They also report their map
+  overestimates vegetation below 5 m and carries roughly a 2 m positive bias from 5 to 20 m,
+  traded deliberately for accuracy on tall canopies, so a 3 m tree threshold over-calls tree.
+  Tree cover therefore defaults to WorldCover's own class 10, and `canopy_frac_tree` is best read
+  as an upper bound.
+- **The local path needs a COG you supply; the Earth Engine path needs credentials.** Neither
+  product is on this system, so each dataset's config carries no `filename` until you place one —
+  `LocalRasterSource.from_settings` says so plainly rather than failing obscurely. Both datasets
+  do carry a verified Earth Engine asset, so `EarthEngineSource` works out of the box given
+  `GEE_PROJECT_NAME` and Earth Engine credentials.
+
+The two backends agree on the fixture to within ~1-2 percentage points per class, which is the
+expected cost of their different reduction semantics rather than an error in either:
+`exactextract` weights each cell by the exact fraction of it a unit covers, while `reduceRegions`
+counts whole pixels by centre. `tests/test_landcover_earthengine_live.py` measures this against
+live Earth Engine; those tests are marked `network` and skipped by default, so CI stays offline.
+
+No urban canopy parameters or classification exist yet.
 
 ## Setup
 
@@ -107,4 +149,12 @@ pytest
 
 Tests do not require `DATA_DIR` to be set and never touch the network — fixtures live under
 `tests/fixtures/`. Network-dependent tests are marked `@pytest.mark.network` and skipped by
-default.
+default:
+
+```sh
+pytest -m network
+```
+
+These hit live Overture and live Earth Engine. The Earth Engine ones additionally need
+`GEE_PROJECT_NAME` and working credentials (`earthengine authenticate`); they skip rather than
+fail when the project is unset, so a checkout without Earth Engine access can still run them.
