@@ -29,10 +29,15 @@ functional semantics to Phase 5 and is deliberately neither a spatial-unit barri
 land-cover source.
 
 **Building heights are sparse, and that is the data, not a defect.** Overture conflates
-footprints winner-takes-all and parses `height` only from OSM tags, so in machine-learning
-dominated areas tier-1 heights are near-absent — 26% of footprints in the Berlin test fixture
-carry one. Nothing in ingestion or cleaning treats a null height as an error; the Phase 3
-cascade fills them and reports how well it managed.
+footprints winner-takes-all, so in machine-learning dominated areas heights are near-absent —
+26% of footprints in the Berlin test fixture carry one. Nothing in ingestion or cleaning treats
+a null height as an error; the Phase 3 cascade fills them and reports how well it managed.
+
+Provenance in Overture is recorded per *attribute*, not per feature, and heights are conflated
+across datasets even where footprints are not: a quarter of the Berlin fixture's heights sit on
+OpenStreetMap footprints but come from Microsoft ML Buildings, each with its own confidence
+score. A tier-1 height is therefore not a synonym for a surveyed one, and the diagnostic below
+reports the difference rather than averaging it away.
 
 Phase 2 (spatial units) — `EnclosureUnits` (`momepy.enclosures()` over streets, rail, and
 waterbodies as barriers — large vegetation patches are not yet a barrier, since no land-cover
@@ -42,7 +47,32 @@ own coordinate origin, not to the query bbox, so the same real-world cell always
 between the two. `OvertureSource` gained a `rail()` layer in this phase, alongside its existing
 `buildings`/`streets`/`water`.
 
-No height cascade, land cover, or classification exists yet.
+Phase 3 (height cascade) — every building comes out with a `height`, a `height_source` naming
+the tier that resolved it, and a `height_confidence`; every unit comes out with
+`height_completeness` (the tier-1 share of building footprint area) and a `height_frac_*`
+column per tier. Four tiers in order: Overture `height`, `num_floors × storey_height`, then
+Google Open Buildings 2.5D, WSF-3D and GHS-BUILT-H read as local COGs. A source-availability
+diagnostic reports height and floor-count coverage per upstream dataset — twice, once by the
+dataset that won the footprint and once by the dataset that supplied the height — which answers
+"is this city viable?" before anyone waits for a full run.
+
+Three things about this phase are worth knowing before relying on it:
+
+- **Tiers 2–4 ship implemented but switched off.** None of those three products is on this
+  system, so each tier's config carries no filename and is skipped; the cascade is simply
+  shorter and buildings it cannot reach are tagged `unresolved` with a null height rather than
+  given an invented one. Point `HeightConfig.areal_tiers` at a COG to switch a tier on.
+- **`height_confidence` has no default and the cascade raises without one.** It is an ordinal
+  ranking of measurement quality, not a calibrated probability, and no published number defines
+  it — so it is set explicitly in config and recorded in the manifest rather than guessed at
+  here. Where Overture supplies a real per-building confidence, that value is used instead.
+- **Areal tiers degrade along the height axis, by construction.** A ~100 m product cannot
+  resolve low-rise from mid-rise from high-rise within a heterogeneous unit, so classification
+  error concentrates on the LCZ pairs that differ mainly in height — 1↔4, 2↔5, 3↔6 — rather
+  than scattering. In a city with low `height_completeness` that pattern is the data behaving
+  as documented, not a bug. Phase 6's validation measures it directly.
+
+No land cover, urban canopy parameters, or classification exist yet.
 
 ## Setup
 
