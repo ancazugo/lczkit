@@ -11,14 +11,15 @@ mean per footprint, which is all tiers 2-4 ask for.
 
 from __future__ import annotations
 
-import math
 from pathlib import Path
 
 import geopandas as gpd
 import numpy as np
 import rasterio
 from pyproj import CRS
-from rasterio import features, transform, windows
+from rasterio import features, transform
+
+from lczkit.raster_window import covering_window
 
 
 def zonal_mean(
@@ -56,7 +57,7 @@ def zonal_mean(
         if src.crs is None:
             raise ValueError(f"{path} declares no CRS; cannot align it to the buildings layer.")
         projected = geoms.to_crs(CRS.from_user_input(src.crs.to_wkt()))
-        window = _covering_window(src, projected.total_bounds)
+        window = covering_window(src, projected.total_bounds)
         if window is None:
             return empty
 
@@ -94,23 +95,6 @@ def zonal_mean(
             gpd.GeoSeries(projected.iloc[unburnt]), values, valid, win_transform
         )
     return means
-
-
-def _covering_window(src: rasterio.DatasetReader, bounds: np.ndarray) -> windows.Window | None:
-    """The raster window covering `bounds`, padded one cell and clipped to the raster.
-
-    Returns `None` when `bounds` falls entirely outside the raster. The one-cell pad matters for
-    `all_touched` rasterization: a footprint whose edge sits exactly on a cell boundary touches
-    the cell beyond it, and that cell must be in the window to be counted.
-    """
-    raw = windows.from_bounds(*bounds, transform=src.transform)
-    col_off = max(0, math.floor(raw.col_off) - 1)
-    row_off = max(0, math.floor(raw.row_off) - 1)
-    col_end = min(src.width, math.ceil(raw.col_off + raw.width) + 1)
-    row_end = min(src.height, math.ceil(raw.row_off + raw.height) + 1)
-    if col_end <= col_off or row_end <= row_off:
-        return None
-    return windows.Window(col_off, row_off, col_end - col_off, row_end - row_off)
 
 
 def _sample_representative_points(
