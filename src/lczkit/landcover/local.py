@@ -25,8 +25,9 @@ from pyproj import CRS
 
 from lczkit.config import LandCoverDatasetConfig, Settings
 from lczkit.landcover.classify import EXCLUDED, ClassIndex
-from lczkit.landcover.table import check_units, fractions_table
+from lczkit.landcover.table import fractions_table
 from lczkit.raster_window import covering_window
+from lczkit.units import check_units
 
 
 class LocalRasterSource:

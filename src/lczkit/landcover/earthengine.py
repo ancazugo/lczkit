@@ -29,7 +29,8 @@ import pandas as pd
 
 from lczkit.config import LandCoverDatasetConfig, Settings
 from lczkit.landcover.classify import EXCLUDED, ClassIndex
-from lczkit.landcover.table import check_units, fractions_table
+from lczkit.landcover.table import fractions_table
+from lczkit.units import check_units
 
 REDUCER = "frequencyHistogram"
 """The only reducer this backend uses. Named explicitly because it is part of the cache key —

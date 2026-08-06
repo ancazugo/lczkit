@@ -9,26 +9,10 @@ the empty-unit convention — happens once, here.
 
 from __future__ import annotations
 
-import geopandas as gpd
 import numpy as np
 import pandas as pd
 
 from lczkit.config import LandCoverDatasetConfig
-from lczkit.crs import assert_projected_crs
-
-
-def check_units(units: gpd.GeoDataFrame) -> None:
-    """The entry contract every stage keyed on `unit_id` enforces.
-
-    Same checks `aggregate()` and `height_metrics()` make, for the same reason: a geographic CRS
-    makes every area meaningless, and a missing `unit_id` index makes the join silently wrong
-    rather than loud.
-    """
-    assert_projected_crs(units, "units")
-    if units.index.name != "unit_id":
-        raise ValueError("units must be indexed by unit_id")
-    if not units.index.is_unique:
-        raise ValueError("units index must be unique")
 
 
 def fractions_table(

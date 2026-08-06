@@ -475,6 +475,81 @@ class LandCoverConfig(BaseModel):
         raise KeyError(f"no land-cover dataset named {name!r}; configured: {available}")
 
 
+class UcpConfig(BaseModel):
+    """Configuration for the Phase 5 urban canopy parameters.
+
+    Two kinds of value live here. The `*_classes` lists are vocabulary — which land-cover class
+    feeds which Stewart & Oke surface fraction, and which Overture attribute values count as
+    industrial — and CLAUDE.md requires those in config rather than in code. The two
+    `street_profile_*` values are momepy's own defaults, restated so they reach the run manifest
+    instead of staying implicit in a library signature.
+    """
+
+    street_profile_distance_m: float = 10.0
+    """Spacing between the perpendicular ticks `momepy.street_profile()` measures along. momepy's
+    own default."""
+
+    street_profile_tick_length_m: float = 50.0
+    """Length of each tick. A tick reaching no building reports this as the street width, so it is
+    also the assumed width of an open street. momepy's own default."""
+
+    min_building_height_m: float = 0.1
+    """Lower bound applied to building height before taking logs for the geometric mean.
+
+    A numerical guard, not a scientific threshold: `log(0)` is negative infinity and would take a
+    whole unit's height of roughness elements to zero on the strength of one bad row. Overture
+    heights are not validated upstream and a zero or negative value does occur. 0.1 m sits below
+    any plausible building, so the floor changes nothing except in the case it exists to catch —
+    but it *is* the value such a building is then counted as, which is why it is configurable
+    rather than buried in the code.
+    """
+
+    land_cover_dataset: str = "worldcover"
+    """Which `LandCoverConfig.datasets` entry supplies the surface fractions. The ETH canopy
+    dataset is a second, competing tree estimate rather than a full land-cover product, and Phase 4
+    documents why it reads high — so the WorldCover route is the default."""
+
+    tree_classes: list[str] = Field(default_factory=lambda: ["tree"])
+    """Land-cover classes counting as tree cover."""
+
+    pervious_classes: list[str] = Field(default_factory=lambda: ["pervious"])
+    """Land-cover classes counting as pervious *before* tree and water are folded in — see
+    `lczkit.ucp.surface`."""
+
+    impervious_classes: list[str] = Field(default_factory=lambda: ["impervious"])
+    """Land-cover classes counting as impervious, buildings included. The building share is
+    subtracted in `lczkit.ucp.surface`, since a raster's built-up class contains the roofs."""
+
+    water_classes: list[str] = Field(default_factory=lambda: ["water"])
+    """Land-cover classes counting as water."""
+
+    industrial_building_subtypes: list[str] = Field(default_factory=lambda: ["industrial"])
+    """Overture building `subtype` values counting as industrial."""
+
+    industrial_building_classes: list[str] = Field(default_factory=lambda: ["industrial"])
+    """Overture building `class` values counting as industrial.
+
+    `warehouse` is deliberately absent. CLAUDE.md's own statement of the problem this parameter
+    exists to solve is that a distribution warehouse and a refinery are geometrically identical —
+    the warehouse being the LCZ 8 case and the refinery the LCZ 10 one. Counting warehouses as
+    industrial would push exactly the units the rule is meant to keep apart towards LCZ 10.
+    """
+
+    industrial_land_use_subtypes: list[str] = Field(default_factory=list)
+    """Overture land-use `subtype` values counting as industrial. Empty by default: Overture files
+    industrial parcels under `subtype='developed'`, which also covers commercial and retail, so the
+    subtype alone carries no industrial signal."""
+
+    industrial_land_use_classes: list[str] = Field(default_factory=lambda: ["industrial"])
+    """Overture land-use `class` values counting as industrial.
+
+    `brownfield` — disused industrial land — is the obvious candidate to add and is deliberately
+    left out: it describes what a parcel *was*, and a brownfield site has no heat output, no
+    industrial buildings and often no buildings at all. Add it only for a city where derelict
+    industry is still the dominant surface.
+    """
+
+
 class Settings(BaseModel):
     """Resolved configuration for a single lczkit run.
 
@@ -488,6 +563,7 @@ class Settings(BaseModel):
     cleaning: CleaningConfig = Field(default_factory=CleaningConfig)
     heights: HeightConfig = Field(default_factory=HeightConfig)
     land_cover: LandCoverConfig = Field(default_factory=LandCoverConfig)
+    ucp: UcpConfig = Field(default_factory=UcpConfig)
 
     @field_validator("data_dir")
     @classmethod
