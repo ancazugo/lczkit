@@ -13,6 +13,7 @@ dependencies = [
     "pyarrow>=25.0.0",
     "pydantic>=2.13.4",
     "python-dotenv>=1.2.2",
+    "rasterio>=1.5.0",
 ]
 
 [build-system]
@@ -38,7 +39,7 @@ warn_unused_ignores = true
 # None of these ship type stubs or a py.typed marker, and no types-* stub package exists for
 # any of them on PyPI.
 [[tool.mypy.overrides]]
-module = ["geoplanar", "neatnet", "momepy"]
+module = ["geoplanar", "neatnet", "momepy", "rasterio", "rasterio.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
@@ -47,6 +48,12 @@ markers = [
     "network: tests that require live network access (skipped by default)",
 ]
 addopts = "-m 'not network'"
+filterwarnings = [
+    # rasterio 1.5 sets `.shape` on the array it returns from `read()`, which NumPy 2.5
+    # deprecated. Raised from Cython, so it surfaces at our call site and cannot be fixed here.
+    # Remove once rasterio ships a fix.
+    "ignore:Setting the shape on a NumPy array has been deprecated:DeprecationWarning",
+]
 
 [dependency-groups]
 dev = [
