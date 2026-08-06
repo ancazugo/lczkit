@@ -12,8 +12,13 @@ wheels/
 .claude/
 *.pdf
 
-# Reference material — gitignored for licensing, not size (see CLAUDE.md)
-docs/references/
+# Reference material — the PDFs are gitignored for licensing, not size, but the *directory*
+# is not. `docs/references/README.md`, `references.bib` and everything in
+# `docs/references/tables/` are committed: the transcribed tables are the authority for every
+# numeric lookup in this package, so a checkout without them cannot reproduce a classification.
+docs/references/**/*.pdf
+docs/references/datasets/
+!docs/references/tables/
 
 # Tool caches
 .mypy_cache/
