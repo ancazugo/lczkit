@@ -21,7 +21,18 @@ Phase 1 (vector ingestion and cleaning) — `OvertureSource` (DuckDB-backed, rea
 bbox-filtered GeoParquet from Overture's S3), the building-cleaning pipeline (invalid-geometry
 repair, multipolygon explosion, oversized-footprint and non-polygon removal, overlap
 resolution and small-building absorption via `geoplanar`), street simplification via
-`neatnet`, cross-layer topology cleanup, and a structured cleaning report.
+`neatnet`, cross-layer topology cleanup, and a structured cleaning report. Buildings retain
+`subtype`/`class` (usage type) and `sources` (per-feature dataset provenance) through cleaning
+— they are what later phases classify heavy industry and audit height coverage with. A
+`land_use` layer is ingested and carried through with geometry repair only; it supplies
+functional semantics to Phase 5 and is deliberately neither a spatial-unit barrier nor a
+land-cover source.
+
+**Building heights are sparse, and that is the data, not a defect.** Overture conflates
+footprints winner-takes-all and parses `height` only from OSM tags, so in machine-learning
+dominated areas tier-1 heights are near-absent — 26% of footprints in the Berlin test fixture
+carry one. Nothing in ingestion or cleaning treats a null height as an error; the Phase 3
+cascade fills them and reports how well it managed.
 
 Phase 2 (spatial units) — `EnclosureUnits` (`momepy.enclosures()` over streets, rail, and
 waterbodies as barriers — large vegetation patches are not yet a barrier, since no land-cover
