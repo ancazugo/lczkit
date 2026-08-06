@@ -10,6 +10,7 @@ import geopandas as gpd
 from pyproj import CRS
 
 from lczkit.cleaning.buildings import clean_buildings
+from lczkit.cleaning.land_use import clean_land_use
 from lczkit.cleaning.report import CleaningReport, CleaningStep
 from lczkit.cleaning.streets import simplify_streets
 from lczkit.cleaning.topology import apply_cross_layer_topology
@@ -19,26 +20,18 @@ from lczkit.protocols import BBox, VectorSource
 
 
 def reproject_to_local_utm(
-    bbox: BBox,
-    buildings: gpd.GeoDataFrame,
-    streets: gpd.GeoDataFrame,
-    waterlines: gpd.GeoDataFrame,
-    waterbodies: gpd.GeoDataFrame,
-) -> tuple[CRS, gpd.GeoDataFrame, gpd.GeoDataFrame, gpd.GeoDataFrame, gpd.GeoDataFrame]:
-    """Compute one UTM CRS from `bbox` and reproject every layer into it.
+    bbox: BBox, **layers: gpd.GeoDataFrame
+) -> tuple[CRS, dict[str, gpd.GeoDataFrame]]:
+    """Compute one UTM CRS from `bbox` and reproject every layer in `layers` into it.
 
     Computed once from the bbox itself, not from any individual layer — `estimate_utm_crs()`
     can differ between layers covering nearly the same area (e.g. near a UTM zone boundary),
-    which would silently break cross-layer topology if each layer picked its own zone.
+    which would silently break cross-layer topology if each layer picked its own zone. Takes
+    layers by keyword and returns them by name so that adding a layer cannot quietly reorder
+    an unpacked tuple at a call site.
     """
     target = local_utm_crs(bbox)
-    return (
-        target,
-        buildings.to_crs(target),
-        streets.to_crs(target),
-        waterlines.to_crs(target),
-        waterbodies.to_crs(target),
-    )
+    return target, {name: layer.to_crs(target) for name, layer in layers.items()}
 
 
 @dataclass(frozen=True)
@@ -50,6 +43,7 @@ class CleanedVectors:
     streets: gpd.GeoDataFrame
     waterlines: gpd.GeoDataFrame
     waterbodies: gpd.GeoDataFrame
+    land_use: gpd.GeoDataFrame
     report: CleaningReport
     crs: CRS
 
@@ -74,13 +68,19 @@ def clean_vectors(source: VectorSource, bbox: BBox, config: CleaningConfig) -> C
     merge_limit_m2 = _require(config.building_merge_limit_m2, "building_merge_limit_m2")
     overlap_limit = _require(config.building_overlap_limit, "building_overlap_limit")
 
-    raw_buildings = source.buildings(bbox)
-    raw_streets = source.streets(bbox)
     raw_waterlines, raw_waterbodies = source.water(bbox)
-
-    crs, buildings, streets, waterlines, waterbodies = reproject_to_local_utm(
-        bbox, raw_buildings, raw_streets, raw_waterlines, raw_waterbodies
+    crs, layers = reproject_to_local_utm(
+        bbox,
+        buildings=source.buildings(bbox),
+        streets=source.streets(bbox),
+        waterlines=raw_waterlines,
+        waterbodies=raw_waterbodies,
+        land_use=source.land_use(bbox),
     )
+    buildings = layers["buildings"]
+    streets = layers["streets"]
+    waterlines = layers["waterlines"]
+    waterbodies = layers["waterbodies"]
 
     steps: list[CleaningStep] = []
 
@@ -92,6 +92,11 @@ def clean_vectors(source: VectorSource, bbox: BBox, config: CleaningConfig) -> C
         overlap_limit=overlap_limit,
     )
     steps.extend(building_steps)
+
+    # Land use takes no part in cross-layer topology — it is functional metadata, not a
+    # physical surface that can conflict with a building or a street.
+    land_use, land_use_step = clean_land_use(layers["land_use"])
+    steps.append(land_use_step)
 
     streets, street_step = simplify_streets(streets, buildings)
     steps.append(street_step)
@@ -106,6 +111,7 @@ def clean_vectors(source: VectorSource, bbox: BBox, config: CleaningConfig) -> C
         streets=streets,
         waterlines=waterlines,
         waterbodies=waterbodies,
+        land_use=land_use,
         report=CleaningReport(steps=steps),
         crs=crs,
     )

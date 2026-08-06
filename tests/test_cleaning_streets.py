@@ -15,13 +15,12 @@ from lczkit.crs import assert_projected_crs
 
 
 def test_simplify_streets_on_real_subset(fixture_vector_source: FixtureVectorSource) -> None:
-    raw_buildings = fixture_vector_source.buildings(SMALL_BBOX)
-    raw_streets = fixture_vector_source.streets(SMALL_BBOX)
-    raw_waterlines, raw_waterbodies = fixture_vector_source.water(SMALL_BBOX)
-
-    _, buildings, streets, _, _ = reproject_to_local_utm(
-        SMALL_BBOX, raw_buildings, raw_streets, raw_waterlines, raw_waterbodies
+    _, layers = reproject_to_local_utm(
+        SMALL_BBOX,
+        buildings=fixture_vector_source.buildings(SMALL_BBOX),
+        streets=fixture_vector_source.streets(SMALL_BBOX),
     )
+    buildings, streets = layers["buildings"], layers["streets"]
 
     simplified, step = simplify_streets(streets, buildings)
 

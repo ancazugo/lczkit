@@ -126,3 +126,50 @@ def test_clean_buildings_runs_full_pipeline_in_order() -> None:
     assert all(s.stage == "buildings" for s in steps)
     assert len(cleaned) == 1
     assert steps[-1].detail["is_planar_enforced"] is True
+
+
+def test_clean_buildings_retains_usage_and_provenance_columns() -> None:
+    """`subtype`, `class` and `sources` must survive cleaning, not be dropped after geometry
+    work — `class` is the only route to LCZ 10 and `sources` drives Phase 3's diagnostic.
+
+    Both merge steps reduce via `GeoDataFrame.dissolve()` (`aggfunc="first"`), so a merged
+    footprint inherits the attributes of one constituent rather than losing them. This test
+    pins that behaviour: it is `geoplanar`'s, not ours, and a change to it would silently
+    break Phases 3, 5 and 6.
+    """
+    gdf = _gdf(
+        [box(0, 0, 10, 10), box(9, 0, 19, 10)],
+        height=[5.0, None],
+        num_floors=[2, None],
+        subtype=["industrial", "residential"],
+        sources=[[{"dataset": "OpenStreetMap"}], [{"dataset": "Microsoft ML Buildings"}]],
+        **{"class": ["industrial", "apartments"]},
+    )
+
+    cleaned, _ = clean_buildings(
+        gdf, max_area_m2=10_000, min_area_m2=1, merge_limit_m2=1_000, overlap_limit=0.5
+    )
+
+    assert {"height", "num_floors", "subtype", "class", "sources"} <= set(cleaned.columns)
+    assert len(cleaned) == 1
+    assert cleaned["class"].iloc[0] in {"industrial", "apartments"}
+    assert cleaned["sources"].iloc[0] is not None
+
+
+def test_clean_buildings_never_drops_a_building_for_a_null_height() -> None:
+    """Overture conflation is winner-takes-all and parses `height` only from OSM tags, so
+    footprints won by an ML source carry no height at all. A null height is normal here; the
+    Phase 3 cascade owns it. Nothing in cleaning may filter on it.
+    """
+    gdf = _gdf(
+        [box(0, 0, 10, 10), box(100, 100, 110, 110)],
+        height=[None, None],
+        num_floors=[None, None],
+    )
+
+    cleaned, _ = clean_buildings(
+        gdf, max_area_m2=10_000, min_area_m2=1, merge_limit_m2=1_000, overlap_limit=0.5
+    )
+
+    assert len(cleaned) == 2
+    assert cleaned["height"].isna().all()

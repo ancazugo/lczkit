@@ -27,6 +27,7 @@ def test_clean_vectors_end_to_end(fixture_vector_source: FixtureVectorSource) ->
         (result.streets, "streets"),
         (result.waterlines, "waterlines"),
         (result.waterbodies, "waterbodies"),
+        (result.land_use, "land_use"),
     ]:
         assert_projected_crs(layer, name)
         assert layer.crs == result.crs
@@ -49,10 +50,26 @@ def test_clean_vectors_end_to_end(fixture_vector_source: FixtureVectorSource) ->
         )
         assert hits.empty
 
+    # Land use is functional metadata, not a physical surface — it is carried through with
+    # geometry repair only and takes no part in cross-layer topology.
+    assert not result.land_use.empty
+    assert (result.land_use.geometry.geom_type.isin(["Polygon", "MultiPolygon"])).all()
+    assert result.land_use.geometry.is_valid.all()
+    assert {"subtype", "class"} <= set(result.land_use.columns)
+
+    # `subtype`/`class` (the only route to LCZ 10) and `sources` (Phase 3's diagnostic) must
+    # survive cleaning, not be dropped after the geometry work.
+    assert {"subtype", "class", "sources"} <= set(result.buildings.columns)
+
+    # Overture parses `height` only from OSM tags and conflates winner-takes-all, so on real
+    # data a large share of footprints carry none. That is expected — Phase 3 owns it, and
+    # nothing in Phase 1 may treat it as an error.
+    assert result.buildings["height"].isna().any()
+
     steps = result.report.steps
     assert len(steps) > 0
     stages = {s.stage for s in steps}
-    assert stages == {"buildings", "streets", "topology"}
+    assert stages == {"buildings", "streets", "land_use", "topology"}
     validate_step = next(s for s in steps if s.operation == "validate_planarity")
     assert isinstance(validate_step.detail["is_planar_enforced"], bool)
     for step in steps:

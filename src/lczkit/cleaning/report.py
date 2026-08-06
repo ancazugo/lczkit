@@ -12,7 +12,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-Stage = Literal["buildings", "streets", "topology"]
+Stage = Literal["buildings", "streets", "land_use", "topology"]
 
 
 class CleaningStep(BaseModel):
