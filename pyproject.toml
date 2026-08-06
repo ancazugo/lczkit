@@ -7,11 +7,15 @@ requires-python = ">=3.12"
 license = "MIT"
 dependencies = [
     "duckdb>=1.5.5",
+    "earthengine-api>=1.7.38",
+    "exactextract>=0.3.0",
     "geopandas>=1.1.4",
     "geoplanar>=0.6.0",
+    "momepy>=1.0.0",
     "neatnet>=0.1.6",
     "pyarrow>=25.0.0",
     "pydantic>=2.13.4",
+    "pypdf>=6.15.0",
     "python-dotenv>=1.2.2",
     "rasterio>=1.5.0",
 ]
@@ -39,7 +43,16 @@ warn_unused_ignores = true
 # None of these ship type stubs or a py.typed marker, and no types-* stub package exists for
 # any of them on PyPI.
 [[tool.mypy.overrides]]
-module = ["geoplanar", "neatnet", "momepy", "rasterio", "rasterio.*"]
+module = [
+    "geoplanar",
+    "neatnet",
+    "momepy",
+    "rasterio",
+    "rasterio.*",
+    "exactextract",
+    "exactextract.*",
+    "ee",
+]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
@@ -53,6 +66,11 @@ filterwarnings = [
     # deprecated. Raised from Cython, so it surfaces at our call site and cannot be fixed here.
     # Remove once rasterio ships a fix.
     "ignore:Setting the shape on a NumPy array has been deprecated:DeprecationWarning",
+    # exactextract only *warns* when the features and the raster disagree on CRS, and then
+    # reduces anyway over meaningless coordinates. LocalRasterSource always reprojects units to
+    # the raster's CRS, so promoting this to an error makes that a tested guarantee rather than
+    # something a future refactor could quietly drop.
+    "error:Spatial reference system of input features does not exactly match raster:RuntimeWarning",
 ]
 
 [dependency-groups]
