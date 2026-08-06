@@ -14,6 +14,11 @@ from lczkit.protocols import BBox
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "overture"
 
+#: Real ESA WorldCover v200 and ETH canopy height, clipped to `FIXTURE_BBOX` by
+#: `scripts/build_landcover_fixture.py`. Unlike the Phase 3 height rasters these are committed:
+#: both products exist and are freely licensed, so there is something real to clip.
+LANDCOVER_FIXTURES_DIR = Path(__file__).parent / "fixtures" / "landcover"
+
 #: The full committed Berlin extract (~3x3 km, matching CLAUDE.md's test-strategy sizing).
 FIXTURE_BBOX: BBox = (13.3789, 52.5057, 13.4231, 52.5327)
 
@@ -97,7 +102,48 @@ def write_height_raster(
 
     `origin` is the *top-left* corner, matching `rasterio.transform.from_origin`.
     """
-    array = np.asarray(values, dtype="float32")
+    return _write_raster(
+        path,
+        values,
+        origin=origin,
+        cell_size_m=cell_size_m,
+        crs=crs,
+        nodata=nodata,
+        dtype="float32",
+    )
+
+
+def write_class_raster(
+    path: Path,
+    values: np.ndarray,
+    *,
+    origin: tuple[float, float],
+    cell_size_m: float,
+    crs: str,
+    nodata: float = 0.0,
+) -> Path:
+    """Write a single-band uint8 GeoTIFF of land-cover class codes, returning `path`.
+
+    Synthesised alongside the committed real fixtures, not instead of them: a hand-built raster is
+    the only way to assert an exact fraction, and exact fractions are how partial cell coverage —
+    the thing `exactextract` is here for — gets tested at all.
+    """
+    return _write_raster(
+        path, values, origin=origin, cell_size_m=cell_size_m, crs=crs, nodata=nodata, dtype="uint8"
+    )
+
+
+def _write_raster(
+    path: Path,
+    values: np.ndarray,
+    *,
+    origin: tuple[float, float],
+    cell_size_m: float,
+    crs: str,
+    nodata: float,
+    dtype: str,
+) -> Path:
+    array = np.asarray(values, dtype=dtype)
     with rasterio.open(
         path,
         "w",
@@ -105,7 +151,7 @@ def write_height_raster(
         height=array.shape[0],
         width=array.shape[1],
         count=1,
-        dtype="float32",
+        dtype=dtype,
         crs=crs,
         transform=from_origin(origin[0], origin[1], cell_size_m, cell_size_m),
         nodata=nodata,
