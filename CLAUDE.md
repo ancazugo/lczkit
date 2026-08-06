@@ -111,7 +111,9 @@ you must respect in every phase:
   │   ├── OSM/             # deferred alternative vector source
   │   ├── GEE/             # keyed on (units hash, collection, date range, reducer)
   │   ├── ESA_WorldCover/
-  │   ├── GHSL/
+  │   ├── GHSL/            # GHS-BUILT-H, height tier 4
+  │   ├── GOB25D/          # Google Open Buildings 2.5D, height tier 2
+  │   ├── WSF3D/           # WSF-3D, height tier 3
   │   └── ETH_CanopyHeight/
   └── output/
       └── lczkit/
@@ -186,11 +188,25 @@ from Overture's S3, with a local cache keyed on `(release, bbox, theme)`. Pin th
 string from config — never "latest".
 
 Layers to pull:
-- `buildings/building` — geometry, `height`, `num_floors`, `sources`
+- `buildings/building` — geometry, `height`, `num_floors`, `subtype`, `class`, `sources`.
+  **`subtype`, `class` and `sources` must be retained through cleaning**, not dropped after
+  geometry work. `class` carries usage type (residential / commercial / industrial) and is the
+  only route to LCZ 10; `sources` carries dataset provenance and drives the Phase 3 diagnostic.
 - `transportation/segment` where `subtype = 'road'`, dropping `class = 'service'`
 - `base/water` — split linestrings (waterlines) from polygons (waterbodies); filter out
   underground/aboveground features and subtypes `human-made`, `reservoir`, `spring`,
   `wastewater`
+- `base/land_use` — polygons, retaining `subtype` and `class`. Used **only** for functional
+  semantics in Phase 6 (industrial fraction per unit). It is **not** a barrier in Phase 2 and
+  **not** a land cover source in Phase 4 — rasters own land cover. Do not let it leak into
+  either role.
+
+Overture conflation is geometry-level and priority-ordered (OSM → Esri → high-precision Google
+Open Buildings → Microsoft ML → lower-precision Google Open Buildings), and it is winner-takes-
+all: a footprint's attributes come from whichever source won it. Attributes are **not** fused
+across sources, and `height` is parsed only from OSM tags. Expect near-complete geometry with
+very sparse heights in ML-dominated areas. Never treat a null height as an error in this phase
+— Phase 3 owns that problem.
 
 Cleaning pipeline for buildings: fix invalid geometries, explode multipolygons, drop
 non-polygon features, drop implausibly large footprints (configurable threshold), merge and
@@ -225,22 +241,57 @@ them round-trips sensibly on the fixture.
 
 ---
 
-### Phase 3 — Height cascade (~4 days)
+### Phase 3 — Height cascade (~5 days)
 
-Two tiers in the MVP, but build the cascade machinery properly so tiers are trivial to add.
+**This is the phase that differentiates `lczkit` from GeoClimate-on-OSM.** Overture solves
+footprint coverage; it does not solve height. In ML-dominated areas — much of the Global South,
+but also plenty of developed cities outside the centre — tier-1 heights will be near-absent.
+The package's answer is a graded cascade plus honest reporting, not a pretence of completeness.
+
+**Tiers**, in order. Build the cascade so adding a tier is a registration, not a rewrite:
 
 1. Overture `height`; else `num_floors × storey_height` (storey height **configurable**,
-   default 3.0 m — it varies regionally and is a real error source)
-2. GHS-BUILT-H zonal mean as fallback
+   default 3.0 m — varies regionally and is a real error source)
+2. **Google Open Buildings 2.5D** — fine-resolution heights across Africa, South and Southeast
+   Asia, and Latin America. The highest-value tier for exactly the regions where tier 1 fails.
+3. **WSF-3D** (DLR, TanDEM-X derived) — global ~90 m building height and volume
+4. **GHS-BUILT-H** — global 100 m mean building height
 
-Every building carries `height_source` (which tier fired) and `height_confidence`. Aggregate
-to units as **`height_completeness`** — the area fraction of buildings with tier-1 heights.
+Tiers 2–4 are areal products: they assign a neighbourhood mean to individual buildings. That is
+a categorically weaker measurement than tier 1, and the output must say so.
 
-`height_completeness` must appear in the final output. It is the honest answer to "should I
-trust this map here" and is a primary deliverable of the package, not a diagnostic.
+**Per-building attributes:** `height`, `height_source` (which tier fired), `height_confidence`.
 
-*Acceptance:* every building has a non-null height and a source tag; `height_completeness`
-is computed per unit and present in the output schema.
+**Per-unit attributes:**
+- `height_completeness` — area fraction of buildings with **tier-1** heights
+- `height_tier_fractions` — the full distribution across tiers, not just tier 1. "90% real
+  heights" and "90% coarse raster fallback" must be distinguishable in the output; they produce
+  the same LCZ label with very different trustworthiness.
+
+Both must appear in the final output. They are primary deliverables, not diagnostics.
+
+**Source-availability diagnostic.** Report non-null `height` and `num_floors` counts grouped by
+Overture source dataset, for the study area. This answers "is this city viable?" empirically
+before anyone waits for a full run. Write it into the manifest.
+
+**Expected degradation — document, do not treat as a bug.** LCZ separates low-rise (<10 m),
+mid-rise (10–25 m) and high-rise (>25 m) largely on height. Areal height products cannot
+resolve those bands within a heterogeneous unit, so error concentrates along the height axis
+*within* a compactness category — 1↔4, 2↔5, 3↔6 — rather than scattering randomly. If Phase 6
+validation shows that pattern in a low-`height_completeness` city, it is the data behaving as
+expected.
+
+**Raster access in this phase.** Tiers 2–4 need raster reads, but the `RasterSource` protocol
+and its GEE backend are Phase 4. Do **not** pull Phase 4 forward. Implement a minimal local
+zonal read here — the user places the product as a COG under `input/GOB25D/`, `input/WSF3D/` or
+`input/GHSL/` — and let Phase 4 generalise it behind the protocol afterwards. This keeps Phase 3
+unblocked, offline, and testable in CI. Structure the tier implementations so that swapping the
+raster read for a `RasterSource` call in Phase 4 touches one function per tier.
+
+*Acceptance:* every building has a non-null height and a source tag; `height_completeness` and
+`height_tier_fractions` are computed per unit and present in the output schema; the
+source-availability diagnostic appears in the manifest; a fixture-city test covers the case
+where tier 1 is entirely absent.
 
 ---
 
@@ -276,6 +327,13 @@ Computed here:
 - pervious / impervious / tree fractions from Phase 4
 - building count, mean building area
 - terrain roughness class from the Davenport lookup
+- **`industrial_fraction`** — unit area share that is industrial, from Overture building `class`
+  and the `base/land_use` layer. This is a *functional* attribute, not a morphological one. It
+  exists solely because LCZ 8 (large low-rise) and LCZ 10 (heavy industry) are geometrically
+  near-identical — large footprint, low, sparse — and nothing in morphology or land cover
+  separates a distribution warehouse from a refinery. Without it LCZ 10 is unreachable and the
+  package will silently never emit it. Combine the two evidence sources with a documented rule
+  and record which contributed.
 
 **Sky view factor is explicitly deferred.** It is the single most expensive component and is
 strongly correlated with aspect ratio, which we have. Document this omission prominently in
@@ -294,6 +352,13 @@ prototypes, return the **full 17-way distance vector** plus `lcz_primary`, `lcz_
 and a `uniqueness` measure. Hard labelling is a downstream convenience function — the
 distance vector is the primary output.
 
+**LCZ 10 disambiguation.** Morphological distance alone cannot separate LCZ 8 from LCZ 10.
+Apply `industrial_fraction` as a post-distance rule: where a unit's nearest prototypes are 8 and
+10 and `industrial_fraction` exceeds a configurable threshold, prefer 10. Keep this as an
+explicit, documented, configurable rule applied *after* the distance computation — do not fold
+a functional attribute into the morphological distance metric, where it would silently distort
+every other class. Record in the output whether the rule fired for a given unit.
+
 **Output.** GeoParquet using LCZ Generator integer codes (1–10 built, 11–17 for A–G) and the
 standard Demuzere colour table, so results drop into existing tooling. Plus a JSON manifest
 containing the full serialised config, all source versions, and the cleaning report.
@@ -307,6 +372,11 @@ recompute a parameter or a quantile.
 **Validation module.** Agreement against the Demuzere global LCZ map on the 100 m grid,
 reported lczexplore-style: per-class agreement and a confusion matrix, not a single accuracy
 number. Comparability with the existing literature matters more than a headline figure.
+
+Additionally, report agreement **stratified by `height_completeness` decile**, and break out
+the height-axis confusion pairs (1↔4, 2↔5, 3↔6) separately. This turns the Phase 3 caveat into
+a measured quantity rather than a disclaimer, and is the single most useful validation output
+for judging whether a low-height-coverage city is usable.
 
 *Acceptance:* end-to-end run on the fixture city produces a valid GeoParquet, `units_viz.parquet`
 and manifest; validation module reports per-class agreement against the global map.
@@ -369,7 +439,7 @@ refetch tiles; the whole directory is portable to static hosting unchanged.
 
 ## References
 
-PDFs live in `docs/references/papers`. They are present on disk but **gitignored and not committed**
+PDFs live in `docs/references/`. They are present on disk but **gitignored and not committed**
 (licensing, not size). Treat them as read-only local reference material: read them freely, never
 `git add` them, and never quote more than a short phrase into code comments or docs. If a PDF
 you need is absent, say so rather than proceeding from memory on anything in Tier 1.
