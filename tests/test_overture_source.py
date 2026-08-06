@@ -13,7 +13,7 @@ from shapely.geometry import box
 
 from lczkit.config import Settings
 from lczkit.protocols import BBox
-from lczkit.sources.overture import OvertureSource, bbox_key
+from lczkit.sources.overture import _BUILDINGS, _RAIL, _STREETS, OvertureSource, bbox_key
 
 
 def _settings(tmp_path: Path, release: str | None = "2026-07-22.0") -> Settings:
@@ -49,7 +49,7 @@ def test_cache_hit_never_touches_network(tmp_path: Path, monkeypatch: pytest.Mon
         geometry=[box(0, 0, 1, 1)],
         crs="EPSG:4326",
     )
-    cache_path = source._cache_path("buildings", bbox)
+    cache_path = source._cache_path("buildings", bbox, _BUILDINGS.key)
     cache_path.parent.mkdir(parents=True)
     cached.to_parquet(cache_path)
 
@@ -69,7 +69,26 @@ def test_streets_and_rail_cache_to_distinct_files(tmp_path: Path) -> None:
     source = OvertureSource(_settings(tmp_path))
     bbox: BBox = (13.39, 52.50, 13.41, 52.51)
 
-    assert source._cache_path("streets", bbox) != source._cache_path("rail", bbox)
+    streets = source._cache_path(_STREETS.layer, bbox, _STREETS.key)
+    rail = source._cache_path(_RAIL.layer, bbox, _RAIL.key)
+
+    assert streets != rail
+
+
+def test_changing_a_layers_columns_changes_its_cache_path(tmp_path: Path) -> None:
+    """A cached file's contents depend on the query, not just on `(release, bbox, layer)`.
+    Widening a layer's column set must route to a new path rather than return a stale frame
+    that is missing the new columns — and must never overwrite the old file, which lives in a
+    directory shared with other projects."""
+    source = OvertureSource(_settings(tmp_path))
+    bbox: BBox = (13.39, 52.50, 13.41, 52.51)
+    narrower = _BUILDINGS._replace(columns="id, height")
+
+    old = source._cache_path(_BUILDINGS.layer, bbox, narrower.key)
+    new = source._cache_path(_BUILDINGS.layer, bbox, _BUILDINGS.key)
+
+    assert old != new
+    assert old.parent == new.parent  # same (release, bbox) directory, different file
 
 
 @pytest.mark.network
@@ -79,6 +98,27 @@ def test_rail_only_returns_rail_subtype(tmp_path: Path) -> None:
     rail = source.rail(SMALL_BBOX)
 
     assert (rail["subtype"] == "rail").all()
+
+
+@pytest.mark.network
+def test_buildings_carry_usage_and_provenance_columns(tmp_path: Path) -> None:
+    """`subtype`/`class` (usage type, the only route to LCZ 10) and `sources` (per-feature
+    dataset provenance, driving Phase 3's diagnostic) must be pulled at ingestion."""
+    source = OvertureSource(_settings(tmp_path))
+
+    buildings = source.buildings(SMALL_BBOX)
+
+    assert {"subtype", "class", "sources"} <= set(buildings.columns)
+
+
+@pytest.mark.network
+def test_land_use_returns_only_polygons_with_usage_columns(tmp_path: Path) -> None:
+    source = OvertureSource(_settings(tmp_path))
+
+    land_use = source.land_use(FIXTURE_BBOX)
+
+    assert (land_use.geometry.geom_type.isin(["Polygon", "MultiPolygon"])).all()
+    assert {"subtype", "class"} <= set(land_use.columns)
 
 
 @pytest.mark.network

@@ -19,7 +19,7 @@ from lczkit.protocols import (
 
 def test_vector_source_is_a_protocol_with_expected_methods() -> None:
     assert Protocol in VectorSource.__mro__
-    assert {"buildings", "streets", "water"} <= set(dir(VectorSource))
+    assert {"buildings", "streets", "water", "rail", "land_use"} <= set(dir(VectorSource))
 
 
 def test_height_source_is_a_protocol_with_expected_methods() -> None:

@@ -44,6 +44,7 @@ class FixtureVectorSource:
         self._rail = gpd.read_parquet(FIXTURES_DIR / "rail.parquet")
         self._waterlines = gpd.read_parquet(FIXTURES_DIR / "waterlines.parquet")
         self._waterbodies = gpd.read_parquet(FIXTURES_DIR / "waterbodies.parquet")
+        self._land_use = gpd.read_parquet(FIXTURES_DIR / "land_use.parquet")
 
     def buildings(self, bbox: BBox) -> gpd.GeoDataFrame:
         minx, miny, maxx, maxy = bbox
@@ -63,6 +64,10 @@ class FixtureVectorSource:
             self._waterlines.cx[minx:maxx, miny:maxy].reset_index(drop=True),
             self._waterbodies.cx[minx:maxx, miny:maxy].reset_index(drop=True),
         )
+
+    def land_use(self, bbox: BBox) -> gpd.GeoDataFrame:
+        minx, miny, maxx, maxy = bbox
+        return self._land_use.cx[minx:maxx, miny:maxy].reset_index(drop=True)
 
 
 @pytest.fixture(scope="session")

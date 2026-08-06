@@ -31,7 +31,13 @@ class VectorSource(Protocol):
         """Return building footprints intersecting `bbox`.
 
         Columns include at least `geometry`, `height` (nullable), `num_floors` (nullable),
-        and `sources` (upstream provenance metadata).
+        `subtype` and `class` (usage type), and `sources` (upstream provenance metadata).
+
+        `height` and `num_floors` are nullable *by design* — upstream vector sources conflate
+        footprints from several datasets and only some of them carry height at all. A null
+        height is never an error at this layer; the Phase 3 height cascade owns it. `subtype`,
+        `class` and `sources` must survive cleaning: `class` is the only route to LCZ 10, and
+        `sources` drives Phase 3's source-availability diagnostic.
         """
         ...
 
@@ -51,6 +57,16 @@ class VectorSource(Protocol):
 
         Added in Phase 2: `EnclosureUnits` needs rail as a barrier layer alongside streets and
         waterbodies, and Phase 1 never had a reason to fetch it.
+        """
+        ...
+
+    def land_use(self, bbox: BBox) -> gpd.GeoDataFrame:
+        """Return land-use polygons intersecting `bbox`, retaining `subtype` and `class`.
+
+        Functional semantics only. This layer supplies the industrial share of a unit's area
+        (Phase 5's `industrial_fraction`, consumed by Phase 6's LCZ 8/10 disambiguation) and
+        nothing else. It is **not** a barrier for spatial-unit generation and **not** a
+        land-cover source — rasters own land cover.
         """
         ...
 

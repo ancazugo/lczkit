@@ -18,6 +18,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import geopandas as gpd
+from shapely.geometry import box
+
 from lczkit.config import Settings
 from lczkit.sources.overture import OvertureSource
 
@@ -30,6 +33,27 @@ RELEASE = "2026-07-22.0"
 FIXTURES_DIR = Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "overture"
 
 
+def _clip(gdf: gpd.GeoDataFrame, bbox: tuple[float, float, float, float]) -> gpd.GeoDataFrame:
+    """Clip polygon geometries to `bbox`, dropping anything that clips away to nothing.
+
+    Applied to `land_use` only. A bbox query returns whole features that merely *intersect* the
+    box, and Overture's `protected` land use includes region-scale boundaries — two of them
+    grazed the Berlin bbox and carried 355k of the layer's 393k vertices, pushing the committed
+    fixture past 8 MB on their own. CLAUDE.md's instruction for an oversized fixture is to clip
+    it further rather than move it out of the repo, so that is what this does. The other layers
+    are city-scale features that never span more than a few blocks and are left untouched.
+
+    `OvertureSource.land_use()` itself does *not* clip — it returns intersecting features like
+    every other layer. This is a property of the fixture, not of the source.
+    """
+    clipped = gdf.copy()
+    clipped["geometry"] = clipped.geometry.intersection(box(*bbox)).make_valid()
+    keep = (~clipped.geometry.is_empty) & clipped.geometry.geom_type.isin(
+        ["Polygon", "MultiPolygon"]
+    )
+    return clipped.loc[keep].reset_index(drop=True)
+
+
 def main() -> None:
     settings = Settings.load()
     settings.overture.release = RELEASE
@@ -39,6 +63,7 @@ def main() -> None:
     streets = source.streets(BERLIN_FIXTURE_BBOX)
     rail = source.rail(BERLIN_FIXTURE_BBOX)
     waterlines, waterbodies = source.water(BERLIN_FIXTURE_BBOX)
+    land_use = _clip(source.land_use(BERLIN_FIXTURE_BBOX), BERLIN_FIXTURE_BBOX)
 
     FIXTURES_DIR.mkdir(parents=True, exist_ok=True)
     buildings.to_parquet(FIXTURES_DIR / "buildings.parquet")
@@ -46,12 +71,14 @@ def main() -> None:
     rail.to_parquet(FIXTURES_DIR / "rail.parquet")
     waterlines.to_parquet(FIXTURES_DIR / "waterlines.parquet")
     waterbodies.to_parquet(FIXTURES_DIR / "waterbodies.parquet")
+    land_use.to_parquet(FIXTURES_DIR / "land_use.parquet")
 
     print(f"buildings:   {len(buildings)}")
     print(f"streets:     {len(streets)}")
     print(f"rail:        {len(rail)}")
     print(f"waterlines:  {len(waterlines)}")
     print(f"waterbodies: {len(waterbodies)}")
+    print(f"land_use:    {len(land_use)}")
     print(f"wrote fixture layers to {FIXTURES_DIR}")
 
 
