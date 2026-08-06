@@ -35,10 +35,10 @@ mypy_path = "src"
 strict = true
 warn_unused_ignores = true
 
-# Neither package ships type stubs or a py.typed marker, and no types-* stub package exists
-# for either on PyPI.
+# None of these ship type stubs or a py.typed marker, and no types-* stub package exists for
+# any of them on PyPI.
 [[tool.mypy.overrides]]
-module = ["geoplanar", "neatnet"]
+module = ["geoplanar", "neatnet", "momepy"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

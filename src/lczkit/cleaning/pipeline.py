@@ -8,13 +8,13 @@ from dataclasses import dataclass
 
 import geopandas as gpd
 from pyproj import CRS
-from shapely.geometry import box
 
 from lczkit.cleaning.buildings import clean_buildings
 from lczkit.cleaning.report import CleaningReport, CleaningStep
 from lczkit.cleaning.streets import simplify_streets
 from lczkit.cleaning.topology import apply_cross_layer_topology
 from lczkit.config import CleaningConfig
+from lczkit.crs import local_utm_crs
 from lczkit.protocols import BBox, VectorSource
 
 
@@ -31,7 +31,7 @@ def reproject_to_local_utm(
     can differ between layers covering nearly the same area (e.g. near a UTM zone boundary),
     which would silently break cross-layer topology if each layer picked its own zone.
     """
-    target = gpd.GeoSeries([box(*bbox)], crs="EPSG:4326").estimate_utm_crs()
+    target = local_utm_crs(bbox)
     return (
         target,
         buildings.to_crs(target),

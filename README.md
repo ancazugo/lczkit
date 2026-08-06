@@ -23,7 +23,15 @@ repair, multipolygon explosion, oversized-footprint and non-polygon removal, ove
 resolution and small-building absorption via `geoplanar`), street simplification via
 `neatnet`, cross-layer topology cleanup, and a structured cleaning report.
 
-No spatial-unit generation, height cascade, land cover, or classification exists yet.
+Phase 2 (spatial units) — `EnclosureUnits` (`momepy.enclosures()` over streets, rail, and
+waterbodies as barriers — large vegetation patches are not yet a barrier, since no land-cover
+source exists until Phase 4), `GridUnits` (a 100 m regular grid aligned to the local UTM CRS's
+own coordinate origin, not to the query bbox, so the same real-world cell always gets the same
+`unit_id`), and `aggregate()` (`"majority"` / `"area_weighted"`) for moving attribute columns
+between the two. `OvertureSource` gained a `rail()` layer in this phase, alongside its existing
+`buildings`/`streets`/`water`.
+
+No height cascade, land cover, or classification exists yet.
 
 ## Setup
 
