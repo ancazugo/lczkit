@@ -14,10 +14,22 @@ from lczkit.protocols import BBox
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "overture"
 
-#: Real ESA WorldCover v200 and ETH canopy height, clipped to `FIXTURE_BBOX` by
+#: Rotterdam's Waalhaven, added in Phase 6. The Berlin fixture cannot validate the LCZ 8 / LCZ 10
+#: rule — it holds 36 industrial buildings of 6195 — so a second fixture over an area with real
+#: industry is what turns that rule from a mechanism into evidence. Built by
+#: `scripts/build_industry_fixture.py`; 259 industrial buildings of 1681 and 17 industrial
+#: land-use parcels of 157.
+INDUSTRY_FIXTURES_DIR = Path(__file__).parent / "fixtures" / "overture_industry"
+
+#: Real ESA WorldCover v200 and ETH canopy height, clipped to the fixture bboxes by
 #: `scripts/build_landcover_fixture.py`. Unlike the Phase 3 height rasters these are committed:
 #: both products exist and are freely licensed, so there is something real to clip.
 LANDCOVER_FIXTURES_DIR = Path(__file__).parent / "fixtures" / "landcover"
+
+#: The Demuzere global LCZ map clipped to both fixture bboxes by
+#: `scripts/build_lcz_reference_fixture.py` — the Phase 6 validation target, so the agreement
+#: comparison runs offline in CI like everything else.
+LCZ_FIXTURES_DIR = Path(__file__).parent / "fixtures" / "lcz"
 
 #: The full committed Berlin extract (~3x3 km, matching CLAUDE.md's test-strategy sizing).
 FIXTURE_BBOX: BBox = (13.3789, 52.5057, 13.4231, 52.5327)
@@ -25,6 +37,12 @@ FIXTURE_BBOX: BBox = (13.3789, 52.5057, 13.4231, 52.5327)
 #: A ~650x600 m subset of the fixture, for tests that run `neatnet`/`clean_vectors` and need
 #: to stay fast — the full extent's street network takes on the order of a minute to simplify.
 SMALL_BBOX: BBox = (13.3966, 52.5165, 13.4054, 52.5219)
+
+#: The full committed Rotterdam extract (~2.7x2.2 km).
+INDUSTRY_BBOX: BBox = (4.3000, 51.8850, 4.3400, 51.9050)
+
+#: A ~700x600 m subset over the densest industrial block, for the same reason `SMALL_BBOX` exists.
+INDUSTRY_SMALL_BBOX: BBox = (4.3130, 51.8930, 4.3230, 51.8985)
 
 
 @pytest.fixture(autouse=True)
@@ -46,13 +64,13 @@ class FixtureVectorSource:
     small, fast) vector source.
     """
 
-    def __init__(self) -> None:
-        self._buildings = gpd.read_parquet(FIXTURES_DIR / "buildings.parquet")
-        self._streets = gpd.read_parquet(FIXTURES_DIR / "streets.parquet")
-        self._rail = gpd.read_parquet(FIXTURES_DIR / "rail.parquet")
-        self._waterlines = gpd.read_parquet(FIXTURES_DIR / "waterlines.parquet")
-        self._waterbodies = gpd.read_parquet(FIXTURES_DIR / "waterbodies.parquet")
-        self._land_use = gpd.read_parquet(FIXTURES_DIR / "land_use.parquet")
+    def __init__(self, directory: Path = FIXTURES_DIR) -> None:
+        self._buildings = gpd.read_parquet(directory / "buildings.parquet")
+        self._streets = gpd.read_parquet(directory / "streets.parquet")
+        self._rail = gpd.read_parquet(directory / "rail.parquet")
+        self._waterlines = gpd.read_parquet(directory / "waterlines.parquet")
+        self._waterbodies = gpd.read_parquet(directory / "waterbodies.parquet")
+        self._land_use = gpd.read_parquet(directory / "land_use.parquet")
 
     def buildings(self, bbox: BBox) -> gpd.GeoDataFrame:
         minx, miny, maxx, maxy = bbox
@@ -81,6 +99,11 @@ class FixtureVectorSource:
 @pytest.fixture(scope="session")
 def fixture_vector_source() -> FixtureVectorSource:
     return FixtureVectorSource()
+
+
+@pytest.fixture(scope="session")
+def industry_vector_source() -> FixtureVectorSource:
+    return FixtureVectorSource(INDUSTRY_FIXTURES_DIR)
 
 
 def write_height_raster(

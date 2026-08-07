@@ -28,26 +28,41 @@ from rasterio.windows import from_bounds
 # tests/conftest.py — the land-cover fixture has to cover the same ground as the vector one.
 BERLIN_FIXTURE_BBOX = (13.3789, 52.5057, 13.4231, 52.5327)
 
+# Matches ROTTERDAM_FIXTURE_BBOX in scripts/build_industry_fixture.py, added in Phase 6 so the
+# second fixture can be classified rather than only cleaned.
+ROTTERDAM_FIXTURE_BBOX = (4.3000, 51.8850, 4.3400, 51.9050)
+
 FIXTURES_DIR = Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "landcover"
 
-#: `(output filename, source URL)`. Both are 10 m EPSG:4326 uint8 global products tiled on a
-#: 3-degree grid; N51E012 is the tile holding Berlin.
+#: `output filename -> (source URL, bbox)`. All are 10 m EPSG:4326 uint8 global products tiled on
+#: a 3-degree grid; N51E012 holds Berlin and N51E003 holds Rotterdam.
+#:
+#: Rotterdam gets WorldCover only. The ETH canopy product is a second, competing tree estimate that
+#: Phase 4 documents as reading high, and Phase 5 defaults to the WorldCover route; the Rotterdam
+#: fixture exists to exercise the LCZ 8/10 rule, where tree cover is beside the point.
 SOURCES = {
     "worldcover_berlin.tif": (
         "https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map/"
-        "ESA_WorldCover_10m_2021_v200_N51E012_Map.tif"
+        "ESA_WorldCover_10m_2021_v200_N51E012_Map.tif",
+        BERLIN_FIXTURE_BBOX,
     ),
     "eth_canopy_berlin.tif": (
         "https://libdrive.ethz.ch/index.php/s/cO8or7iOe5dT2Rt/download"
-        "?path=%2F3deg_cogs&files=ETH_GlobalCanopyHeight_10m_2020_N51E012_Map.tif"
+        "?path=%2F3deg_cogs&files=ETH_GlobalCanopyHeight_10m_2020_N51E012_Map.tif",
+        BERLIN_FIXTURE_BBOX,
+    ),
+    "worldcover_rotterdam.tif": (
+        "https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map/"
+        "ESA_WorldCover_10m_2021_v200_N51E003_Map.tif",
+        ROTTERDAM_FIXTURE_BBOX,
     ),
 }
 
 
-def clip(url: str, destination: Path) -> None:
-    """Read the window covering the fixture bbox and write it out, preserving nodata and CRS."""
+def clip(url: str, destination: Path, bbox: tuple[float, float, float, float]) -> None:
+    """Read the window covering `bbox` and write it out, preserving nodata and CRS."""
     with rasterio.open(url) as src:
-        window = from_bounds(*BERLIN_FIXTURE_BBOX, transform=src.transform)
+        window = from_bounds(*bbox, transform=src.transform)
         values = src.read(1, window=window)
         profile = src.profile | {
             "driver": "GTiff",
@@ -64,9 +79,9 @@ def clip(url: str, destination: Path) -> None:
 
 def main() -> None:
     FIXTURES_DIR.mkdir(parents=True, exist_ok=True)
-    for filename, url in SOURCES.items():
+    for filename, (url, bbox) in SOURCES.items():
         destination = FIXTURES_DIR / filename
-        clip(url, destination)
+        clip(url, destination, bbox)
         with rasterio.open(destination) as check:
             size_kb = destination.stat().st_size / 1024
             print(

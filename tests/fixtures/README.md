@@ -23,31 +23,87 @@ Re-run that script to refresh the fixture (e.g. against a newer release).
 
 This bbox has **not** been cross-checked against official DFC2017 tile boundaries — it was
 chosen as a real, feature-dense Berlin extract sufficient for Phase 1's cleaning-pipeline
-tests. Phase 6 (validation against the Demuzere global LCZ map / DFC2017 ground truth) should
-confirm alignment before relying on it for accuracy reporting, not just structural testing.
+tests. Phase 6 validates against the Demuzere global LCZ map (see `lcz/` below) rather than
+against DFC2017 ground truth, so tile alignment has not become load-bearing.
+
+## `overture_industry/`
+
+A real ~2.7x2.2 km Overture extract over Rotterdam's Waalhaven, same release and same six layers,
+built by `scripts/build_industry_fixture.py`. Added in Phase 6.
+
+It exists because **the Berlin fixture cannot validate the LCZ 8 / LCZ 10 rule.** Mitte holds 36
+industrial buildings of 6195 and 2 industrial land-use parcels of 1559 — enough to exercise the
+plumbing, nowhere near enough for the discrimination to be observable, and
+`test_ucp_integration.py` asserts that smallness so a green suite is not mistaken for evidence.
+Rotterdam holds **259 industrial buildings of 1681 and 17 industrial parcels of 157**, which is
+what makes the rule testable at all.
+
+Rotterdam was chosen by measurement. Duisburg-Bruckhausen has more industrial buildings in
+absolute terms (152) but 7163 residential ones alongside them — a mixed district, not an
+industrial one — and Houston's ship channel is barely tagged (5 industrial buildings). Rotterdam
+is the only candidate carrying both evidence sources, and therefore the only one that exercises
+the `both` branch of `industrial_evidence`. Within Rotterdam, the Waalhaven basin was preferred
+over the Botlek petrochemical complex: Botlek is the truer LCZ 10 landscape but carries only 33
+industrial buildings against 44 parcels, and building evidence is the scarcer of the two in most
+cities.
+
+`land_use.parquet` is clipped to the bbox for the same reason Berlin's is.
 
 ## `landcover/`
 
-Two real 10 m global products clipped to the same bbox as the Overture extract, built by
-`scripts/build_landcover_fixture.py`. Both are EPSG:4326 uint8, 530x324, and total ~31 KB.
+Three real 10 m global products clipped to the fixture bboxes, built by
+`scripts/build_landcover_fixture.py`. All EPSG:4326 uint8, ~36 KB in total.
 
-- `worldcover_berlin.tif` — ESA WorldCover v200 (2021), nodata 0. Holds classes 10, 30, 40, 50,
-  60 and 80; 82% of the tile is class 50 (Built up).
-- `eth_canopy_berlin.tif` — ETH global canopy height (2020), nodata 255. **78% of this tile is
-  nodata**: Lang et al. mask built-up areas, snow, ice and permanent water out of the product and
-  set them to 255 rather than reporting zero canopy there, so 93% of the cells WorldCover calls
-  built up, and 93% of the water, come back as nodata. That is why
+- `worldcover_berlin.tif` — ESA WorldCover v200 (2021), nodata 0, 530x324. Holds classes 10, 30,
+  40, 50, 60 and 80; 82% of the tile is class 50 (Built up).
+- `eth_canopy_berlin.tif` — ETH global canopy height (2020), nodata 255, 530x324. **78% of this
+  tile is nodata**: Lang et al. mask built-up areas, snow, ice and permanent water out of the
+  product and set them to 255 rather than reporting zero canopy there, so 93% of the cells
+  WorldCover calls built up, and 93% of the water, come back as nodata. That is why
   `LandCoverDatasetConfig.nodata_policy` exists, and `tests/test_landcover_fixture.py` asserts the
   difference it makes. Note that Lang et al. define that mask *from ESA WorldCover*, so these two
   fixtures are not independent measurements of the same ground.
+- `worldcover_rotterdam.tif` — ESA WorldCover v200 (2021), nodata 0, 480x240, over the industry
+  fixture. No canopy counterpart: the ETH product is a second, competing tree estimate that Phase 4
+  documents as reading high, and tree cover is beside the point for the LCZ 8/10 rule.
 
 Unlike the Phase 3 height rasters — synthesised in-test, because no tier 2-4 product exists
 anywhere to clip — these are committed, because a real product does exist and the clip is small.
 That is what CLAUDE.md's test strategy asks for.
 
-Both are **CC-BY-4.0** and are redistributed here under that licence:
+## `lcz/`
+
+The Demuzere global LCZ map clipped to both fixture bboxes, built by
+`scripts/build_lcz_reference_fixture.py`. EPSG:4326 uint8 at ~100 m, nodata 0, ~3 KB each.
+
+- `lcz_reference_berlin.tif` — 49x30, holding classes 1, 2, 4, 5, 6, 8, 10, 11, 12 and 15.
+- `lcz_reference_rotterdam.tif` — 45x22, holding classes 1, 4, 5, 6, 8, 9, 10, 12, 14 and 17.
+  Note that the reference map itself puts **LCZ 10 (heavy industry)** in this extent, which is what
+  makes it a target the industry fixture can be judged against rather than merely compared to.
+
+Both carry the product's own GDAL colormap, which is the authority
+`docs/references/tables/demuzere_2022_lcz_codes.md` was transcribed from — so the transcription
+stays checkable on a clean checkout with no `DATA_DIR`.
+
+Unlike the other fixture scripts, this one reads from `DATA_DIR` rather than over HTTPS: the global
+map is a 1.8 GB COG already present on this system under `input/`. It is read only; nothing there
+is created, modified or deleted.
+
+**The clipped copy is version 3 of the map**, while the Tier 1 citation below describes an earlier
+version. A run manifest records the file and the citation separately rather than conflating them.
+
+## Licensing
+
+All committed raster fixtures are **CC-BY-4.0** and are redistributed here under that licence:
 
 - ESA WorldCover 10 m 2021 v200, © ESA WorldCover project 2021 / Contains modified Copernicus
   Sentinel data (2021) processed by ESA WorldCover consortium. `10.5281/zenodo.7254221`.
 - Lang, N., Jetz, W., Schindler, K., Wegner, J. D. (2023), *A high-resolution canopy height model
   of the Earth*, Nature Ecology & Evolution 7, 1778-1789. `10.1038/s41559-023-02206-6`.
+- Demuzere, M., Kittner, J., Martilli, A., Mills, G., Moede, C., Stewart, I. D., van Vliet, J.,
+  Bechtel, B. (2022), *A global map of Local Climate Zones to support Earth system modelling and
+  urban-scale environmental science*, Earth System Science Data 14, 3835-3873.
+  `10.5194/essd-14-3835-2022`.
+
+The Overture extracts are from Overture Maps Foundation data, which carries the licences of its
+upstream sources (ODbL for OSM-derived features, CDLA-Permissive-2.0 for the ML-derived ones).
