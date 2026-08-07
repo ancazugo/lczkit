@@ -550,6 +550,192 @@ class UcpConfig(BaseModel):
     """
 
 
+class ClassificationConfig(BaseModel):
+    """Configuration for the Phase 6 prototype-distance classifier.
+
+    Every threshold the classifier applies lives here and is serialised into the run manifest.
+    Two of them - `natural_dominant_fraction` and `natural_negligible_fraction` - move the
+    prototype table itself, because the tree and water ranges they generate are lczkit's own
+    rather than Stewart & Oke's and there is no published value to defer to.
+    """
+
+    weight_preset: str = "bernard2024"
+    """Named entry in `lczkit.classify.weights.PRESETS`. `"bernard2024"` is the published default
+    for the built types; `"equal"` is the uniform comparison."""
+
+    built_min_building_fraction: float = 0.10
+    """Building surface fraction at or above which a unit is classified against the built
+    prototypes rather than the natural ones.
+
+    Not an invented number. Every built class in Stewart & Oke's table has a building surface
+    fraction of at least 10%, and every natural class at most 10%, so 10% is the boundary the
+    published table draws itself. It is configurable because a city's footprint completeness can
+    shift the measured fraction even where the real one is unchanged.
+    """
+
+    reachable_natural_classes: list[str] = Field(default_factory=lambda: ["A", "B", "D", "E", "G"])
+    """Which natural classes the gate may assign, by Stewart & Oke label.
+
+    C (bush, scrub), D (low plants) and F (bare soil or sand) are mutually indistinguishable with
+    the parameters this package computes: the published table separates them only by sky view
+    factor, aspect ratio and height of roughness elements, all building-derived and all absent in
+    open ground, and the default WorldCover mapping folds shrubland, grassland and bare ground
+    into a single `pervious` class. Rather than let three tied prototypes be resolved by index
+    order, C and F are excluded and the exclusion is recorded in the manifest. Reaching them needs
+    a land-cover mapping that emits shrub and bare separately, and a Phase 5 fraction carrying
+    them. Distances to the excluded classes are still computed and reported.
+    """
+
+    natural_dominant_fraction: float = 0.50
+    """Tree or water cover at which a unit reads as LCZ A or LCZ G. See
+    `docs/references/tables/lczkit_natural_class_ranges.md` - lczkit's own, not Tier 1."""
+
+    natural_negligible_fraction: float = 0.10
+    """Tree or water cover a natural class treats as absent. Reuses the 10% boundary Stewart &
+    Oke apply to building and impervious cover throughout their natural rows."""
+
+    lcz10_min_industrial_fraction: float = 0.50
+    """`industrial_fraction` above which a unit whose two nearest prototypes are LCZ 8 and LCZ 10
+    is relabelled LCZ 10.
+
+    Deliberately set to under-trigger, per CLAUDE.md: Overture cannot distinguish heavy from light
+    industry, so a missing LCZ 10 is a visible gap while a light-industrial estate mislabelled as
+    heavy industry is an invisible error that propagates into any model consuming the map. A
+    majority of the unit's area has to be industrial before the rule fires. Note the denominator
+    differs from Bernard et al. (2024)'s `FIND/B`, which is a share of building area rather than
+    of unit area, so their 0.33 does not transfer.
+    """
+
+    lcz1_min_height_m: float | None = None
+    """Optional floor on `Hr` below which the LCZ 1 (compact high-rise) distance is discarded.
+
+    Bernard et al. (2024) Sect. 2.3 apply the equivalent constraint on mean building levels,
+    reporting that without it GeoClimate produced LCZ 1 across European cities where no urban
+    researcher would place any. lczkit has no reliable per-unit storey count, so the hook is
+    exposed against `Hr` instead and defaults to off - an untested constraint applied by default
+    would be a worse failure than the over-prediction it guards against.
+    """
+
+    @model_validator(mode="after")
+    def _check_thresholds(self) -> ClassificationConfig:
+        if not 0.0 < self.natural_negligible_fraction < self.natural_dominant_fraction <= 1.0:
+            raise ValueError(
+                "expected 0 < natural_negligible_fraction < natural_dominant_fraction <= 1, got "
+                f"{self.natural_negligible_fraction} and {self.natural_dominant_fraction}"
+            )
+        for name in ("built_min_building_fraction", "lcz10_min_industrial_fraction"):
+            value = getattr(self, name)
+            if not 0.0 <= value <= 1.0:
+                raise ValueError(f"{name} must be a fraction in [0, 1], got {value}")
+        if not self.reachable_natural_classes:
+            raise ValueError(
+                "reachable_natural_classes must not be empty; a run that can assign no natural "
+                "class would label every park and lake as a built type."
+            )
+        return self
+
+
+class OutputConfig(BaseModel):
+    """Configuration for what a run writes into `output/lczkit/<run_id>/`."""
+
+    break_count: int = 7
+    """Number of classification breaks precomputed per continuous variable. Phase 7 renders
+    choropleths from these and must never recompute a quantile at site-build time."""
+
+    break_method: Literal["quantile"] = "quantile"
+    """How the breaks are derived. Only quantiles are implemented; the field exists so the
+    manifest states the method rather than leaving a consumer to assume one."""
+
+    viz_significant_figures: int = 3
+    """Significant figures floats are rounded to in `units_viz.parquet`."""
+
+    viz_distance_scale: int = 1000
+    """Multiplier applied to the 17-way distance vector before it is stored as `int16` in
+    `units_viz.parquet`. Distances are small positive reals, so 1000 keeps three decimal places
+    inside the int16 range."""
+
+    @model_validator(mode="after")
+    def _check(self) -> OutputConfig:
+        if self.break_count < 2:
+            raise ValueError(f"break_count must be at least 2, got {self.break_count}")
+        if self.viz_significant_figures < 1:
+            raise ValueError(
+                f"viz_significant_figures must be at least 1, got {self.viz_significant_figures}"
+            )
+        if self.viz_distance_scale < 1:
+            raise ValueError(f"viz_distance_scale must be positive, got {self.viz_distance_scale}")
+        return self
+
+
+def _default_reference_dataset() -> LandCoverDatasetConfig:
+    """The Demuzere global LCZ map, described as a categorical raster product.
+
+    Deliberately a `LandCoverDatasetConfig`: the reduction the validation module needs - areal
+    class fractions per unit, then the majority - is exactly what `LocalRasterSource` already
+    does, including the CRS handling, the covering window and the nodata policy. Describing the
+    reference map this way reuses all of it instead of growing a second `exactextract` path that
+    could drift.
+
+    `filename` is unset because the product is not part of the repo; place it under
+    `input/<source_dir_name>/` and set the name. `nodata=0` is the product's own convention.
+
+    Nodata is *assigned* to its own class rather than excluded, which is the only difference from
+    how a land-cover product would be described. Excluding it would renormalise the fractions over
+    the covered cells and lose the one number the validation module cannot do without: how much of
+    each unit the reference map actually reaches. A unit half outside the map would otherwise
+    report a confident majority computed from a corner of itself.
+    """
+    return LandCoverDatasetConfig(
+        name="demuzere_lcz",
+        source_dir_name="Demuzere_2022_complete",
+        classes=[*(f"lcz_{code}" for code in range(1, 18)), "nodata"],
+        value_classes={code: f"lcz_{code}" for code in range(1, 18)},
+        column_prefix="ref_",
+        nodata=0.0,
+        nodata_policy="assign",
+        nodata_class="nodata",
+        unmapped_policy="raise",
+    )
+
+
+class ValidationConfig(BaseModel):
+    """Configuration for agreement against a reference LCZ map.
+
+    CLAUDE.md's target is the Demuzere global map on the 100 m grid, reported lczexplore-style:
+    per-class agreement and a confusion matrix, never a single headline number.
+    """
+
+    reference: LandCoverDatasetConfig = Field(default_factory=_default_reference_dataset)
+    """The reference map, described as a categorical raster. See `_default_reference_dataset`."""
+
+    reference_citation: str = "10.5194/essd-14-3835-2022"
+    """Demuzere et al. (2022), *ESSD* 14, 3835-3873. Recorded separately from the file actually
+    read: the copy on this system is version 3 of the map and the paper describes an earlier one,
+    so conflating the two in the manifest would misstate what a run was validated against."""
+
+    min_reference_coverage: float = 0.5
+    """Fraction of a unit the reference map must actually cover for that unit to enter the
+    agreement statistics. A unit half outside the map's extent would otherwise contribute a
+    majority computed from a corner of itself."""
+
+    height_completeness_deciles: int = 10
+    """Strata for the height-completeness breakdown. CLAUDE.md asks for deciles specifically;
+    configurable so a run with few units can widen the bins rather than report noise."""
+
+    @model_validator(mode="after")
+    def _check(self) -> ValidationConfig:
+        if not 0.0 <= self.min_reference_coverage <= 1.0:
+            raise ValueError(
+                f"min_reference_coverage must be in [0, 1], got {self.min_reference_coverage}"
+            )
+        if self.height_completeness_deciles < 2:
+            raise ValueError(
+                "height_completeness_deciles must be at least 2, got "
+                f"{self.height_completeness_deciles}"
+            )
+        return self
+
+
 class Settings(BaseModel):
     """Resolved configuration for a single lczkit run.
 
@@ -564,6 +750,9 @@ class Settings(BaseModel):
     heights: HeightConfig = Field(default_factory=HeightConfig)
     land_cover: LandCoverConfig = Field(default_factory=LandCoverConfig)
     ucp: UcpConfig = Field(default_factory=UcpConfig)
+    classification: ClassificationConfig = Field(default_factory=ClassificationConfig)
+    output: OutputConfig = Field(default_factory=OutputConfig)
+    validation: ValidationConfig = Field(default_factory=ValidationConfig)
 
     @field_validator("data_dir")
     @classmethod
