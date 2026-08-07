@@ -69,9 +69,11 @@ Three things about this phase are worth knowing before relying on it:
   here. Where Overture supplies a real per-building confidence, that value is used instead.
 - **Areal tiers degrade along the height axis, by construction.** A ~100 m product cannot
   resolve low-rise from mid-rise from high-rise within a heterogeneous unit, so classification
-  error concentrates on the LCZ pairs that differ mainly in height — 1↔4, 2↔5, 3↔6 — rather
-  than scattering. In a city with low `height_completeness` that pattern is the data behaving
-  as documented, not a bug. Phase 6's validation measures it directly.
+  error concentrates on the LCZ pairs that differ mainly in height — 1↔2↔3 among the compact
+  types and 4↔5↔6 among the open ones — rather than scattering. In a city with low
+  `height_completeness` that pattern is the data behaving as documented, not a bug. Phase 6's
+  validation measures it directly, and reports it separately from the compactness axis
+  (1↔4, 2↔5, 3↔6), which is a footprint-coverage diagnostic rather than a height one.
 
 Phase 4 (raster and land cover) — the `RasterSource` protocol, with two backends returning a
 fractions table keyed by `unit_id`: `LocalRasterSource` (a COG on disk, reduced with
@@ -233,12 +235,22 @@ Six things about this phase are worth knowing before relying on it:
 
 Agreement against the Demuzere global map is reported lczexplore-style — per-class agreement and
 a confusion matrix, never a single accuracy figure — plus agreement stratified by
-`height_completeness` decile and the three confusion pairs CLAUDE.md names for separate reporting.
+`height_completeness` band and **both** confusion axes, reported apart because they are different
+instruments: the height axis (1↔2↔3, 4↔5↔6) diagnoses the height estimate, the compactness axis
+(1↔4, 2↔5, 3↔6) diagnoses footprint coverage and unit size.
+
 Measured on the fixtures: **17.7% over 957 cells in Berlin Mitte** and **42.5% over 657 cells in
-Rotterdam**. The dominant Berlin confusion is compact midrise read as open midrise, which is a
-building-surface-fraction disagreement: Stewart & Oke's ranges are defined for an LCZ patch, and a
-100 m grid cell that includes its share of street is not a patch. These are first measurements of
-a prototype-distance classifier missing five of ten properties, not a headline accuracy.
+Rotterdam**. These are first measurements of a prototype-distance classifier missing five of ten
+properties, not a headline accuracy — and Rotterdam's higher figure is mostly water, which agrees
+at 95.9% over 266 of its 657 cells while its built classes sit near zero.
+
+The dominant Berlin confusion is compact midrise read as open midrise, a building-surface-fraction
+disagreement. [`docs/experiments/phase-6.5-unit-scale.md`](docs/experiments/phase-6.5-unit-scale.md)
+tests the obvious explanation — that Stewart & Oke's ranges describe an LCZ patch and a 100 m grid
+cell is not one — and **rejects it**: computing on enclosures instead changes agreement by −0.4
+points. Restoring the 23.5% of building footprint area that Phase 1 cleaning removes is worth +9.1
+points, so the deficit is in the numerator rather than the unit. That is an open finding; nothing
+downstream of it has been tuned.
 
 ## Setup
 

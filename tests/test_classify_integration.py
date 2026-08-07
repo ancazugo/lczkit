@@ -265,7 +265,8 @@ def test_the_validation_report_is_per_class_and_stratified_not_a_single_number(
     assert report.n_compared > 0
     assert report.per_class
     assert report.confusion
-    assert len(report.height_axis) == 3
+    assert len(report.height_axis) == 6
+    assert len(report.compactness_axis) == 3
     assert len(report.by_height_completeness) == 10
     assert 0.0 <= report.overall_agreement <= 1.0
     assert sum(cell.n for cell in report.confusion) == report.n_compared

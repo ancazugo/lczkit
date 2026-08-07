@@ -6,15 +6,21 @@ thing a reader of an LCZ map actually needs to know, which is *which* classes ar
 for which - Bernard et al. (2024) Sect. 3.2 read their own results exactly this way, noting that
 their worst agreements sit on classes covering a negligible share of the area.
 
-Two breakdowns beyond the standard ones are required here, and both exist to turn the Phase 3
-height caveat into a measured quantity:
+Three breakdowns beyond the standard ones are required here:
 
-- **agreement by `height_completeness` decile**, so a city where tier-1 heights are near-absent
-  can be judged rather than disclaimed; and
-- **the height-axis confusion pairs 1<->4, 2<->5, 3<->6**, which is where CLAUDE.md predicts the
-  error concentrates when heights come from an areal product - those pairs differ essentially
-  only in height, so a height estimate that cannot resolve the <10 m / 10-25 m / >25 m bands
-  within a heterogeneous unit moves a label along that axis and nowhere else.
+- **agreement by `height_completeness` band**, so a city where tier-1 heights are near-absent can
+  be judged rather than disclaimed;
+- **the height axis**, 1<->2<->3 and 4<->5<->6, holding compactness fixed. This is where CLAUDE.md
+  predicts error concentrates when heights come from an areal product, since such a product cannot
+  resolve the <10 m / 10-25 m / >25 m bands within a heterogeneous unit. It is the axis that pairs
+  with the stratification above; and
+- **the compactness axis**, 1<->4, 2<->5, 3<->6, holding height fixed. This is the diagnostic for
+  building footprint coverage and for whether the spatial unit is the right size to hold an LCZ
+  patch at all.
+
+The two are different instruments and are reported separately. An earlier revision of the spec
+named the second set the height axis, which inverted what a reader would conclude from it: a
+disagreement between LCZ 2 and LCZ 5 says nothing about heights, both being midrise.
 
 Everything is area-weighted. On a regular grid that is the same as counting units; on enclosures
 it is not, and weighting by count there would let a thousand courtyards outvote a district.
@@ -26,7 +32,7 @@ import numpy as np
 import pandas as pd
 from pydantic import BaseModel, Field
 
-from lczkit.classify.labels import HEIGHT_AXIS_PAIRS, lcz
+from lczkit.classify.labels import COMPACTNESS_AXIS_PAIRS, HEIGHT_AXIS_PAIRS, lcz
 from lczkit.config import ValidationConfig
 
 
@@ -68,18 +74,20 @@ class Stratum(BaseModel):
     agreement: float
 
 
-class HeightAxisConfusion(BaseModel):
-    """One compact/open pair that differs essentially only in building height."""
+class AxisConfusion(BaseModel):
+    """One pair of classes differing along a single axis, counted in both directions."""
 
-    compact: int
-    open: int
-    n_compact_as_open: int
-    n_open_as_compact: int
+    a: int
+    b: int
+    n_a_as_b: int
+    """Units the reference calls `a` and the run called `b`."""
+
+    n_b_as_a: int
     n_total: int
     share_of_disagreement: float
-    """`n_total` over all disagreeing units. The number CLAUDE.md's Phase 3 prediction is
-    about: if areal height products are the limiting factor, these three pairs should hold a
-    disproportionate share of the errors."""
+    """`n_total` over all disagreeing units. If one axis is the limiting factor, its pairs should
+    hold a disproportionate share of the errors - which is the whole reason for reporting the two
+    axes apart rather than pooled."""
 
 
 class AgreementReport(BaseModel):
@@ -108,7 +116,12 @@ class AgreementReport(BaseModel):
     per_class: list[ClassAgreement] = Field(default_factory=list)
     confusion: list[ConfusionCell] = Field(default_factory=list)
     by_height_completeness: list[Stratum] = Field(default_factory=list)
-    height_axis: list[HeightAxisConfusion] = Field(default_factory=list)
+
+    height_axis: list[AxisConfusion] = Field(default_factory=list)
+    """1<->2<->3 and 4<->5<->6: compactness fixed, height band varies."""
+
+    compactness_axis: list[AxisConfusion] = Field(default_factory=list)
+    """1<->4, 2<->5, 3<->6: height fixed, building surface fraction varies."""
 
     n_disagree: int = 0
 
@@ -167,7 +180,8 @@ def agreement(
 
     report.per_class = _per_class(compared)
     report.confusion = _confusion(compared)
-    report.height_axis = _height_axis(compared)
+    report.height_axis = _axis(compared, HEIGHT_AXIS_PAIRS)
+    report.compactness_axis = _axis(compared, COMPACTNESS_AXIS_PAIRS)
     if height_completeness is not None:
         report.by_height_completeness = _strata(
             compared,
@@ -229,21 +243,19 @@ def _confusion(compared: pd.DataFrame) -> list[ConfusionCell]:
     ]
 
 
-def _height_axis(compared: pd.DataFrame) -> list[HeightAxisConfusion]:
-    """The 1<->4, 2<->5, 3<->6 pairs and their share of all disagreement."""
+def _axis(compared: pd.DataFrame, pairs: tuple[tuple[int, int], ...]) -> list[AxisConfusion]:
+    """One axis' pairs and their share of all disagreement, counted in both directions."""
     disagreeing = int((~compared["agree"]).sum())
-    rows: list[HeightAxisConfusion] = []
-    for compact, open_ in HEIGHT_AXIS_PAIRS:
-        forward = int(((compared["reference"] == compact) & (compared["predicted"] == open_)).sum())
-        backward = int(
-            ((compared["reference"] == open_) & (compared["predicted"] == compact)).sum()
-        )
+    rows: list[AxisConfusion] = []
+    for a, b in pairs:
+        forward = int(((compared["reference"] == a) & (compared["predicted"] == b)).sum())
+        backward = int(((compared["reference"] == b) & (compared["predicted"] == a)).sum())
         rows.append(
-            HeightAxisConfusion(
-                compact=compact,
-                open=open_,
-                n_compact_as_open=forward,
-                n_open_as_compact=backward,
+            AxisConfusion(
+                a=a,
+                b=b,
+                n_a_as_b=forward,
+                n_b_as_a=backward,
                 n_total=forward + backward,
                 share_of_disagreement=_share(float(forward + backward), float(disagreeing)),
             )

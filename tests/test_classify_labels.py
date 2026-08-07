@@ -17,6 +17,7 @@ from conftest import LCZ_FIXTURES_DIR
 from lczkit.classify.labels import (
     BUILT_CODES,
     CODES,
+    COMPACTNESS_AXIS_PAIRS,
     HEIGHT_AXIS_PAIRS,
     LCZ_CLASSES,
     NATURAL_CODES,
@@ -67,19 +68,31 @@ def test_labels_round_trip_through_codes() -> None:
         assert lcz(entry.code).label == entry.label
 
 
-def test_the_reported_pairs_hold_height_fixed_and_vary_compactness() -> None:
-    """The three pairs CLAUDE.md names, checked against what they actually are.
-
-    Each pair shares a height band — "high-rise", "midrise", "low-rise" — and differs in
-    compactness. They are a compactness axis, not the height axis the spec's name claims, and a
-    reader drawing conclusions about areal height products from a disagreement here would be
-    reading the wrong signal. Pinning it in a test keeps the discrepancy visible.
-    """
-    for compact, open_ in HEIGHT_AXIS_PAIRS:
+def test_the_compactness_axis_holds_the_height_band_fixed() -> None:
+    """Each pair shares a height band — "high-rise", "midrise", "low-rise" — and differs only in
+    compactness, which is what makes a disagreement here evidence about footprint coverage and
+    unit size rather than about heights."""
+    for compact, open_ in COMPACTNESS_AXIS_PAIRS:
         assert open_ - compact == 3
         assert lcz(compact).name.startswith("Compact")
         assert lcz(open_).name.startswith("Open")
         assert lcz(compact).name.split()[-1] == lcz(open_).name.split()[-1]
+
+
+def test_the_height_axis_holds_compactness_fixed() -> None:
+    """The converse, and the reason the two are reported apart.
+
+    Both members of every height-axis pair share a compactness family — compact 1/2/3 or open
+    4/5/6 — and differ in height band. All pairs within a family, not only the adjacent ones:
+    1<->3 is a high-rise read as low-rise, a two-band error and the most severe kind, and omitting
+    it would report the axis as quieter than it is.
+    """
+    for a, b in HEIGHT_AXIS_PAIRS:
+        assert lcz(a).name.split()[0] == lcz(b).name.split()[0]
+        assert lcz(a).name.split()[-1] != lcz(b).name.split()[-1]
+
+    assert set(HEIGHT_AXIS_PAIRS) == {(1, 2), (2, 3), (1, 3), (4, 5), (5, 6), (4, 6)}
+    assert not set(HEIGHT_AXIS_PAIRS) & set(COMPACTNESS_AXIS_PAIRS)
 
 
 def test_the_legend_is_json_shaped_and_complete() -> None:

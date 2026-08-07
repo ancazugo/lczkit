@@ -65,23 +65,46 @@ def test_the_confusion_matrix_is_sparse_and_complete() -> None:
     assert sum(cells.values()) == report.n_compared
 
 
-def test_the_height_axis_pairs_are_counted_in_both_directions() -> None:
-    """A height estimate that cannot resolve the LCZ height bands moves a label along the
-    compact/open axis in whichever direction it errs, so counting one way would halve the signal
-    this breakdown exists to measure."""
+def test_the_compactness_axis_pairs_are_counted_in_both_directions() -> None:
+    """A footprint deficit moves a label along the compact/open axis in whichever direction it
+    errs, so counting one way would halve the signal this breakdown exists to measure."""
     predicted, reference, area = build([4, 1, 5, 9], [1, 4, 2, 3])
 
     report = agreement(predicted, reference, area)
 
-    pairs = {(entry.compact, entry.open): entry for entry in report.height_axis}
-    assert pairs[(1, 4)].n_compact_as_open == 1
-    assert pairs[(1, 4)].n_open_as_compact == 1
+    pairs = {(entry.a, entry.b): entry for entry in report.compactness_axis}
+    assert pairs[(1, 4)].n_a_as_b == 1
+    assert pairs[(1, 4)].n_b_as_a == 1
     assert pairs[(1, 4)].n_total == 2
     assert pairs[(2, 5)].n_total == 1
     assert pairs[(3, 6)].n_total == 0
-    # Three of the four disagreements sit on the height axis.
+    # Three of the four disagreements sit on the compactness axis.
     assert pairs[(1, 4)].share_of_disagreement == pytest.approx(0.5)
-    assert sum(entry.n_total for entry in report.height_axis) == 3
+    assert sum(entry.n_total for entry in report.compactness_axis) == 3
+
+
+def test_the_two_axes_are_reported_separately_and_measure_different_things() -> None:
+    """The correction CLAUDE.md's resolved-discrepancy table records.
+
+    A reference LCZ 2 called LCZ 5 is a *compactness* error — both are midrise — and a reference
+    LCZ 2 called LCZ 3 is a *height* error, both being compact. Pooling them, or reporting the
+    first under the name of the second, inverts what a reader concludes about whether heights or
+    footprints are the limiting factor.
+    """
+    predicted, reference, area = build([5, 3, 6], [2, 2, 2])
+
+    report = agreement(predicted, reference, area)
+
+    height = {(entry.a, entry.b): entry.n_total for entry in report.height_axis}
+    compactness = {(entry.a, entry.b): entry.n_total for entry in report.compactness_axis}
+
+    assert len(report.height_axis) == 6
+    assert len(report.compactness_axis) == 3
+    assert height[(2, 3)] == 1  # compact midrise read as compact low-rise: height
+    assert compactness[(2, 5)] == 1  # compact midrise read as open midrise: compactness
+    # 2 -> 6 differs on both axes at once and belongs to neither.
+    assert sum(height.values()) + sum(compactness.values()) == 2
+    assert report.n_disagree == 3
 
 
 def test_agreement_is_stratified_by_height_completeness_in_equal_width_bands() -> None:

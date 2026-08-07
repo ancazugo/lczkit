@@ -15,6 +15,7 @@ from lczkit.classify.classifier import (
 from lczkit.classify.labels import (
     BUILT_CODES,
     CODES,
+    COMPACTNESS_AXIS_PAIRS,
     HEIGHT_AXIS_PAIRS,
     LCZ_CLASSES,
     NATURAL_CODES,
@@ -30,6 +31,7 @@ __all__ = [
     "BUILT_CODES",
     "CLASSIFICATION_COLUMNS",
     "CODES",
+    "COMPACTNESS_AXIS_PAIRS",
     "DIMENSIONS",
     "DISTANCE_COLUMNS",
     "HEIGHT_AXIS_PAIRS",

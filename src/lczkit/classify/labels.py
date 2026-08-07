@@ -68,21 +68,39 @@ NATURAL_CODES: tuple[int, ...] = tuple(lcz.code for lcz in LCZ_CLASSES if not lc
 NODATA_CODE = 0
 """The published map's nodata value. Never a class, and never written as a label."""
 
-HEIGHT_AXIS_PAIRS: tuple[tuple[int, int], ...] = ((1, 4), (2, 5), (3, 6))
-"""The three pairs CLAUDE.md names for separate reporting, under the name it gives them.
+COMPACTNESS_AXIS_PAIRS: tuple[tuple[int, int], ...] = ((1, 4), (2, 5), (3, 6))
+"""Pairs holding the height band fixed and varying compactness.
 
-**What they actually are.** Each pair holds the height band fixed and varies compactness: 1 and 4
-are both high-rise, 2 and 5 both midrise, 3 and 6 both low-rise, and within each pair the compact
-member differs from the open one in building surface fraction (LCZ 2 is 40-70%, LCZ 5 is 20-40%).
-They are a *compactness* axis. The genuine height axis within a compactness category is 1<->2<->3
-for the compact types and 4<->5<->6 for the open ones.
+1 and 4 are both high-rise, 2 and 5 both midrise, 3 and 6 both low-rise; within each pair the
+compact member differs from the open one in building surface fraction alone (LCZ 2 is 40-70%,
+LCZ 5 is 20-40%). A disagreement here is evidence about **footprint coverage and unit definition**
+- whether the buildings are all present and whether the unit is the right size to hold an LCZ
+patch - not about height.
+"""
 
-The distinction matters for what a reader concludes. CLAUDE.md's Phase 3 prediction is that error
-in a low-`height_completeness` city concentrates along the *height* axis, because areal height
-products cannot resolve the <10 m / 10-25 m / >25 m bands within a heterogeneous unit — but a
-disagreement on one of these three pairs is evidence about building footprint coverage, not about
-height. The pairs are reported as specified; the label on them is the spec's, and it does not
-describe them.
+HEIGHT_AXIS_PAIRS: tuple[tuple[int, int], ...] = (
+    (1, 2),
+    (2, 3),
+    (1, 3),
+    (4, 5),
+    (5, 6),
+    (4, 6),
+)
+"""Pairs holding compactness fixed and varying the height band.
+
+1<->2<->3 among the compact types and 4<->5<->6 among the open ones, which is the axis Stewart &
+Oke separate on height: >25 m, 10-25 m and <10 m. A disagreement here is evidence about the
+**height estimate**, which is why this is the axis that pairs with `height_completeness` - CLAUDE.md
+predicts that where heights come from an areal product, error concentrates along it, because such a
+product cannot resolve those three bands within a heterogeneous unit.
+
+Every pair within each compactness group, not only the adjacent ones. 1<->3 is a high-rise read as
+low-rise: a height confusion of two full bands rather than one, and the most severe kind. Counting
+only 1<->2 and 2<->3 would report the axis as quieter than it is.
+
+Earlier revisions of the spec called `COMPACTNESS_AXIS_PAIRS` the height axis. They are now
+reported separately and under the names that describe them; see CLAUDE.md's resolved-discrepancy
+table.
 """
 
 _BY_CODE = {lcz.code: lcz for lcz in LCZ_CLASSES}
