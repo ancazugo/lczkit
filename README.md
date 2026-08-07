@@ -18,15 +18,31 @@ Phase 0 (skeleton) — project layout, the five pluggable-source `Protocol`s, th
 enforcement helper, and the `Settings` config model.
 
 Phase 1 (vector ingestion and cleaning) — `OvertureSource` (DuckDB-backed, reading
-bbox-filtered GeoParquet from Overture's S3), the building-cleaning pipeline (invalid-geometry
-repair, multipolygon explosion, oversized-footprint and non-polygon removal, overlap
-resolution and small-building absorption via `geoplanar`), street simplification via
-`neatnet`, cross-layer topology cleanup, and a structured cleaning report. Buildings retain
+bbox-filtered GeoParquet from Overture's S3), the building-cleaning pipeline, street
+simplification via `neatnet`, cross-layer topology cleanup, and a structured cleaning report
+recording feature counts **and footprint area** in and out of every operation. Buildings retain
 `subtype`/`class` (usage type) and `sources` (per-feature dataset provenance) through cleaning
 — they are what later phases classify heavy industry and audit height coverage with. A
 `land_use` layer is ingested and carried through with geometry repair only; it supplies
 functional semantics to Phase 5 and is deliberately neither a spatial-unit barrier nor a
 land-cover source.
+
+**Cleaning produces two building layers, not one.** They share a `building_id` and diverge after
+a common prefix of geometry repair, multipolygon explosion, and non-polygon and oversized-footprint
+removal:
+
+- **`buildings_area`** adds overlap *trimming* only, and feeds every area statistic — building
+  surface fraction, `Hr`, building count, mean building area, `industrial_fraction` — plus the
+  height cascade. It retains 99.5% of raw footprint area on the Berlin fixture.
+- **`buildings_topo`** adds overlap merging, small-building dissolution and a road-buffer rule, and
+  feeds the `neatnet` exclusion mask and `momepy.street_profile`. Destructive by design.
+
+The split exists because a single layer cleaned for topology destroyed 23.5% of Berlin's footprint
+area before building surface fraction — roughly 47% of the classification metric — was computed.
+See [`docs/experiments/phase-6.6-footprint-attrition.md`](docs/experiments/phase-6.6-footprint-attrition.md).
+Footprints are dropped for lying inside a road buffer, never for touching a street centreline: a
+perimeter block fronting a street routinely crosses a generalised centreline, and treating that as
+an error removed 439 Berlin footprints averaging three times the size of the ones it kept.
 
 **Building heights are sparse, and that is the data, not a defect.** Overture conflates
 footprints winner-takes-all, so in machine-learning dominated areas heights are near-absent —
@@ -239,18 +255,24 @@ a confusion matrix, never a single accuracy figure — plus agreement stratified
 instruments: the height axis (1↔2↔3, 4↔5↔6) diagnoses the height estimate, the compactness axis
 (1↔4, 2↔5, 3↔6) diagnoses footprint coverage and unit size.
 
-Measured on the fixtures: **17.7% over 957 cells in Berlin Mitte** and **42.5% over 657 cells in
-Rotterdam**. These are first measurements of a prototype-distance classifier missing five of ten
-properties, not a headline accuracy — and Rotterdam's higher figure is mostly water, which agrees
-at 95.9% over 266 of its 657 cells while its built classes sit near zero.
+Measured on the fixtures: **24.3% over 957 cells in Berlin Mitte** and **42.3% over 657 cells in
+Rotterdam**. These are measurements of a prototype-distance classifier missing five of ten
+properties, not a headline accuracy. Berlin's cells are 99.5% built, so its figure is a built-class
+one as it stands; Rotterdam's higher number is mostly water, agreeing at 89.6% over its 298 natural
+cells while its 359 built cells sit at 3.1%.
 
-The dominant Berlin confusion is compact midrise read as open midrise, a building-surface-fraction
-disagreement. [`docs/experiments/phase-6.5-unit-scale.md`](docs/experiments/phase-6.5-unit-scale.md)
-tests the obvious explanation — that Stewart & Oke's ranges describe an LCZ patch and a 100 m grid
-cell is not one — and **rejects it**: computing on enclosures instead changes agreement by −0.4
-points. Restoring the 23.5% of building footprint area that Phase 1 cleaning removes is worth +9.1
-points, so the deficit is in the numerator rather than the unit. That is an open finding; nothing
-downstream of it has been tuned.
+Two experiments in [`docs/experiments/`](docs/experiments/) explain how those numbers got there and
+what is still missing. [Phase 6.5](docs/experiments/phase-6.5-unit-scale.md) tests the obvious
+explanation for the original 17.7% — that Stewart & Oke's ranges describe an LCZ patch and a 100 m
+grid cell is not one — and rejects it, finding instead that Phase 1 cleaning was destroying 23.5% of
+the footprint area behind the metric. [Phase 6.6](docs/experiments/phase-6.6-footprint-attrition.md)
+fixes that, taking Berlin from 17.7% to 24.3% and putting LCZ 1's building surface fraction inside
+its published range for the first time.
+
+The remaining gap is open, and nothing downstream of it has been tuned. The error has moved onto the
+**height axis** — now 31.8% of all Berlin disagreement, up from 19.9%, with compact high-rise read
+as compact midrise — which points at the areal height tiers next, ahead of the metric's missing
+sky-view-factor dimension and the reference map's own unquantified error ceiling.
 
 ## Setup
 
