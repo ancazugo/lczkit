@@ -100,6 +100,37 @@ def test_generate_raises_without_barriers() -> None:
         EnclosureUnits().generate(bbox, gpd.GeoDataFrame(geometry=[]))
 
 
+def test_enclosures_partition_the_bbox_and_never_extend_past_it(
+    fixture_vector_source: FixtureVectorSource,
+) -> None:
+    """The regression Phase 2's acceptance criteria could not catch.
+
+    "Stable unique `unit_id`s" and "aggregation round-trips sensibly" are both satisfied by a set
+    of enclosures that overlaps itself and spills outside the study area, which is what
+    `momepy.enclosures`' default `clip=False` produced here: barrier linework continues past
+    `bbox`, so polygonization yields faces lying wholly outside it. Berlin returned 222% of the
+    requested extent and Rotterdam 379% before this was fixed, which silently misweights every
+    area-weighted statistic computed over the units.
+
+    Asserted on real fixture barriers rather than synthetic ones because the synthetic cases are
+    built from linework that stops at the bbox, and so cannot exhibit the failure at all.
+    """
+    crs = local_utm_crs(SMALL_BBOX)
+    limit = gpd.GeoSeries([box(*SMALL_BBOX)], crs="EPSG:4326").to_crs(crs).iloc[0]
+    streets = fixture_vector_source.streets(SMALL_BBOX).to_crs(crs)
+    rail = fixture_vector_source.rail(SMALL_BBOX).to_crs(crs)
+    _waterlines, waterbodies = fixture_vector_source.water(SMALL_BBOX)
+
+    units = EnclosureUnits().generate(
+        SMALL_BBOX, assemble_barriers(streets, waterbodies.to_crs(crs), rail=rail)
+    )
+
+    # A partition: the pieces sum to the whole, which they cannot do if any overlaps or lies
+    # outside. Both failure modes inflate the total, so one equality covers them together.
+    assert units.geometry.area.sum() == pytest.approx(limit.area, rel=1e-6)
+    assert units.representative_point().within(limit).all()
+
+
 def test_generate_on_real_fixture_barriers(fixture_vector_source: FixtureVectorSource) -> None:
     """Streets + rail + waterbodies from the real Berlin fixture, on `SMALL_BBOX` for speed —
     exercises `OvertureSource.rail` (via `FixtureVectorSource`) as a real barrier input, not

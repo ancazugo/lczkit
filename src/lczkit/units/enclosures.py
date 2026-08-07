@@ -75,6 +75,15 @@ class EnclosureUnits:
     barriers — unlike `GridUnits`, whose ids are tied to absolute coordinates, an enclosure's id
     can shift if upstream barrier data changes. Documented, not fixed: no id scheme survives
     which regions of the barrier network happen to change.
+
+    **Enclosures are restricted to `bbox`.** Barrier linework runs past the study area — a rail
+    line entering the extent continues well beyond it — and polygonizing it produces faces lying
+    wholly outside. Left in, those are returned as units: on the Berlin fixture the result covered
+    222% of the requested extent and on Rotterdam 379%, so the units were not a partition and any
+    area-weighted statistic over them was measured against the wrong denominator. `clip=True`
+    keeps only the faces whose representative point falls inside `limit`, which is exact rather
+    than approximate: `limit`'s boundary is part of the noded linework, so every face is already
+    split at the extent's edge and none straddles it. No geometry is modified.
     """
 
     def generate(self, bbox: BBox, barriers: gpd.GeoDataFrame | None = None) -> gpd.GeoDataFrame:
@@ -88,6 +97,6 @@ class EnclosureUnits:
         assert crs is not None  # narrows for mypy; assert_projected_crs already guarantees this
         limit = gpd.GeoSeries([box(*bbox)], crs="EPSG:4326").to_crs(crs)
 
-        raw: gpd.GeoDataFrame = momepy.enclosures(barriers, limit=limit)
+        raw: gpd.GeoDataFrame = momepy.enclosures(barriers, limit=limit, clip=True)
         raw["unit_id"] = "enclosure_" + raw["eID"].astype(str)
         return raw.set_index("unit_id")[["geometry"]]
