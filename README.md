@@ -176,7 +176,69 @@ Five things about this phase are worth knowing before relying on it:
   LCZ 8 case CLAUDE.md names. The Berlin fixture holds 36 industrial buildings of 6195 and 2
   industrial parcels of 1559, enough to exercise the plumbing and not enough to validate the rule.
 
-No classification exists yet.
+Phase 6 (classification, output, validation) — `lczkit.classify.PrototypeClassifier` turns the
+parameter table into a 17-way distance vector plus `lcz_primary`, `lcz_secondary`, `uniqueness`
+and a record of how each label was reached; `lczkit.output.write_run()` writes the run to
+`output/lczkit/<run_id>/`; `lczkit.validation` measures agreement against a reference LCZ map.
+The distance vector is the primary output and a label is a convenience over it — no core API
+returns a bare LCZ integer.
+
+```
+output/lczkit/<run_id>/
+├── units.parquet       # GeoParquet: geometry, parameters, labels, provenance, land cover
+├── units_viz.parquet   # no geometry, floats to 3 s.f., distances as scaled int16
+└── manifest.json       # config, versions, reports, prototypes, breaks, legend, validation
+```
+
+Six things about this phase are worth knowing before relying on it:
+
+- **The natural classes do not go through the distance metric alone, because they cannot.**
+  Bernard et al. (2024) §2.5 is explicit that their weights "are only used in the closest-distance
+  approach for LCZ built types", and the reason is visible in the published table: LCZ A, B, C and
+  D are separated *only* by sky view factor, aspect ratio and height of roughness elements — all
+  building-derived, all null or zero in open ground — and F and G differ in no published dimension
+  at all. So a configurable land-cover gate picks the family first (`building_surface_fraction`
+  ≥ 10%, which is the boundary Stewart & Oke's own table draws), and the weighted distance then
+  runs within it. The full 17-way vector is still reported, but the two halves are measured under
+  different weight vectors, so the gate rather than the argmin decides the family. `label_route`
+  records which mechanism produced every label.
+- **Two prototype dimensions are lczkit's, not Stewart & Oke's.** `tree_fraction` and
+  `water_fraction` ranges are tagged `source="lczkit"` throughout, documented at length in
+  `docs/references/tables/lczkit_natural_class_ranges.md`, and driven by two configurable
+  thresholds. Without them LCZ G is unreachable, since water and bare soil are identical in the
+  published table. **LCZ C (bush, scrub) and LCZ F (bare soil) remain unreachable by default** and
+  are recorded as such in the manifest: nothing separates them from LCZ D once the default
+  WorldCover mapping folds shrubland, grassland and bare ground into one `pervious` class.
+- **Five of Stewart & Oke's ten properties do not reach the metric.** Sky view factor and terrain
+  roughness are Phase 5 deferrals; surface admittance, albedo and anthropogenic heat output are
+  not derivable from open vector and raster data at all. The manifest lists all five with reasons.
+  Note that anthropogenic heat output is the only published property that would separate LCZ 10
+  from LCZ 8 directly — 300+ W m⁻² against at most 50 — which is why a functional attribute has to.
+- **The `bernard2024` preset cannot be applied as published.** Its weights cover seven UCPs and
+  lczkit computes five, so SVF (weight 4) and z₀ (0.5) — 4.5 of a published 21.5 — go unapplied
+  and the effective built metric has three non-zero dimensions: `FB` 8, `Hr` 6, `H/W` 3. The
+  manifest records the shortfall, because a comparison against a GeoClimate run is not a
+  comparison of the same metric.
+- **The LCZ 10 rule is implemented as specified and does not fire on real industrial data.** It
+  relabels a unit whose two nearest prototypes are LCZ 8 and LCZ 10 and whose `industrial_fraction`
+  clears a conservative threshold. On the Rotterdam fixture — 671 cells over a working port, 254
+  industrial buildings, 75% of cells more than 90% industrial by area, and a reference map putting
+  88 of them in LCZ 10 — **no unit has that pair as its two nearest prototypes at any threshold**,
+  so the rule never gets the opportunity. Port plots are large and sparsely built, and the building
+  surface fraction that dominates the built metric lands them on LCZ 9 instead. Every run's
+  manifest reports the firing count so this is visible from the output rather than only here.
+- **Null parameters renormalise rather than dropping the unit.** A unit missing `aspect_ratio`
+  is compared on the weights it does have, and `n_params_used` and `missing_parameters` say what
+  it was judged on. No imputation anywhere.
+
+Agreement against the Demuzere global map is reported lczexplore-style — per-class agreement and
+a confusion matrix, never a single accuracy figure — plus agreement stratified by
+`height_completeness` decile and the three confusion pairs CLAUDE.md names for separate reporting.
+Measured on the fixtures: **17.7% over 957 cells in Berlin Mitte** and **42.5% over 657 cells in
+Rotterdam**. The dominant Berlin confusion is compact midrise read as open midrise, which is a
+building-surface-fraction disagreement: Stewart & Oke's ranges are defined for an LCZ patch, and a
+100 m grid cell that includes its share of street is not a patch. These are first measurements of
+a prototype-distance classifier missing five of ten properties, not a headline accuracy.
 
 ## Setup
 

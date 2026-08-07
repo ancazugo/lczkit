@@ -1,0 +1,234 @@
+"""Writing a run: the two tables, the manifest, and the boundary they must not cross.
+
+The assertions worth having here are about contracts rather than content: that nothing lands
+outside `run_dir`, that the archival table keeps full precision while the viz table does not, and
+that a column appearing twice is an error rather than a silent overwrite.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import geopandas as gpd
+import numpy as np
+import pandas as pd
+import pytest
+from shapely.geometry import box
+
+from lczkit.classify import PrototypeClassifier
+from lczkit.config import Settings
+from lczkit.output import MANIFEST_FILE, UNITS_FILE, VIZ_FILE, viz_table, write_run
+
+CRS = "EPSG:32633"
+
+
+@pytest.fixture
+def settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Settings:
+    (tmp_path / "input").mkdir()
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    return Settings.load(run_id="test-run", dotenv_path=tmp_path / "absent.env")
+
+
+def make_units(n: int = 4) -> gpd.GeoDataFrame:
+    return gpd.GeoDataFrame(
+        {"unit_id": [f"grid_{index}" for index in range(n)]},
+        geometry=[box(index * 100.0, 0.0, index * 100.0 + 100.0, 100.0) for index in range(n)],
+        crs=CRS,
+    ).set_index("unit_id")
+
+
+def make_parameters(units: gpd.GeoDataFrame) -> pd.DataFrame:
+    n = len(units)
+    frame = pd.DataFrame(
+        {
+            "building_surface_fraction": np.linspace(0.0, 0.6, n),
+            "impervious_surface_fraction": np.linspace(0.05, 0.4, n),
+            "pervious_surface_fraction": np.linspace(0.95, 0.0, n),
+            "tree_fraction": np.linspace(0.7, 0.0, n),
+            "water_fraction": np.zeros(n),
+            "height_of_roughness_elements_m": np.linspace(3.0, 20.0, n),
+            "aspect_ratio": np.linspace(0.1, 1.4, n),
+            "industrial_fraction": np.zeros(n),
+            "mean_building_area_m2": np.linspace(123.456789, 9876.54321, n),
+        },
+        index=units.index,
+    )
+    return frame
+
+
+def run(settings: Settings, extras: pd.DataFrame | None = None):
+    units = make_units()
+    parameters = make_parameters(units)
+    classifier = PrototypeClassifier()
+    return (
+        units,
+        parameters,
+        write_run(
+            settings,
+            units,
+            parameters,
+            classifier.classify(parameters),
+            classifier,
+            extras=extras,
+        ),
+    )
+
+
+def test_a_run_writes_exactly_three_files_and_only_inside_its_own_directory(
+    settings: Settings,
+) -> None:
+    """CLAUDE.md: never write outside `output/lczkit/<run_id>/`. `output/` is shared with other
+    tools and `input/` with other projects, so this is the one that must not regress."""
+    before = {path for path in settings.data_dir.rglob("*") if path.is_file()}
+
+    _, _, outputs = run(settings)
+
+    written = {path for path in settings.data_dir.rglob("*") if path.is_file()} - before
+    assert {path.name for path in written} == {UNITS_FILE, VIZ_FILE, MANIFEST_FILE}
+    assert all(path.parent == settings.run_dir for path in written)
+    assert outputs.run_dir == settings.run_dir
+    assert not any(path.is_relative_to(settings.input_dir) for path in written)
+
+
+def test_the_archival_table_is_geoparquet_at_full_precision(settings: Settings) -> None:
+    units, parameters, outputs = run(settings)
+
+    stored = gpd.read_parquet(outputs.units)
+
+    assert isinstance(stored, gpd.GeoDataFrame)
+    assert stored.crs == units.crs
+    assert stored.index.equals(units.index)
+    assert stored["mean_building_area_m2"].equals(parameters["mean_building_area_m2"])
+    assert stored["lcz_primary"].notna().all()
+    assert "lcz_d17" in stored.columns
+
+
+def test_the_viz_table_drops_geometry_rounds_floats_and_scales_the_distances(
+    settings: Settings,
+) -> None:
+    """Three significant figures and int16 distances: at full float64 the distance vector alone
+    triples what a browser has to parse, and no sidebar reads past the third digit."""
+    _, _, outputs = run(settings)
+
+    stored = pd.read_parquet(outputs.units_viz)
+
+    assert "geometry" not in stored.columns
+    # 123.456789, 3374.4856, 6625.5144, 9876.54321 to three significant figures.
+    assert stored["mean_building_area_m2"].to_list() == pytest.approx(
+        [123.0, 3370.0, 6630.0, 9880.0]
+    )
+    assert stored["lcz_d1"].dtype == "Int16"
+    assert stored["lcz_d1"].notna().all()
+
+
+def test_the_scaled_distances_recover_the_originals_to_three_decimals(
+    settings: Settings,
+) -> None:
+    _, parameters, outputs = run(settings)
+
+    exact = PrototypeClassifier().classify(parameters)["lcz_d5"]
+    stored = pd.read_parquet(outputs.units_viz)["lcz_d5"]
+
+    assert (stored.astype("float64") / 1000.0).to_list() == pytest.approx(exact.to_list(), abs=5e-4)
+
+
+def test_rounding_leaves_zeros_nulls_and_integers_alone(settings: Settings) -> None:
+    """`log10(0)` is negative infinity and would take a zero to NaN; a null must stay null; an
+    integer column is a count, not a measurement to round."""
+    frame = pd.DataFrame(
+        {"value": [0.0, np.nan, 0.00123456, 98765.4], "count": [1, 2, 3, 4]},
+        index=pd.Index(list("abcd"), name="unit_id"),
+    )
+
+    result = viz_table(frame, Settings(data_dir=settings.data_dir))
+
+    assert result["value"].to_list()[0] == 0.0
+    assert np.isnan(result["value"].to_list()[1])
+    assert result["value"].to_list()[2] == pytest.approx(0.00123)
+    assert result["value"].to_list()[3] == pytest.approx(98800.0)
+    assert result["count"].to_list() == [1, 2, 3, 4]
+
+
+def test_the_manifest_is_valid_json_and_names_what_was_written(settings: Settings) -> None:
+    _, _, outputs = run(settings)
+
+    loaded = json.loads(outputs.manifest_path.read_text(encoding="utf-8"))
+
+    assert loaded["run_id"] == "test-run"
+    assert set(loaded["outputs"]) == {UNITS_FILE, VIZ_FILE, MANIFEST_FILE}
+    assert loaded["config"]["classification"]["weight_preset"] == "bernard2024"
+
+
+def test_breaks_cover_the_continuous_columns_and_skip_the_categorical_ones(
+    settings: Settings,
+) -> None:
+    """The seventh decile of an LCZ code is not a class boundary, and the distance vector is drawn
+    as a per-unit bar chart rather than a choropleth."""
+    _, _, outputs = run(settings)
+
+    columns = {entry.column for entry in outputs.manifest.breaks}
+
+    assert "building_surface_fraction" in columns
+    assert "uniqueness" in columns
+    assert not columns & {"lcz_primary", "lcz_secondary", "lcz_d1", "lcz_d17"}
+    assert all(entry.method == "quantile" for entry in outputs.manifest.breaks)
+
+
+def test_the_manifest_summarises_what_the_classifier_did_to_this_city(
+    settings: Settings,
+) -> None:
+    """The LCZ 10 firing count especially. A rule that never fires is indistinguishable, from the
+    output alone, from one that was never configured — and on the Rotterdam fixture it never
+    fires, so this count is how a reader of any run finds that out."""
+    _, _, outputs = run(settings)
+
+    summary = outputs.manifest.classification_summary
+
+    assert summary["n_units"] == 4
+    assert summary["n_unlabelled"] == 0
+    assert sum(summary["labels"].values()) == 4
+    assert sum(summary["label_route"].values()) == 4
+    assert summary["lcz10_rule_applied"] == 0
+    assert 0.0 <= summary["median_uniqueness"] <= 1.0
+
+
+def test_extras_are_carried_through_to_both_tables(settings: Settings) -> None:
+    units = make_units()
+    extras = pd.DataFrame({"height_completeness": [1.0, 0.5, 0.0, np.nan]}, index=units.index)
+
+    _, _, outputs = run(settings, extras=extras)
+
+    assert "height_completeness" in gpd.read_parquet(outputs.units).columns
+    assert "height_completeness" in pd.read_parquet(outputs.units_viz).columns
+
+
+def test_a_column_supplied_twice_is_an_error_not_a_silent_overwrite(settings: Settings) -> None:
+    units = make_units()
+    parameters = make_parameters(units)
+    classifier = PrototypeClassifier()
+
+    with pytest.raises(ValueError, match="aspect_ratio"):
+        write_run(
+            settings,
+            units,
+            parameters,
+            classifier.classify(parameters),
+            classifier,
+            extras=parameters[["aspect_ratio"]],
+        )
+
+
+def test_a_misaligned_index_is_refused(settings: Settings) -> None:
+    units = make_units()
+    parameters = make_parameters(units)
+    classifier = PrototypeClassifier()
+
+    with pytest.raises(ValueError, match="parameters index"):
+        write_run(
+            settings,
+            units,
+            parameters.iloc[:2],
+            classifier.classify(parameters),
+            classifier,
+        )
