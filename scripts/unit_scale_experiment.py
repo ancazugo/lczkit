@@ -1,24 +1,28 @@
-"""Phase 6.5: does the spatial unit explain lczkit's low agreement?
+"""The three-arm harness: is lczkit's low agreement the spatial unit, or the numerator?
 
     uv run --active python scripts/unit_scale_experiment.py
 
-Measured agreement is Berlin 17.7% and Rotterdam 42.5%, against ~55% for GeoClimate's own
-OSM-versus-national-database comparison. CLAUDE.md's hypothesis is a **scale mismatch**: Stewart &
-Oke's ranges describe an LCZ *patch*, a 100 m grid cell carries its share of street, and building
-surface fraction - which carries roughly 47% of the distance metric - is therefore depressed.
-GeoClimate partitions into street-bounded RSUs precisely because an RSU approximates a patch.
+Written for Phase 6.5, which rejected the unit-scale hypothesis, and **retained as a permanent
+diagnostic** because its control arm is what distinguishes the two questions. Phase 6.6 re-ran it
+after fixing what the control found. Both write-ups are in `docs/experiments/`.
+
+CLAUDE.md's original hypothesis was a **scale mismatch**: Stewart & Oke's ranges describe an LCZ
+*patch*, a 100 m grid cell carries its share of street, and building surface fraction - which
+carries roughly 47% of the distance metric - is therefore depressed. GeoClimate partitions into
+street-bounded RSUs precisely because an RSU approximates a patch.
 
 Three arms, on both committed fixtures, entirely offline:
 
 - **A** - compute parameters on 100 m grid cells and classify. What the package does today.
 - **B** - compute on enclosures and classify there, then project the labels onto the same 100 m
   grid by majority, for validation only. The RSU analogue, and the hypothesis under test.
-- **C** - arm A with **raw Overture footprints** in place of cleaned ones. A control, not a
+- **C** - arm A with **raw Overture footprints** in place of `buildings_area`. A control, not a
   pipeline option and never proposed as one. It exists because A and B alone cannot distinguish
   "the unit is the wrong size" from "the numerator is too small", and CLAUDE.md's acceptance for
-  this phase asks for a recommendation *with the evidence* for it. Phase 1 cleaning removes about
-  a quarter of the building area, and whether that matters more than the unit is exactly what a
-  reader has to be able to check.
+  Phase 6.5 asks for a recommendation *with the evidence* for it. It is what found the real cause:
+  cleaning was removing a quarter of Berlin's building area, and arm C was 9.1 points ahead of the
+  pipeline because of it. **A and C converging is now the regression test** - they should stay
+  within noise of each other, and a gap reopening between them means area is being lost again.
 
 The decisive output is not the agreement figure but the **distribution of building surface
 fraction per class against the published range**, grouped by the *reference* class. Grouping by the
@@ -54,6 +58,7 @@ from lczkit.config import (
     ValidationConfig,
 )
 from lczkit.heights.cascade import fill_heights
+from lczkit.heights.inherit import inherit_heights
 from lczkit.heights.tiers import build_cascade
 from lczkit.landcover.local import LocalRasterSource
 from lczkit.protocols import BBox
@@ -73,6 +78,8 @@ CLEANING = CleaningConfig(
     building_min_area_m2=20.0,
     building_merge_limit_m2=200.0,
     building_overlap_limit=0.1,
+    building_road_buffer_m=4.0,
+    building_road_overlap_limit=0.5,
 )
 HEIGHTS = HeightConfig(overture_height_confidence=0.9, overture_num_floors_confidence=0.6)
 LAND_COVER = LandCoverConfig()
@@ -194,7 +201,8 @@ def build_arms(fixture: Fixture) -> tuple[list[Arm], CleanedVectors, dict[str, A
     cleaned = clean_vectors(source, fixture.bbox, CLEANING)
     tiers = build_cascade(HEIGHTS, lambda name: FIXTURES / "landcover")
 
-    cleaned_buildings, _ = fill_heights(cleaned.buildings, tiers)
+    cleaned_buildings, _ = fill_heights(cleaned.buildings_area, tiers)
+    topo_buildings = inherit_heights(cleaned.buildings_topo, cleaned_buildings)
     raw_buildings, _ = fill_heights(raw_footprints(source, fixture.bbox, cleaned.crs), tiers)
 
     grid = GridUnits().generate(fixture.bbox)
@@ -211,6 +219,7 @@ def build_arms(fixture: Fixture) -> tuple[list[Arm], CleanedVectors, dict[str, A
         parameters = compute_parameters(
             units,
             buildings,
+            topo_buildings,
             cleaned.streets,
             cleaned.land_use,
             fractions,
@@ -220,15 +229,17 @@ def build_arms(fixture: Fixture) -> tuple[list[Arm], CleanedVectors, dict[str, A
         return Arm(name, units, parameters, classifier.classify(parameters), why)
 
     arms = [
-        arm("A", grid, cleaned_buildings, "100 m grid, cleaned buildings (current pipeline)"),
-        arm("B", enclosures, cleaned_buildings, "enclosures, cleaned buildings"),
+        arm("A", grid, cleaned_buildings, "100 m grid, buildings_area (current pipeline)"),
+        arm("B", enclosures, cleaned_buildings, "enclosures, buildings_area"),
         arm("C", grid, raw_buildings, "100 m grid, raw Overture footprints (control)"),
     ]
     provenance = {
         "buildings_raw": int(len(raw_buildings)),
-        "buildings_cleaned": int(len(cleaned_buildings)),
+        "buildings_area": int(len(cleaned_buildings)),
+        "buildings_topo": int(len(topo_buildings)),
         "building_area_raw_m2": float(raw_buildings.geometry.area.sum()),
         "building_area_cleaned_m2": float(cleaned_buildings.geometry.area.sum()),
+        "buildings_area_retention": cleaned.report.area_retention("buildings_area"),
         "cleaning_steps": [step.model_dump() for step in cleaned.report.steps],
     }
     return arms, cleaned, provenance
@@ -310,9 +321,10 @@ def show(results: dict[str, Any]) -> None:
     clean = results["cleaning"]
     lost = 1.0 - clean["building_area_cleaned_m2"] / clean["building_area_raw_m2"]
     print(
-        f"  buildings {clean['buildings_raw']} raw -> {clean['buildings_cleaned']} cleaned; "
-        f"{clean['building_area_raw_m2'] / 1e6:.3f} -> "
-        f"{clean['building_area_cleaned_m2'] / 1e6:.3f} km2 ({lost:.1%} of area removed)"
+        f"  buildings {clean['buildings_raw']} raw -> {clean['buildings_area']} area layer "
+        f"({clean['buildings_topo']} topo); {clean['building_area_raw_m2'] / 1e6:.3f} -> "
+        f"{clean['building_area_cleaned_m2'] / 1e6:.3f} km2 ({lost:.1%} of area removed, "
+        f"retention {clean['buildings_area_retention']:.2%})"
     )
 
     print(f"\n  {'arm':<4} {'units':>7} {'agreement':>10} {'compared':>9}   description")

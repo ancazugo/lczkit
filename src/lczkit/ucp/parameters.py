@@ -20,7 +20,8 @@ from lczkit.ucp.surface import surface_fractions
 
 def compute_parameters(
     units: gpd.GeoDataFrame,
-    buildings: gpd.GeoDataFrame,
+    buildings_area: gpd.GeoDataFrame,
+    buildings_topo: gpd.GeoDataFrame,
     streets: gpd.GeoDataFrame,
     land_use: gpd.GeoDataFrame,
     land_cover: pd.DataFrame,
@@ -30,23 +31,32 @@ def compute_parameters(
 ) -> pd.DataFrame:
     """The full urban canopy parameter table, indexed by `unit_id` to match `units`.
 
-    `buildings` must have been through `lczkit.heights.cascade.fill_heights()`; `land_cover` is a
-    Phase 4 fractions table for the dataset `config.land_cover_dataset` names. All vector layers
-    must share `units`' projected CRS — Phase 1's `clean_vectors()` returns them that way, and
+    Both building layers must have been through `lczkit.heights.cascade.fill_heights()` — or, for
+    `buildings_topo`, `lczkit.heights.inherit.inherit_heights()`. `land_cover` is a Phase 4
+    fractions table for the dataset `config.land_cover_dataset` names. All vector layers must share
+    `units`' projected CRS — Phase 1's `clean_vectors()` returns them that way, and
     `lczkit.ucp.registry.PARAMETERS` documents every column this returns.
+
+    **Which layer feeds what.** `buildings_area` supplies every area statistic: building surface
+    fraction, `Hr`, building count, mean building area, and `industrial_fraction`, whose denominator
+    is building area. `buildings_topo` supplies only the street profile, because a footprint lying
+    across a street centreline reports a canyon width of zero and drives the aspect ratio up — on
+    the Berlin fixture 439 footprints did exactly that. `buildings_topo`'s facades have been trimmed
+    back to the road-buffer edge, which is a plausible facade line; `buildings_area`'s have not,
+    because trimming them would cost the footprint area they exist to preserve.
 
     Two of Stewart & Oke's seven morphological properties are absent by design: see
     `lczkit.ucp.registry.NOT_COMPUTED`.
     """
     dataset = land_cover_config.dataset(config.land_cover_dataset)
 
-    morphology = building_metrics(buildings, units, config)
+    morphology = building_metrics(buildings_area, units, config)
     table = pd.concat(
         [
             morphology,
-            street_metrics(streets, buildings, units, config),
+            street_metrics(streets, buildings_topo, units, config),
             surface_fractions(land_cover, morphology["building_surface_fraction"], dataset, config),
-            industrial_metrics(buildings, land_use, units, config),
+            industrial_metrics(buildings_area, land_use, units, config),
         ],
         axis=1,
     )

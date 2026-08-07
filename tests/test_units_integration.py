@@ -22,6 +22,8 @@ _TEST_CLEANING_CONFIG = CleaningConfig(
     building_min_area_m2=15,
     building_merge_limit_m2=50,
     building_overlap_limit=0.3,
+    building_road_buffer_m=4.0,
+    building_road_overlap_limit=0.5,
 )
 
 

@@ -17,6 +17,7 @@ from lczkit.cleaning.pipeline import CleanedVectors, clean_vectors
 from lczkit.config import CleaningConfig, HeightConfig, LandCoverConfig, UcpConfig
 from lczkit.heights.cascade import cascade_height_sources, fill_heights
 from lczkit.heights.completeness import height_metrics
+from lczkit.heights.inherit import inherit_heights
 from lczkit.heights.tiers import build_cascade
 from lczkit.landcover.local import LocalRasterSource
 from lczkit.ucp import PARAMETER_COLUMNS, compute_parameters
@@ -31,6 +32,8 @@ _CLEANING = CleaningConfig(
     building_min_area_m2=20.0,
     building_merge_limit_m2=200.0,
     building_overlap_limit=0.1,
+    building_road_buffer_m=4.0,
+    building_road_overlap_limit=0.5,
 )
 _HEIGHTS = HeightConfig(overture_height_confidence=0.9, overture_num_floors_confidence=0.6)
 _LAND_COVER = LandCoverConfig()
@@ -51,7 +54,7 @@ def cleaned(fixture_vector_source: FixtureVectorSource) -> CleanedVectors:
 @pytest.fixture(scope="module")
 def buildings(cleaned: CleanedVectors) -> gpd.GeoDataFrame:
     tiers = build_cascade(_HEIGHTS, lambda name: LANDCOVER_FIXTURES_DIR)
-    filled, _ = fill_heights(cleaned.buildings, tiers)
+    filled, _ = fill_heights(cleaned.buildings_area, tiers)
     return filled
 
 
@@ -76,6 +79,7 @@ def parameters_for(
     return compute_parameters(
         units,
         buildings,
+        inherit_heights(cleaned.buildings_topo, buildings),
         cleaned.streets,
         cleaned.land_use,
         land_cover,

@@ -29,6 +29,8 @@ _CLEANING = CleaningConfig(
     building_min_area_m2=20.0,
     building_merge_limit_m2=200.0,
     building_overlap_limit=0.1,
+    building_road_buffer_m=4.0,
+    building_road_overlap_limit=0.5,
 )
 
 
@@ -72,7 +74,7 @@ def test_land_cover_joins_against_the_phase_3_height_metrics(
         overture_height_confidence=0.9, overture_num_floors_confidence=0.6
     )
     tiers = build_cascade(heights_config, lambda name: LANDCOVER_FIXTURES_DIR)
-    buildings, _ = fill_heights(cleaned.buildings, tiers)
+    buildings, _ = fill_heights(cleaned.buildings_area, tiers)
     heights = height_metrics(buildings, grid_units, cascade_height_sources(tiers))
 
     fractions = _source("worldcover", WORLDCOVER).fractions(grid_units)

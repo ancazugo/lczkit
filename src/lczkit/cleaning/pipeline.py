@@ -37,9 +37,21 @@ def reproject_to_local_utm(
 @dataclass(frozen=True)
 class CleanedVectors:
     """The cleaned output of `clean_vectors()`. Holds live GeoDataFrames for in-process use —
-    never itself serialized; that's Phase 6's job on the eventual output GeoParquet."""
+    never itself serialized; that's Phase 6's job on the eventual output GeoParquet.
 
-    buildings: gpd.GeoDataFrame
+    There is no plain `buildings` attribute, deliberately. Which of the two layers a caller wants
+    is never obvious from the name, and the single ambiguous layer that used to be here is what
+    fed 23.5% of Berlin's footprint area into a statistic that needed all of it.
+    """
+
+    buildings_area: gpd.GeoDataFrame
+    """Area-preserving. Building surface fraction, `Hr`, building count, mean building area and
+    `industrial_fraction` all read this, and the Phase 3 height cascade runs on it."""
+
+    buildings_topo: gpd.GeoDataFrame
+    """Planar and non-overlapping. The `neatnet` exclusion mask and `momepy.street_profile` read
+    this; it has been through the road-buffer rule, so its facades stand outside the roadway."""
+
     streets: gpd.GeoDataFrame
     waterlines: gpd.GeoDataFrame
     waterbodies: gpd.GeoDataFrame
@@ -67,6 +79,8 @@ def clean_vectors(source: VectorSource, bbox: BBox, config: CleaningConfig) -> C
     min_area_m2 = _require(config.building_min_area_m2, "building_min_area_m2")
     merge_limit_m2 = _require(config.building_merge_limit_m2, "building_merge_limit_m2")
     overlap_limit = _require(config.building_overlap_limit, "building_overlap_limit")
+    road_buffer_m = _require(config.building_road_buffer_m, "building_road_buffer_m")
+    road_overlap_limit = _require(config.building_road_overlap_limit, "building_road_overlap_limit")
 
     raw_waterlines, raw_waterbodies = source.water(bbox)
     crs, layers = reproject_to_local_utm(
@@ -84,7 +98,7 @@ def clean_vectors(source: VectorSource, bbox: BBox, config: CleaningConfig) -> C
 
     steps: list[CleaningStep] = []
 
-    buildings, building_steps = clean_buildings(
+    layers_out, building_steps = clean_buildings(
         buildings,
         max_area_m2=max_area_m2,
         min_area_m2=min_area_m2,
@@ -98,16 +112,24 @@ def clean_vectors(source: VectorSource, bbox: BBox, config: CleaningConfig) -> C
     land_use, land_use_step = clean_land_use(layers["land_use"])
     steps.append(land_use_step)
 
-    streets, street_step = simplify_streets(streets, buildings)
+    # Simplification comes first: the road-buffer rule buffers the network, and buffering
+    # unsimplified dual carriageways would cover the block between them.
+    streets, street_step = simplify_streets(streets, layers_out.topo)
     steps.append(street_step)
 
-    buildings, streets, waterlines, waterbodies, topology_steps = apply_cross_layer_topology(
-        buildings, streets, waterlines, waterbodies
+    buildings_topo, streets, waterlines, waterbodies, topology_steps = apply_cross_layer_topology(
+        layers_out.topo,
+        streets,
+        waterlines,
+        waterbodies,
+        road_buffer_m=road_buffer_m,
+        road_overlap_limit=road_overlap_limit,
     )
     steps.extend(topology_steps)
 
     return CleanedVectors(
-        buildings=buildings,
+        buildings_area=layers_out.area,
+        buildings_topo=buildings_topo,
         streets=streets,
         waterlines=waterlines,
         waterbodies=waterbodies,

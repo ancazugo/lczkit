@@ -31,6 +31,8 @@ _TEST_CLEANING_CONFIG = CleaningConfig(
     building_min_area_m2=15,
     building_merge_limit_m2=50,
     building_overlap_limit=0.3,
+    building_road_buffer_m=4.0,
+    building_road_overlap_limit=0.5,
 )
 
 WEST_HEIGHT = 8.0
@@ -88,7 +90,7 @@ def test_cascade_and_per_unit_metrics_end_to_end(
     config = _config(areal_raster)
     tiers = build_cascade(config, lambda name: areal_raster.parent)
 
-    buildings, report = fill_heights(cleaned.buildings, tiers)
+    buildings, report = fill_heights(cleaned.buildings_area, tiers)
 
     # acceptance: every building has a non-null height and a source tag
     assert not buildings.empty
@@ -148,7 +150,7 @@ def test_tier1_entirely_absent_falls_through_to_the_areal_tier(
     The cascade must still produce a height for every building, and the output must say
     unambiguously that none of it is tier 1 — same LCZ labels, very different trustworthiness.
     """
-    stripped = cleaned.buildings.assign(height=np.nan, num_floors=np.nan)
+    stripped = cleaned.buildings_area.assign(height=np.nan, num_floors=np.nan)
     tiers = build_cascade(_config(areal_raster), lambda name: areal_raster.parent)
 
     buildings, report = fill_heights(stripped, tiers)
@@ -176,7 +178,7 @@ def test_without_an_areal_tier_the_shortfall_is_reported_not_raised(
     config = HeightConfig(overture_height_confidence=0.9, overture_num_floors_confidence=0.6)
     tiers = build_cascade(config, lambda name: Path("/nonexistent") / name)
 
-    buildings, report = fill_heights(cleaned.buildings, tiers)
+    buildings, report = fill_heights(cleaned.buildings_area, tiers)
 
     assert [tier.name for tier in tiers] == ["overture"]
     assert report.n_unresolved > 0
@@ -193,9 +195,9 @@ def test_without_an_areal_tier_the_shortfall_is_reported_not_raised(
 
 
 def test_the_diagnostic_reports_the_fixtures_real_provenance(cleaned: CleanedVectors) -> None:
-    diagnostic = source_availability(cleaned.buildings)
+    diagnostic = source_availability(cleaned.buildings_area)
 
-    assert diagnostic.n_buildings == len(cleaned.buildings)
+    assert diagnostic.n_buildings == len(cleaned.buildings_area)
     assert diagnostic.n_with_height < diagnostic.n_buildings
     assert {row.dataset for row in diagnostic.by_footprint_dataset} <= {
         "OpenStreetMap",

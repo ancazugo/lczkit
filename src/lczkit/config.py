@@ -47,8 +47,26 @@ class CleaningConfig(BaseModel):
     """Footprints larger than this are dropped as implausible."""
 
     building_min_area_m2: float | None = None
-    """Footprints smaller than this are absorbed into a touching larger neighbour, or dropped
-    if they touch nothing."""
+    """Footprints smaller than this are dissolved into a touching larger neighbour on
+    `buildings_topo`. Those touching nothing are kept: small is not spurious."""
+
+    building_road_buffer_m: float | None = None
+    """Half-width of the road buffer the `buildings_topo` street rule measures against, in metres.
+
+    Derived from the fixtures rather than the literature. At 4.0 m the overlap fraction separates
+    perimeter blocks from structures standing in the roadway; at 2.0 m the distribution is too
+    compressed to separate anything (p95 = 0.46) and at 8.0 m it swallows the blocks (p90 = 0.98).
+    """
+
+    building_road_overlap_limit: float | None = None
+    """Fraction of a footprint inside the road buffer above which it is dropped rather than trimmed.
+
+    Also fixture-derived: 0.5 is where the median dropped footprint falls below the median building
+    (230 m² on Berlin), recovering 95% of the area the old centreline rule destroyed. Both this and
+    `building_road_buffer_m` were measured on two European cities and should be re-derived for a
+    city whose fabric or road-centreline generalisation differs — see
+    `docs/experiments/phase-6.6-footprint-attrition.md`.
+    """
 
     building_merge_limit_m2: float | None = None
     """`geoplanar.merge_overlaps`' `merge_limit` — overlapping polygons smaller than this are

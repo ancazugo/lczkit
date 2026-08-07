@@ -7,6 +7,7 @@ import pytest
 from shapely.geometry import LineString, MultiPolygon, Polygon, box
 
 from lczkit.cleaning.buildings import (
+    BUILDING_ID,
     absorb_small_buildings,
     clean_buildings,
     drop_non_polygons,
@@ -14,6 +15,7 @@ from lczkit.cleaning.buildings import (
     explode_multipolygons,
     fix_invalid_geometries,
     resolve_overlaps,
+    trim_overlaps,
 )
 
 CRS = "EPSG:32633"  # a real projected CRS; assert_projected_crs requires one
@@ -88,7 +90,28 @@ def test_resolve_overlaps_merges_below_merge_limit() -> None:
     assert merged["height"].iloc[0] in (5.0, 7.0)
 
 
-def test_absorb_small_buildings_merges_touching_and_drops_isolated() -> None:
+def test_trim_overlaps_removes_the_double_count_without_losing_a_feature() -> None:
+    """`buildings_area`'s only overlap operation. Building surface fraction sums overlay pieces,
+    so a shared 10 m2 strip is counted twice and can push the fraction above 1.0; trimming removes
+    exactly that. Both features must survive — merging them would corrupt `building_count` and
+    `mean_building_area_m2`, which is why merging stays on the topological layer."""
+    gdf = _gdf([box(0, 0, 10, 10), box(9, 0, 19, 10)], height=[5.0, 7.0])
+
+    trimmed, step = trim_overlaps(gdf)
+
+    assert len(trimmed) == 2
+    assert trimmed.geometry.area.sum() == pytest.approx(190.0)  # 200 minus the shared 10
+    assert not trimmed.geometry.iloc[0].overlaps(trimmed.geometry.iloc[1])
+    assert step.stage == "buildings_area"
+    assert step.area_in_m2 == pytest.approx(200.0)
+    assert step.area_out_m2 == pytest.approx(190.0)
+
+
+def test_absorb_small_buildings_dissolves_touching_and_keeps_isolated() -> None:
+    """CLAUDE.md's rule: this operation dissolves, it does not delete. `geoplanar.merge_touching`
+    deletes any polygon sharing no boundary with a neighbour and cannot be told not to, so the
+    isolates are held back from it and concatenated in afterwards. A free-standing garage is small,
+    not spurious."""
     large = box(0, 0, 10, 10)  # area 100
     sliver = box(10, 0, 10.5, 10)  # touches `large` along its right edge, area 5 < min_area
     isolated = box(100, 100, 100.5, 100.5)  # area 0.25 < min_area, touches nothing
@@ -96,16 +119,34 @@ def test_absorb_small_buildings_merges_touching_and_drops_isolated() -> None:
 
     result, step = absorb_small_buildings(gdf, min_area_m2=6)
 
-    assert len(result) == 1  # sliver absorbed into `large`; isolated dropped
-    assert result.geometry.iloc[0].area == pytest.approx(large.area + sliver.area)
+    assert len(result) == 2  # sliver dissolved into `large`; isolated retained
+    assert result.geometry.area.sum() == pytest.approx(large.area + sliver.area + isolated.area)
     assert step.n_in == 3
-    assert step.detail["n_small"] == 2
+    assert step.detail == {
+        "min_area_m2": 6,
+        "n_small": 2,
+        "n_dissolved": 1,
+        "n_isolated_retained": 1,
+    }
+    assert step.area_out_m2 == pytest.approx(step.area_in_m2)
 
 
-def test_clean_buildings_runs_full_pipeline_in_order() -> None:
+def test_absorb_small_buildings_loses_no_area_when_every_small_one_is_isolated() -> None:
+    """The Berlin case: 1043 of 1186 sub-20 m2 footprints touch nothing at all. Under the old
+    behaviour every one of them was deleted."""
+    gdf = _gdf([box(0, 0, 1, 1), box(50, 50, 51, 51), box(100, 100, 110, 110)])
+
+    result, step = absorb_small_buildings(gdf, min_area_m2=5)
+
+    assert len(result) == 3
+    assert step.area_out_m2 == pytest.approx(step.area_in_m2)
+    assert step.detail["n_isolated_retained"] == 2
+
+
+def test_clean_buildings_forks_into_two_layers_sharing_a_building_id() -> None:
     gdf = _gdf([box(0, 0, 10, 10), box(9, 0, 19, 10)], height=[5.0, 7.0])
 
-    cleaned, steps = clean_buildings(
+    layers, steps = clean_buildings(
         gdf,
         max_area_m2=10_000,
         min_area_m2=1,
@@ -113,19 +154,43 @@ def test_clean_buildings_runs_full_pipeline_in_order() -> None:
         overlap_limit=0.5,
     )
 
-    operations = [s.operation for s in steps]
-    assert operations == [
+    assert [s.operation for s in steps] == [
         "fix_invalid_geometries",
         "explode_multipolygons",
         "drop_non_polygons",
         "drop_oversized",
+        "assign_building_id",
+        "trim_overlaps",
         "resolve_overlaps",
         "absorb_small_buildings",
         "validate_planarity",
     ]
-    assert all(s.stage == "buildings" for s in steps)
-    assert len(cleaned) == 1
+    # The shared prefix is stage "buildings"; after the fork each step names the layer it built,
+    # so `CleaningReport.area_retention` can be asked about either one.
+    assert [s.stage for s in steps[:5]] == ["buildings"] * 5
+    assert steps[5].stage == "buildings_area"
+    assert {s.stage for s in steps[6:]} == {"buildings_topo"}
+
+    # Area preserves both features; topo merges them into one.
+    assert len(layers.area) == 2
+    assert len(layers.topo) == 1
+    assert layers.area[BUILDING_ID].is_unique
+    assert set(layers.topo[BUILDING_ID]) <= set(layers.area[BUILDING_ID])
     assert steps[-1].detail["is_planar_enforced"] is True
+
+
+def test_clean_buildings_keeps_more_area_on_the_area_layer_than_on_the_topological_one() -> None:
+    """The whole point of the split. `buildings_topo` merges the overlapping pair into one feature
+    and would go on to lose more to the road-buffer rule; `buildings_area` gives up only the
+    double-counted strip."""
+    gdf = _gdf([box(0, 0, 10, 10), box(9, 0, 19, 10), box(100, 100, 100.5, 100.5)])
+
+    layers, _ = clean_buildings(
+        gdf, max_area_m2=10_000, min_area_m2=1, merge_limit_m2=1_000, overlap_limit=0.5
+    )
+
+    assert layers.area.geometry.area.sum() == pytest.approx(190.25)
+    assert layers.area.geometry.area.sum() >= layers.topo.geometry.area.sum()
 
 
 def test_clean_buildings_retains_usage_and_provenance_columns() -> None:
@@ -146,14 +211,17 @@ def test_clean_buildings_retains_usage_and_provenance_columns() -> None:
         **{"class": ["industrial", "apartments"]},
     )
 
-    cleaned, _ = clean_buildings(
+    layers, _ = clean_buildings(
         gdf, max_area_m2=10_000, min_area_m2=1, merge_limit_m2=1_000, overlap_limit=0.5
     )
 
-    assert {"height", "num_floors", "subtype", "class", "sources"} <= set(cleaned.columns)
-    assert len(cleaned) == 1
-    assert cleaned["class"].iloc[0] in {"industrial", "apartments"}
-    assert cleaned["sources"].iloc[0] is not None
+    for cleaned in (layers.area, layers.topo):
+        assert {"height", "num_floors", "subtype", "class", "sources"} <= set(cleaned.columns)
+        assert cleaned["sources"].iloc[0] is not None
+    assert len(layers.topo) == 1
+    assert layers.topo["class"].iloc[0] in {"industrial", "apartments"}
+    # The area layer keeps both, so both usage types survive to `industrial_fraction`.
+    assert set(layers.area["class"]) == {"industrial", "apartments"}
 
 
 def test_clean_buildings_never_drops_a_building_for_a_null_height() -> None:
@@ -167,9 +235,10 @@ def test_clean_buildings_never_drops_a_building_for_a_null_height() -> None:
         num_floors=[None, None],
     )
 
-    cleaned, _ = clean_buildings(
+    layers, _ = clean_buildings(
         gdf, max_area_m2=10_000, min_area_m2=1, merge_limit_m2=1_000, overlap_limit=0.5
     )
 
-    assert len(cleaned) == 2
-    assert cleaned["height"].isna().all()
+    assert len(layers.area) == 2
+    assert len(layers.topo) == 2
+    assert layers.area["height"].isna().all()

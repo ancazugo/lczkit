@@ -37,6 +37,7 @@ from lczkit.config import (
     ValidationConfig,
 )
 from lczkit.heights.cascade import fill_heights
+from lczkit.heights.inherit import inherit_heights
 from lczkit.heights.tiers import build_cascade
 from lczkit.landcover.local import LocalRasterSource
 from lczkit.ucp import compute_parameters
@@ -51,6 +52,8 @@ _CLEANING = CleaningConfig(
     building_min_area_m2=20.0,
     building_merge_limit_m2=200.0,
     building_overlap_limit=0.1,
+    building_road_buffer_m=4.0,
+    building_road_overlap_limit=0.5,
 )
 _HEIGHTS = HeightConfig(overture_height_confidence=0.9, overture_num_floors_confidence=0.6)
 _LAND_COVER = LandCoverConfig()
@@ -76,11 +79,12 @@ def units() -> gpd.GeoDataFrame:
 @pytest.fixture(scope="module")
 def parameters(cleaned: CleanedVectors, units: gpd.GeoDataFrame) -> pd.DataFrame:
     tiers = build_cascade(_HEIGHTS, lambda name: LANDCOVER_FIXTURES_DIR)
-    buildings, _ = fill_heights(cleaned.buildings, tiers)
+    buildings, _ = fill_heights(cleaned.buildings_area, tiers)
     land_cover = LocalRasterSource(_LAND_COVER.dataset("worldcover"), WORLDCOVER).fractions(units)
     return compute_parameters(
         units,
         buildings,
+        inherit_heights(cleaned.buildings_topo, buildings),
         cleaned.streets,
         cleaned.land_use,
         land_cover,
@@ -99,7 +103,7 @@ def test_the_fixture_carries_industrial_evidence_the_berlin_one_cannot(
 ) -> None:
     """The reason this fixture exists. Berlin Mitte has 36 industrial buildings of 6195 and 2
     parcels of 1559; the Waalhaven has two orders of magnitude more of the first."""
-    industrial_buildings = int((cleaned.buildings["class"] == "industrial").sum())
+    industrial_buildings = int((cleaned.buildings_area["class"] == "industrial").sum())
     industrial_parcels = int((cleaned.land_use["class"] == "industrial").sum())
 
     assert industrial_buildings > 200
