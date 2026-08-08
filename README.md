@@ -34,8 +34,10 @@ removal:
 - **`buildings_area`** adds overlap *trimming* only, and feeds every area statistic — building
   surface fraction, `Hr`, building count, mean building area, `industrial_fraction` — plus the
   height cascade. It retains 99.5% of raw footprint area on the Berlin fixture.
-- **`buildings_topo`** adds overlap merging, small-building dissolution and a road-buffer rule, and
-  feeds the `neatnet` exclusion mask and `momepy.street_profile`. Destructive by design.
+- **`buildings_topo`** adds overlap merging, small-building dissolution, a road-buffer rule and a
+  final planarity pass, and feeds the `neatnet` exclusion mask and `momepy.street_profile`.
+  Destructive by design, and **verifiably planar** — `momepy.enclosures()` requires that, and the
+  cleaning report asserts it rather than recording it.
 
 The split exists because a single layer cleaned for topology destroyed 23.5% of Berlin's footprint
 area before building surface fraction — roughly 47% of the classification metric — was computed.
@@ -43,6 +45,13 @@ See [`docs/experiments/phase-6.6-footprint-attrition.md`](docs/experiments/phase
 Footprints are dropped for lying inside a road buffer, never for touching a street centreline: a
 perimeter block fronting a street routinely crosses a generalised centreline, and treating that as
 an error removed 439 Berlin footprints averaging three times the size of the ones it kept.
+
+Planarity is enforced explicitly at the end, because trimming alone cannot reach it: overlaps whose
+intersection has collapsed to *zero area* satisfy the `overlaps` predicate while `difference` on
+them is a no-op, so `geoplanar.trim_overlaps` leaves them however many times it runs. Three such
+pairs on Berlin held the layer non-planar for two phases. Subtracting a one-micrometre buffer clears
+them for 4.5×10⁻⁵ m² of 3.13 km² — see
+[`docs/experiments/phase-6.7-instrument-diagnostics.md`](docs/experiments/phase-6.7-instrument-diagnostics.md).
 
 **Building heights are sparse, and that is the data, not a defect.** Overture conflates
 footprints winner-takes-all, so in machine-learning dominated areas heights are near-absent —
@@ -249,30 +258,54 @@ Six things about this phase are worth knowing before relying on it:
   is compared on the weights it does have, and `n_params_used` and `missing_parameters` say what
   it was judged on. No imputation anywhere.
 
-Agreement against the Demuzere global map is reported lczexplore-style — per-class agreement and
-a confusion matrix, never a single accuracy figure — plus agreement stratified by
-`height_completeness` band and **both** confusion axes, reported apart because they are different
-instruments: the height axis (1↔2↔3, 4↔5↔6) diagnoses the height estimate, the compactness axis
-(1↔4, 2↔5, 3↔6) diagnoses footprint coverage and unit size.
+### Validation, and what it is measured against
 
-Measured on the fixtures: **24.3% over 957 cells in Berlin Mitte** and **42.3% over 657 cells in
-Rotterdam**. These are measurements of a prototype-distance classifier missing five of ten
-properties, not a headline accuracy. Berlin's cells are 99.5% built, so its figure is a built-class
-one as it stands; Rotterdam's higher number is mostly water, agreeing at 89.6% over its 298 natural
-cells while its 359 built cells sit at 3.1%.
+There are two references, and the distinction is load-bearing. **Hand-labelled So2Sat LCZ42 /
+DFC2017 polygons are the primary reference** where they exist. The Demuzere global map
+(`lcz_v3.tif`) is a secondary comparator — it is a model output carrying its own error, and
+scoring against it as though it were ground truth reports the *disagreement between two models* as
+lczkit's error. The agreement between the two is reported as the **ceiling**: the most any run
+could score against the global map.
 
-Two experiments in [`docs/experiments/`](docs/experiments/) explain how those numbers got there and
-what is still missing. [Phase 6.5](docs/experiments/phase-6.5-unit-scale.md) tests the obvious
-explanation for the original 17.7% — that Stewart & Oke's ranges describe an LCZ patch and a 100 m
-grid cell is not one — and rejects it, finding instead that Phase 1 cleaning was destroying 23.5% of
-the footprint area behind the metric. [Phase 6.6](docs/experiments/phase-6.6-footprint-attrition.md)
-fixes that, taking Berlin from 17.7% to 24.3% and putting LCZ 1's building surface fraction inside
-its published range for the first time.
+Everything is reported lczexplore-style — per-class agreement and a confusion matrix, never a
+single accuracy figure — plus built-class agreement separately from overall with the natural-class
+share stated beside it, agreement stratified by `height_completeness` band, and **both** confusion
+axes, apart because they are different instruments: the height axis (1↔2↔3, 4↔5↔6) diagnoses the
+height estimate, the compactness axis (1↔4, 2↔5, 3↔6) diagnoses footprint coverage and unit size.
 
-The remaining gap is open, and nothing downstream of it has been tuned. The error has moved onto the
-**height axis** — now 31.8% of all Berlin disagreement, up from 19.9%, with compact high-rise read
-as compact midrise — which points at the areal height tiers next, ahead of the metric's missing
-sky-view-factor dimension and the reference map's own unquantified error ceiling.
+Measured on the Berlin fixture, over the 432 cells carrying both references:
+
+| | agreement |
+|---|---:|
+| lczkit, against the labelled polygons | **40.9%** |
+| `lcz_v3`, against the same labelled polygons — **the ceiling** | 53.2% |
+| lczkit, against `lcz_v3` | 24.3% |
+
+All 432 are built cells, so there is no natural cover inflating anything. Rotterdam has **no
+labelled coverage** — So2Sat covers 52 cities and Rotterdam is not one of them — so it stays on
+`lcz_v3` alone at 42.3% over 657 cells, of which 45.4% are natural: its water agrees at 95.5% while
+its 359 built cells sit at 3.1%. That is the figure a built/natural split exists to stop anyone
+quoting.
+
+Three experiments in [`docs/experiments/`](docs/experiments/) record how those numbers got there.
+[Phase 6.5](docs/experiments/phase-6.5-unit-scale.md) tests the obvious explanation for the original
+17.7% — that Stewart & Oke's ranges describe an LCZ patch and a 100 m grid cell is not one — and
+rejects it, finding instead that Phase 1 cleaning was destroying 23.5% of the footprint area behind
+the metric. [Phase 6.6](docs/experiments/phase-6.6-footprint-attrition.md) fixes that.
+[Phase 6.7](docs/experiments/phase-6.7-instrument-diagnostics.md) wires the real reference, measures
+the ceiling, and **inverts the error diagnosis**: against `lcz_v3` the height axis carried 31.8% of
+Berlin's disagreement, but against real labels it is compactness at 55.2% and height at 17.0%. Most
+of the height-axis error attributed to lczkit was `lcz_v3`'s own tendency to read Berlin Mitte as
+compact high-rise.
+
+The remaining gap is 12.3 points against a real reference, and nothing downstream of it has been
+tuned. It points at unit definition and footprint coverage first, the metric's missing
+sky-view-factor dimension second, and the height cascade third.
+
+**Enclosure-based computation leads the 100 m grid on Berlin against real labels** — 45.4% against
+40.9%, the whole lead coming from LCZ 2 — but trails on Rotterdam, and Berlin's labelled cells hold
+only two classes. It has not been adopted; the evidence and what is still missing are in the Phase
+6.7 write-up.
 
 ## Setup
 
