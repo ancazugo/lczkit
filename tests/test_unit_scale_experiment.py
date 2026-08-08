@@ -1,4 +1,4 @@
-"""The Phase 6.5 experiment's two load-bearing helpers.
+"""The unit-scale harness' load-bearing helpers.
 
 The script itself is not a test — `clean_vectors` on the full Berlin extent takes about ninety
 seconds, and the experiment is a one-off analysis rather than a pipeline stage. What is tested here
@@ -185,6 +185,19 @@ def test_the_three_arms_are_declared_with_the_control_marked_as_one(script: Modu
     assert {fixture.name for fixture in script.FIXTURE_CITIES} == {"berlin", "rotterdam"}
     assert script.TESTED_PARAMETER == "building_surface_fraction"
     for fixture in script.FIXTURE_CITIES:
-        assert fixture.vectors.is_dir()
         assert fixture.worldcover.is_file()
         assert fixture.reference.is_file()
+        # `vectors` is a factory rather than a directory so the same harness runs over a live
+        # `OvertureSource`; the committed fixtures still have to resolve to real files.
+        assert Path(fixture.vectors.args[0]).is_dir()
+
+
+def test_only_the_city_with_labelled_coverage_declares_ground_truth(script: ModuleType) -> None:
+    """Berlin has So2Sat polygons and Rotterdam does not, and the difference must be structural
+    rather than a caveat in prose: a `None` here is what makes the harness print that Rotterdam's
+    figures are against an estimate, and what keeps a ceiling from being fabricated for it."""
+    by_name = {fixture.name: fixture for fixture in script.FIXTURE_CITIES}
+
+    assert by_name["berlin"].ground_truth is not None
+    assert by_name["berlin"].ground_truth.is_file()
+    assert by_name["rotterdam"].ground_truth is None
