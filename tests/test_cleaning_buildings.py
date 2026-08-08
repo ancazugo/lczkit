@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import geopandas as gpd
+import geoplanar
 import pytest
 from shapely.geometry import LineString, MultiPolygon, Polygon, box
 
@@ -12,6 +13,7 @@ from lczkit.cleaning.buildings import (
     clean_buildings,
     drop_non_polygons,
     drop_oversized,
+    enforce_planarity,
     explode_multipolygons,
     fix_invalid_geometries,
     resolve_overlaps,
@@ -107,6 +109,85 @@ def test_trim_overlaps_removes_the_double_count_without_losing_a_feature() -> No
     assert step.area_out_m2 == pytest.approx(190.0)
 
 
+def _zero_area_overlap() -> gpd.GeoDataFrame:
+    """Two footprints that `overlaps()` reports as overlapping while their intersection has area
+    exactly 0.0 — the artefact `geoplanar.trim_overlaps` cannot clear.
+
+    The smaller polygon carries a zero-width spike along the shared edge. `difference` on such a
+    pair returns the input unchanged, so the pair survives any number of trimming passes; on the
+    Berlin fixture three of them did, and they are why `buildings_topo` reported
+    `is_planar_enforced: False` while `momepy.enclosures()` was reading it.
+
+    The spike sits on the *smaller* polygon deliberately: `trim_overlaps` trims the larger, so
+    subtracting the spiked one from the plain one is the no-op, which is the case that survives.
+    """
+    plain = box(0, 0, 20, 10)
+    spiked = Polygon([(20, 0), (25, 0), (25, 10), (20, 10), (20, 6), (20, 4), (20, 6)])
+    return _gdf([plain, spiked])
+
+
+def test_trim_overlaps_cannot_clear_a_zero_area_overlap() -> None:
+    """The premise of `enforce_planarity`, asserted rather than assumed. If a future geoplanar
+    fixes this, this test fails and the extra step can go."""
+    gdf = _zero_area_overlap()
+    left, right = gdf.geometry.iloc[0], gdf.geometry.iloc[1]
+    assert left.overlaps(right)
+    assert left.intersection(right).area == 0.0
+
+    trimmed, _ = trim_overlaps(gdf)
+
+    assert trimmed.geometry.iloc[0].overlaps(trimmed.geometry.iloc[1])
+
+
+def test_enforce_planarity_clears_what_trimming_cannot_at_negligible_cost() -> None:
+    gdf = _zero_area_overlap()
+
+    result, step = enforce_planarity(gdf)
+
+    assert not result.geometry.iloc[0].overlaps(result.geometry.iloc[1])
+    assert geoplanar.is_planar_enforced(result, allow_gaps=True)
+    assert len(result) == 2
+    assert step.detail["n_residual_pairs"] == 1
+    assert step.detail["n_passes"] >= 1
+    # A micrometre-wide sliver off a 200 m2 footprint. The step exists to make a layer planar, not
+    # to change what it measures, and the report has to show that it did not.
+    assert step.detail["area_removed_m2"] < 1e-3
+    assert step.area_out_m2 == pytest.approx(step.area_in_m2, abs=1e-3)
+
+
+def test_enforce_planarity_leaves_an_already_planar_layer_alone() -> None:
+    """A rule that never fires must be distinguishable from one never run — `n_passes` is 0, not
+    absent, and not 1."""
+    gdf = _gdf([box(0, 0, 10, 10), box(20, 0, 30, 10)])
+
+    result, step = enforce_planarity(gdf)
+
+    assert step.detail["n_passes"] == 0
+    assert step.detail["n_residual_pairs"] == 0
+    assert step.detail["area_removed_m2"] == pytest.approx(0.0)
+    assert result.geometry.area.sum() == pytest.approx(200.0)
+
+
+def test_enforce_planarity_trims_the_larger_footprint_of_a_pair() -> None:
+    """Matching `trim_overlaps(strategy="largest")`, so which feature loses the sliver does not
+    depend on which operation reached the pair first."""
+    gdf = _gdf([box(0, 0, 10, 10), box(9, 0, 30, 10)])
+    before = gdf.geometry.area.to_numpy()
+
+    result, _ = enforce_planarity(gdf)
+    after = result.geometry.area.to_numpy()
+
+    assert after[0] == pytest.approx(before[0])
+    assert after[1] < before[1]
+
+
+def test_enforce_planarity_refuses_to_report_a_layer_it_could_not_make_planar() -> None:
+    """Silently returning a still-overlapping layer is the failure mode this whole step exists to
+    end, so exhausting the passes raises rather than shrugging."""
+    with pytest.raises(RuntimeError, match="planar"):
+        enforce_planarity(_zero_area_overlap(), max_passes=0)
+
+
 def test_absorb_small_buildings_dissolves_touching_and_keeps_isolated() -> None:
     """CLAUDE.md's rule: this operation dissolves, it does not delete. `geoplanar.merge_touching`
     deletes any polygon sharing no boundary with a neighbour and cannot be told not to, so the
@@ -163,6 +244,7 @@ def test_clean_buildings_forks_into_two_layers_sharing_a_building_id() -> None:
         "trim_overlaps",
         "resolve_overlaps",
         "absorb_small_buildings",
+        "enforce_planarity",
         "validate_planarity",
     ]
     # The shared prefix is stage "buildings"; after the fork each step names the layer it built,

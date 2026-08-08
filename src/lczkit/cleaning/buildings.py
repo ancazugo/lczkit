@@ -27,8 +27,10 @@ from dataclasses import dataclass
 
 import geopandas as gpd
 import geoplanar
+import numpy as np
 import pandas as pd
 
+from lczkit.cleaning.geometry import largest_part
 from lczkit.cleaning.report import CleaningStep, Stage
 from lczkit.crs import assert_projected_crs
 
@@ -211,6 +213,107 @@ def absorb_small_buildings(
     )
 
 
+def _overlapping_pairs(buildings: gpd.GeoDataFrame) -> list[tuple[int, int]]:
+    """Every pair of positions whose footprints overlap, unordered and deduplicated.
+
+    The same `overlaps` predicate `geoplanar.is_overlapping` tests with, so a layer this returns
+    nothing for is a layer that reports planar.
+    """
+    found = np.asarray(buildings.sindex.query(buildings.geometry, predicate="overlaps"))
+    return sorted({(min(a, b), max(a, b)) for a, b in found.T.tolist() if a != b})
+
+
+RESIDUAL_OVERLAP_EPS_M = 1e-6
+"""Width of the buffer subtracted to separate a residual zero-area overlap, in metres.
+
+One micrometre — six orders of magnitude below any survey precision, and eleven below a footprint.
+It is a numerical tolerance for a floating-point artefact, not a decision about buildings, which is
+why it lives here rather than in `CleaningConfig`: nothing about a city would make a different
+value right. Measured on the Berlin fixture it removes 4.5e-5 m² of 3.13 km², or 1.4e-9 %.
+"""
+
+MAX_PLANARITY_PASSES = 8
+"""Bound on the fixed-point loop in `enforce_planarity`.
+
+Separating one pair can expose another, so the loop is genuinely iterative — Berlin needs two
+passes for three pairs. The bound exists so a pathological layer fails loudly instead of hanging.
+"""
+
+
+def enforce_planarity(
+    buildings: gpd.GeoDataFrame,
+    *,
+    eps_m: float = RESIDUAL_OVERLAP_EPS_M,
+    max_passes: int = MAX_PLANARITY_PASSES,
+) -> tuple[gpd.GeoDataFrame, CleaningStep]:
+    """Clear the overlaps `geoplanar.trim_overlaps` cannot. `buildings_topo` only.
+
+    **Why anything is left to clear.** `trim_overlaps` subtracts one footprint of an overlapping
+    pair from the other with a plain `difference`. Where the pair's overlap has collapsed to zero
+    area — two polygons sharing a boundary that is collinear but carries mismatched vertices — that
+    subtraction is a no-op, and the pair stays flagged however many times it is run. Measured on the
+    Berlin fixture: three such pairs survive `resolve_overlaps`, relating as `212111212` (a 2-D
+    interior intersection) while `intersection()` returns a MultiLineString of area exactly 0.0.
+    That single flag is what made `buildings_topo` report `is_planar_enforced: False` for two
+    phases, while `momepy.enclosures()` — which needs a planar input — was reading it.
+
+    Neither `shapely.set_precision` nor `shapely.difference(grid_size=...)` fixes them reliably;
+    tried across 1e-9 to 1e-2, each resolved at most one of the three and coarser grids introduced
+    new overlaps elsewhere. Subtracting a `eps_m`-wide buffer of the smaller polygon from the larger
+    does resolve all three, because it forces a genuine re-noding of the shared boundary.
+
+    The larger of each pair is trimmed, matching `trim_overlaps(strategy="largest")`, so which
+    feature loses the sliver does not depend on which operation reached it first.
+    """
+    assert_projected_crs(buildings, "buildings")
+    working = buildings.reset_index(drop=True)
+    # Edited as a positional array rather than through `.loc`: the spatial index reports positions,
+    # and a pass rewrites the same footprint more than once when it overlaps two neighbours.
+    geometries = working.geometry.to_numpy().copy()
+
+    passes = 0
+    n_pairs = 0
+    pairs = _overlapping_pairs(working)
+    while pairs:
+        if passes >= max_passes:
+            raise RuntimeError(
+                f"could not clear {len(pairs)} overlapping footprint pair(s) in {max_passes} "
+                f"passes at eps_m={eps_m}; buildings_topo would not be a planar layer"
+            )
+        passes += 1
+        n_pairs = max(n_pairs, len(pairs))
+
+        touched: set[int] = set()
+        for first, second in pairs:
+            larger = first if geometries[first].area >= geometries[second].area else second
+            smaller = second if larger == first else first
+            geometries[larger] = geometries[larger].difference(geometries[smaller].buffer(eps_m))
+            touched.add(larger)
+
+        positions = sorted(touched)
+        geometries[positions] = largest_part(
+            gpd.GeoSeries(geometries[positions], crs=working.crs)
+        ).to_numpy()
+        working = working.set_geometry(
+            gpd.GeoSeries(geometries, index=working.index, crs=working.crs)
+        )
+        pairs = _overlapping_pairs(working)
+
+    working = working.loc[working.geometry.notna() & ~working.geometry.is_empty].reset_index(
+        drop=True
+    )
+    return working, _step(
+        "enforce_planarity",
+        buildings,
+        working,
+        stage="buildings_topo",
+        eps_m=eps_m,
+        n_passes=passes,
+        n_residual_pairs=n_pairs,
+        area_removed_m2=_area(buildings) - _area(working),
+    )
+
+
 @dataclass(frozen=True)
 class BuildingLayers:
     """The two layers `clean_buildings()` forks into, before cross-layer topology runs on `topo`."""
@@ -255,6 +358,12 @@ def clean_buildings(
     topo, step = resolve_overlaps(base, merge_limit_m2, overlap_limit)
     steps.append(step)
     topo, step = absorb_small_buildings(topo, min_area_m2)
+    steps.append(step)
+
+    # Last, not earlier: `absorb_small_buildings` dissolves, and a dissolve can reintroduce the
+    # artefact this clears. The invariant has to be established after the last thing that can
+    # break it, or `validate_planarity` below is measuring a layer that no longer exists.
+    topo, step = enforce_planarity(topo)
     steps.append(step)
 
     # allow_gaps=True: buildings are not a plane tessellation — gaps between separate

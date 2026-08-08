@@ -11,29 +11,10 @@ from __future__ import annotations
 
 import geopandas as gpd
 import numpy as np
-import pandas as pd
-import shapely
 
+from lczkit.cleaning.geometry import largest_part
 from lczkit.cleaning.report import CleaningStep, Stage
 from lczkit.crs import assert_projected_crs
-
-
-def _largest_part(geometry: gpd.GeoSeries) -> gpd.GeoSeries:
-    """Reduce each geometry to its single largest polygon part.
-
-    Subtracting a road buffer can split a footprint in two — a building the network crosses end to
-    end. Keeping both parts would turn one building into two in `building_count` and give a
-    `building_id` two rows; keeping the largest keeps the feature a feature. A geometry the
-    subtraction emptied has no parts and comes back missing, for the caller to drop.
-    """
-    parts, origin = shapely.get_parts(geometry.to_numpy(), return_index=True)
-    if len(parts) == 0:
-        empty = pd.Series(index=geometry.index, dtype="object")
-        return gpd.GeoSeries(empty, crs=geometry.crs)
-    winners = pd.DataFrame({"origin": origin, "area": shapely.area(parts)})
-    picked = winners.groupby("origin")["area"].idxmax()
-    largest = pd.Series(parts[picked.to_numpy()], index=geometry.index[picked.index])
-    return gpd.GeoSeries(largest.reindex(geometry.index), crs=geometry.crs)
 
 
 def resolve_buildings_on_streets(
@@ -94,7 +75,7 @@ def resolve_buildings_on_streets(
     kept = buildings.loc[~dropped].copy()
     to_trim = trimmed.loc[kept.index]
     if to_trim.any():
-        kept.loc[to_trim, "geometry"] = _largest_part(
+        kept.loc[to_trim, "geometry"] = largest_part(
             kept.loc[to_trim].geometry.difference(road)
         ).to_numpy()
         kept = kept.loc[kept.geometry.notna() & ~kept.geometry.is_empty]

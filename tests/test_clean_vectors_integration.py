@@ -124,8 +124,12 @@ def test_every_step_records_both_a_count_and_an_area(result: CleanedVectors) -> 
         "topology",
     }
 
+    # Asserted `is True`, not `isinstance(..., bool)`. It sat at False for two phases while
+    # `momepy.enclosures()` — which requires a planar input — read this layer, and a test that
+    # only checked the type could not tell.
+
     validate_step = next(s for s in steps if s.operation == "validate_planarity")
-    assert isinstance(validate_step.detail["is_planar_enforced"], bool)
+    assert validate_step.detail["is_planar_enforced"] is True
 
     for step in steps:
         if step.operation not in ("explode_multipolygons",):
