@@ -161,6 +161,36 @@ def test_a_unit_the_reference_barely_covers_is_excluded() -> None:
     assert report.min_reference_coverage == 0.5
 
 
+def test_built_agreement_is_reported_apart_from_an_overall_figure_water_can_carry() -> None:
+    """Rotterdam's headline 42.5% was 266 water cells agreeing at 95.9% while LCZ 8 sat at 0.0%
+    over 224. Here: three water cells all right, three built cells all wrong. An overall 50% would
+    be a true statement about nothing.
+    """
+    predicted, reference, area = build([17, 17, 17, 2, 2, 2], [17, 17, 17, 5, 5, 5])
+
+    report = agreement(predicted, reference, area)
+
+    assert report.overall_agreement == pytest.approx(0.5)
+    assert report.built_agreement == pytest.approx(0.0)
+    assert report.natural_agreement == pytest.approx(1.0)
+    assert report.n_built == 3
+    assert report.n_natural == 3
+    assert report.natural_share == pytest.approx(0.5)
+
+
+def test_the_built_natural_split_is_taken_from_the_reference_not_the_prediction() -> None:
+    """Otherwise a classifier could raise its built score by predicting water: the mislabelled
+    cell would leave the built denominator along with the error."""
+    predicted, reference, area = build([17, 2], [2, 2])
+
+    report = agreement(predicted, reference, area)
+
+    assert report.n_built == 2
+    assert report.n_natural == 0
+    assert report.built_agreement == pytest.approx(0.5)
+    assert report.natural_agreement == 0.0
+
+
 def test_nothing_comparable_gives_an_empty_report_rather_than_an_error() -> None:
     predicted, reference, area = build([np.nan], [np.nan])
 

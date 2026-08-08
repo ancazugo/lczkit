@@ -128,6 +128,19 @@ class RunManifest(BaseModel):
     height_fill: HeightFillReport | None = None
     height_source_availability: SourceAvailability | None = None
     validation: AgreementReport | None = None
+    """Agreement against the Demuzere global map. A comparator, not ground truth - read it against
+    `reference_ceiling`."""
+
+    validation_ground_truth: AgreementReport | None = None
+    """Agreement against hand-labelled LCZ polygons (So2Sat LCZ42 / DFC2017) where they exist.
+    **This is the primary validation figure**; `validation` is secondary."""
+
+    reference_ceiling: AgreementReport | None = None
+    """Agreement between the Demuzere map and the labelled polygons, on the same units.
+
+    The bound on what any run can score against `validation`, and the number that has to exist
+    before a residual there is called a defect. Measured at 53.2% on the Berlin fixture, which is
+    inside the 50-60% band lczkit was being compared against as though it were a target."""
 
     outputs: list[str] = Field(default_factory=list)
     """Files written into the run directory, by name."""
@@ -143,6 +156,8 @@ def build_manifest(
     height_fill: HeightFillReport | None = None,
     height_source_availability: SourceAvailability | None = None,
     validation: AgreementReport | None = None,
+    validation_ground_truth: AgreementReport | None = None,
+    reference_ceiling: AgreementReport | None = None,
     outputs: list[str] | None = None,
 ) -> RunManifest:
     """Assemble the manifest for one run.
@@ -187,5 +202,7 @@ def build_manifest(
         height_fill=height_fill,
         height_source_availability=height_source_availability,
         validation=validation,
+        validation_ground_truth=validation_ground_truth,
+        reference_ceiling=reference_ceiling,
         outputs=outputs or [],
     )

@@ -92,6 +92,37 @@ is created, modified or deleted.
 **The clipped copy is version 3 of the map**, while the Tier 1 citation below describes an earlier
 version. A run manifest records the file and the citation separately rather than conflating them.
 
+### `so2sat_berlin.parquet` — the ground truth, added in Phase 6.7
+
+473 hand-labelled So2Sat LCZ42 (v4) patches intersecting the Berlin fixture bbox, EPSG:4326, 34 KB,
+built by `scripts/build_so2sat_fixture.py` from the copy under `input/So2Sat-LCZ42/`. Columns
+`patch_id`, `dataset`, `LCZ_class`.
+
+**This is the primary validation reference for Berlin**; `lcz_reference_berlin.tif` is a secondary
+comparator. Phase 6.7 exists because validation had been treating the latter as ground truth — it
+is a model output with its own error, and measured against these labels it is right **53.2%** of
+the time, which bounds any score against it.
+
+Three properties that the reduction in `lczkit.validation.labelled` depends on:
+
+- **Patches are 320 m squares on a 100 m stride**, so they overlap each other roughly sevenfold:
+  48.4 km² of patch area over a 7.1 km² union inside this bbox, 16,560 overlapping pairs. Labels
+  are therefore anchored on the patch **centre**, never overlaid areally.
+- **Geometries are stored unclipped**, unlike `land_use.parquet` above. Clipping a patch at the
+  bbox edge would move its centroid, and the centroid is what decides which cell the label lands
+  in. Patches whose centre falls outside the study area simply contribute nothing.
+- **Centres map 1:1 onto the 100 m grid** — 438 centres into 438 distinct cells, none ambiguous —
+  because the So2Sat patch grid and `GridUnits` are both aligned to the local UTM origin.
+  `tests/test_validation_labelled.py` asserts this rather than assuming it.
+
+The labels here cover 438 of the fixture's 964 cells and hold only **LCZ 2 (332) and LCZ 5 (106)**,
+where `lcz_v3` claims six classes over the same ground. That narrowness is why
+`scripts/berlin_wide_validation.py` exists — it is not committed and not run in CI.
+
+Rotterdam has no counterpart: So2Sat covers 52 cities and Rotterdam is not one of them (Amsterdam,
+60 km away, is the nearest). The industry fixture stays on `lcz_v3` and every figure derived from
+it carries that limitation.
+
 ## Licensing
 
 All committed raster fixtures are **CC-BY-4.0** and are redistributed here under that licence:
@@ -104,6 +135,9 @@ All committed raster fixtures are **CC-BY-4.0** and are redistributed here under
   Bechtel, B. (2022), *A global map of Local Climate Zones to support Earth system modelling and
   urban-scale environmental science*, Earth System Science Data 14, 3835-3873.
   `10.5194/essd-14-3835-2022`.
+- Zhu, X. X. et al. (2020), *So2Sat LCZ42: A Benchmark Data Set for the Classification of Global
+  Local Climate Zones*, IEEE Geoscience and Remote Sensing Magazine 8(3), 76-89.
+  `10.1109/MGRS.2020.2964708`. Fourth version, via mediaTUM `1836598`.
 
 The Overture extracts are from Overture Maps Foundation data, which carries the licences of its
 upstream sources (ODbL for OSM-derived features, CDLA-Permissive-2.0 for the ML-derived ones).

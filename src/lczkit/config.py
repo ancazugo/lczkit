@@ -731,6 +731,14 @@ class ValidationConfig(BaseModel):
     read: the copy on this system is version 3 of the map and the paper describes an earlier one,
     so conflating the two in the manifest would misstate what a run was validated against."""
 
+    ground_truth_citation: str = "10.1109/MGRS.2020.2964708"
+    """Zhu et al. (2020), *IEEE GRSM* 8(3), 76-89. So2Sat LCZ42, the hand-labelled reference.
+
+    Recorded apart from `reference_citation` because the two are not the same kind of thing and
+    Phase 6.7 exists because they were treated as if they were: `lcz_v3` is a model output with
+    its own error, these are human labels. Where both are available the labels are primary and
+    `lcz_v3` is a comparator whose agreement with them is the ceiling on any score against it."""
+
     min_reference_coverage: float = 0.5
     """Fraction of a unit the reference map must actually cover for that unit to enter the
     agreement statistics. A unit half outside the map's extent would otherwise contribute a

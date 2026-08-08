@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
 from lczkit.classify import PrototypeClassifier
@@ -20,6 +21,7 @@ from lczkit.cleaning.report import CleaningReport, CleaningStep
 from lczkit.config import ClassificationConfig, Settings
 from lczkit.output.manifest import TRACKED_PACKAGES, build_manifest, package_versions
 from lczkit.ucp.registry import LIMITATIONS, NOT_COMPUTED, PARAMETER_COLUMNS
+from lczkit.validation import agreement
 
 
 @pytest.fixture
@@ -155,6 +157,38 @@ def test_the_cleaning_report_is_embedded_when_there_is_one(settings: Settings) -
     assert json.loads(manifest.model_dump_json())["cleaning"]["steps"][0]["n_out"] == 12
 
 
+def test_the_two_references_and_the_ceiling_are_recorded_apart(settings: Settings) -> None:
+    """Three separate fields, never one. `validation` is agreement against a model output,
+    `validation_ground_truth` against hand-labelled polygons, and `reference_ceiling` is what the
+    model output itself scores against those labels — the bound on the first. Collapsing any two
+    of them is the mistake Phase 6.7 exists to undo.
+    """
+    index = pd.Index(["u0", "u1", "u2", "u3"], name="unit_id")
+    area = pd.Series(10_000.0, index=index)
+    truth = pd.Series([2, 2, 5, 5], index=index, dtype="Int8")
+    comparator = pd.Series([2, 1, 5, 1], index=index, dtype="Int8")  # 50% right against `truth`
+    run = pd.Series([2, 2, 2, 2], index=index, dtype="Int8")
+
+    manifest = build_manifest(
+        settings,
+        PrototypeClassifier(),
+        validation=agreement(run, comparator, area),
+        validation_ground_truth=agreement(run, truth, area),
+        reference_ceiling=agreement(comparator, truth, area),
+    )
+
+    assert manifest.reference_ceiling is not None
+    assert manifest.reference_ceiling.overall_agreement == pytest.approx(0.5)
+    assert manifest.validation_ground_truth is not None
+    assert manifest.validation_ground_truth.overall_agreement == pytest.approx(0.5)
+    assert manifest.validation is not None
+    assert manifest.validation.overall_agreement == pytest.approx(0.25)
+
+    restored = json.loads(manifest.model_dump_json())
+    assert restored["reference_ceiling"]["overall_agreement"] == pytest.approx(0.5)
+    assert restored["validation_ground_truth"]["built_agreement"] == pytest.approx(0.5)
+
+
 def test_absent_stages_are_null_rather_than_fabricated(settings: Settings) -> None:
     """The stages are independently usable, so a run that classified a table it was handed has no
     cleaning report to record — and saying so is better than inventing an empty one."""
@@ -163,3 +197,6 @@ def test_absent_stages_are_null_rather_than_fabricated(settings: Settings) -> No
     assert manifest.cleaning is None
     assert manifest.height_fill is None
     assert manifest.validation is None
+    # A run against a city with no labelled coverage has no ceiling, and must not imply one.
+    assert manifest.validation_ground_truth is None
+    assert manifest.reference_ceiling is None

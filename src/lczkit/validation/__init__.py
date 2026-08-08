@@ -8,6 +8,11 @@ compactness axis (1<->4, 2<->5, 3<->6).
 `ranges` adds the complementary instrument: agreement says whether a label was right, and
 `parameter_ranges` says whether the parameter behind it could ever have reached the published
 prototype it should have matched.
+
+Two references, not one. `reference_lcz` reads the Demuzere global map, which is a model output
+carrying its own error; `labelled_lcz` reads hand-labelled So2Sat LCZ42 / DFC2017 polygons, which
+are ground truth. Where both exist the labels are primary and the agreement *between* them is the
+ceiling on any score against the map. Phase 6.7 exists because that distinction was not being made.
 """
 
 from lczkit.validation.agreement import (
@@ -18,6 +23,7 @@ from lczkit.validation.agreement import (
     Stratum,
     agreement,
 )
+from lczkit.validation.labelled import LabelMatch, labelled_lcz
 from lczkit.validation.ranges import ClassRange, RangeReport, parameter_ranges
 from lczkit.validation.reference import reference_lcz
 
@@ -27,9 +33,11 @@ __all__ = [
     "ClassAgreement",
     "ClassRange",
     "ConfusionCell",
+    "LabelMatch",
     "RangeReport",
     "Stratum",
     "agreement",
+    "labelled_lcz",
     "parameter_ranges",
     "reference_lcz",
 ]

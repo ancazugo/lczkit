@@ -6,8 +6,10 @@ thing a reader of an LCZ map actually needs to know, which is *which* classes ar
 for which - Bernard et al. (2024) Sect. 3.2 read their own results exactly this way, noting that
 their worst agreements sit on classes covering a negligible share of the area.
 
-Three breakdowns beyond the standard ones are required here:
+Four breakdowns beyond the standard ones are required here:
 
+- **built-class agreement, separately from overall**, with the natural-class share stated beside
+  it. An overall figure carried by water is not a statement about the classifier;
 - **agreement by `height_completeness` band**, so a city where tier-1 heights are near-absent can
   be judged rather than disclaimed;
 - **the height axis**, 1<->2<->3 and 4<->5<->6, holding compactness fixed. This is where CLAUDE.md
@@ -32,7 +34,12 @@ import numpy as np
 import pandas as pd
 from pydantic import BaseModel, Field
 
-from lczkit.classify.labels import COMPACTNESS_AXIS_PAIRS, HEIGHT_AXIS_PAIRS, lcz
+from lczkit.classify.labels import (
+    COMPACTNESS_AXIS_PAIRS,
+    HEIGHT_AXIS_PAIRS,
+    NATURAL_CODES,
+    lcz,
+)
 from lczkit.config import ValidationConfig
 
 
@@ -113,6 +120,26 @@ class AgreementReport(BaseModel):
 
     area_compared_m2: float
 
+    built_agreement: float = 0.0
+    """Agreement over the units the *reference* calls built (LCZ 1-10).
+
+    Reported separately from `overall_agreement` always, per CLAUDE.md, because an overall figure
+    can be dominated by trivially-classified natural cover and then says nothing about the
+    classifier: Rotterdam's headline 42.5% was 266 water cells agreeing at 95.9% while LCZ 8 sat at
+    0.0% over 224. The denominator is the reference's family, not the run's - grouping by what the
+    run predicted would let a classifier improve its built score by predicting water.
+    """
+
+    natural_agreement: float = 0.0
+    """Agreement over the units the reference calls natural (LCZ A-G, codes 11-17)."""
+
+    n_built: int = 0
+    n_natural: int = 0
+
+    natural_share: float = 0.0
+    """Area share of the compared units the reference calls natural. Stated alongside the headline
+    so a figure carried by water is recognisable as one."""
+
     per_class: list[ClassAgreement] = Field(default_factory=list)
     confusion: list[ConfusionCell] = Field(default_factory=list)
     by_height_completeness: list[Stratum] = Field(default_factory=list)
@@ -177,6 +204,18 @@ def agreement(
     )
     if compared.empty:
         return report
+
+    is_natural = compared["reference"].isin(NATURAL_CODES)
+    built, natural = compared[~is_natural], compared[is_natural]
+    report.n_built = int(len(built))
+    report.n_natural = int(len(natural))
+    report.built_agreement = _share(
+        float(built.loc[built["agree"], "area"].sum()), float(built["area"].sum())
+    )
+    report.natural_agreement = _share(
+        float(natural.loc[natural["agree"], "area"].sum()), float(natural["area"].sum())
+    )
+    report.natural_share = _share(float(natural["area"].sum()), total_area)
 
     report.per_class = _per_class(compared)
     report.confusion = _confusion(compared)
