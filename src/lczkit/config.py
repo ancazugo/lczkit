@@ -77,6 +77,32 @@ class CleaningConfig(BaseModel):
     `building_merge_limit_m2` are merged only if the shared overlap exceeds this fraction of
     their area."""
 
+    street_tile_size_m: float | None = None
+    """Edge length of the tiles street simplification is chunked into, in metres.
+
+    `None` runs `neatnet` over the whole extent, which is what every number recorded in this
+    repository before Phase 8 was computed with. Set it to engage the tiled path — required
+    above roughly 50 km2, where whole-extent simplification stops completing in usable time
+    (100 km2 measured at 50 minutes on one core, 256 km2 abandoned after 4h12m).
+
+    2000.0 m is the fixture-derived working value: tiles small enough to keep the largest face-
+    artifact component tractable, large enough that seam handling stays a small share of the
+    work. See `docs/experiments/phase-8-scaling.md`.
+    """
+
+    street_tile_buffer_m: float | None = None
+    """Working margin added around each tile before simplification, in metres.
+
+    Each tile is simplified over `core + buffer` and contributes only its core, so a feature at
+    the seam is decided with its neighbourhood present. Measured on Berlin: raising this from
+    300 m to 600 m cut spurious linework — geometry the tiled run invents that the whole-extent
+    run does not have — from 1.23 km to 0.11 km, and 900 m bought nothing further. Below about
+    300 m the buffer stops containing a dual carriageway's artifact and seams degrade sharply.
+    """
+
+    street_tile_workers: int | None = None
+    """Processes to run tiles across. `None` uses every core the process is allowed."""
+
 
 class ArealTierConfig(BaseModel):
     """One areal raster tier of the Phase 3 height cascade (tiers 2-4).
@@ -804,6 +830,25 @@ class Settings(BaseModel):
     def run_dir(self) -> Path:
         """`$DATA_DIR/output/lczkit/<run_id>/` — this run's own output directory."""
         return self.output_dir / "lczkit" / self.run_id
+
+    @property
+    def tile_cache_dir(self) -> Path:
+        """`$DATA_DIR/output/lczkit/_cache/tiles/` — memoised per-tile street simplification.
+
+        **A deliberate departure from CLAUDE.md's Phase 8 item 4, which says to cache tiles under
+        `input/`.** That instruction collides with the standing constraint two sections earlier:
+        writes to `input/` are confined to the source implementation owning that subdirectory,
+        and nothing else in the package writes there at all. A simplified tile is derived by
+        lczkit's own cleaning from data a source already fetched — it is not source data, and
+        `input/` is shared with other projects that must not have to reason about lczkit's
+        intermediates.
+
+        Resolved on the safe side of the ambiguity: the cache lives in lczkit's own output tree,
+        a sibling of the run directories rather than inside any one of them, since a tile
+        outlives the run that computed it. Cache keys carry the same discipline `OvertureSource`
+        uses — see `lczkit.cleaning.pipeline.tile_fingerprint`.
+        """
+        return self.output_dir / "lczkit" / "_cache" / "tiles"
 
     def source_dir(self, name: str) -> Path:
         """Return `input/<name>/`, the directory a source implementation owns.

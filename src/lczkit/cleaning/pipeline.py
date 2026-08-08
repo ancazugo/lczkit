@@ -4,7 +4,11 @@ cleaning pipeline against them.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass
+from importlib.metadata import version
+from pathlib import Path
 
 import geopandas as gpd
 from pyproj import CRS
@@ -12,11 +16,33 @@ from pyproj import CRS
 from lczkit.cleaning.buildings import clean_buildings
 from lczkit.cleaning.land_use import clean_land_use
 from lczkit.cleaning.report import CleaningReport, CleaningStep
-from lczkit.cleaning.streets import simplify_streets
+from lczkit.cleaning.streets import simplify_streets, simplify_streets_tiled
 from lczkit.cleaning.topology import apply_cross_layer_topology
 from lczkit.config import CleaningConfig
 from lczkit.crs import local_utm_crs
 from lczkit.protocols import BBox, VectorSource
+
+
+def tile_fingerprint(config: CleaningConfig) -> str:
+    """Short hash of everything that changes a cached tile's contents.
+
+    Tile keys are aligned to the CRS origin and so are shared between runs over different
+    bboxes — which is the point of the cache, and also why the key alone is not enough to
+    identify a result. Anything that would make the same tile simplify differently has to move
+    the fingerprint, or a later run silently reads an earlier run's answer.
+
+    The whole of `CleaningConfig` goes in, not only the tiling fields: the exclusion mask is
+    `buildings_topo`, so every building threshold reaches a tile's result too. `neatnet`'s
+    version is included because its output is its algorithm. The pinned artifact threshold is
+    *not* here — it depends on the full extent rather than on config, so `simplify_streets_tiled`
+    folds it in once it has resolved it.
+    """
+    payload = {
+        "cleaning": config.model_dump(mode="json"),
+        "neatnet": version("neatnet"),
+    }
+    digest = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
+    return digest[:12]
 
 
 def reproject_to_local_utm(
@@ -69,11 +95,48 @@ def _require(value: float | None, name: str) -> float:
     return value
 
 
-def clean_vectors(source: VectorSource, bbox: BBox, config: CleaningConfig) -> CleanedVectors:
+def _simplify(
+    streets: gpd.GeoDataFrame,
+    buildings: gpd.GeoDataFrame,
+    config: CleaningConfig,
+    *,
+    cache_dir: Path | None,
+) -> tuple[gpd.GeoDataFrame, CleaningStep]:
+    """Dispatch to the tiled or whole-extent simplification, on `street_tile_size_m` alone.
+
+    Unset means whole-extent, which is how every figure recorded before Phase 8 was produced.
+    Tiling is a deliberate, recorded choice rather than something that switches itself on at
+    some extent — a run whose answer changed because the study area grew past a hidden
+    threshold would be very hard to explain afterwards.
+    """
+    if config.street_tile_size_m is None:
+        return simplify_streets(streets, buildings)
+    buffer_m = _require(config.street_tile_buffer_m, "street_tile_buffer_m")
+    return simplify_streets_tiled(
+        streets,
+        buildings,
+        tile_size_m=config.street_tile_size_m,
+        buffer_m=buffer_m,
+        workers=config.street_tile_workers,
+        cache_dir=cache_dir,
+        cache_fingerprint=tile_fingerprint(config),
+    )
+
+
+def clean_vectors(
+    source: VectorSource,
+    bbox: BBox,
+    config: CleaningConfig,
+    *,
+    cache_dir: Path | None = None,
+) -> CleanedVectors:
     """Fetch raw vector layers from `source` and run the full Phase 1 cleaning pipeline.
 
     `source` is typed against the `VectorSource` protocol, not any concrete implementation, so
     this stays source-agnostic — usable with `OvertureSource` or any future `VectorSource`.
+
+    `cache_dir` memoises per-tile street simplification when tiling is configured; the caller
+    resolves the path, since config owns every path in this package. `None` disables it.
     """
     max_area_m2 = _require(config.building_max_area_m2, "building_max_area_m2")
     min_area_m2 = _require(config.building_min_area_m2, "building_min_area_m2")
@@ -114,7 +177,7 @@ def clean_vectors(source: VectorSource, bbox: BBox, config: CleaningConfig) -> C
 
     # Simplification comes first: the road-buffer rule buffers the network, and buffering
     # unsimplified dual carriageways would cover the block between them.
-    streets, street_step = simplify_streets(streets, layers_out.topo)
+    streets, street_step = _simplify(streets, layers_out.topo, config, cache_dir=cache_dir)
     steps.append(street_step)
 
     buildings_topo, streets, waterlines, waterbodies, topology_steps = apply_cross_layer_topology(

@@ -149,3 +149,40 @@ def test_the_street_rule_reports_what_it_dropped_and_trimmed(result: CleanedVect
     assert step.detail["overlap_limit"] == 0.5
     assert step.detail["n_dropped"] + step.detail["n_trimmed"] > 0
     assert step.detail["area_dropped_m2"] <= step.area_in_m2 - step.area_out_m2
+
+
+_TILED_CLEANING_CONFIG = _TEST_CLEANING_CONFIG.model_copy(
+    update={"street_tile_size_m": 400.0, "street_tile_buffer_m": 200.0, "street_tile_workers": 1}
+)
+
+
+def test_clean_vectors_defaults_to_the_whole_extent_path(result: CleanedVectors) -> None:
+    """Tiling is opt-in. Unset, `clean_vectors` must run exactly the path every figure recorded
+    before Phase 8 was measured with — otherwise those numbers stop being reproducible.
+    """
+    (step,) = result.report.stage_steps("streets")
+    assert step.operation == "simplify_streets"
+    assert step.detail["tiled"] is False
+
+
+def test_clean_vectors_tiles_when_configured(fixture_vector_source: FixtureVectorSource) -> None:
+    """`street_tile_size_m` alone decides, and the choice reaches the cleaning report."""
+    cleaned = clean_vectors(fixture_vector_source, SMALL_BBOX, _TILED_CLEANING_CONFIG)
+    (step,) = cleaned.report.stage_steps("streets")
+    assert step.operation == "simplify_streets_tiled"
+    assert step.detail["tiled"] is True
+    assert step.detail["n_tiles"] > 1
+    assert step.detail["workers"] == 1
+    assert_projected_crs(cleaned.streets, "streets")
+    assert len(cleaned.streets) > 0
+
+
+def test_tiling_without_a_buffer_refuses_rather_than_guessing(
+    fixture_vector_source: FixtureVectorSource,
+) -> None:
+    """The buffer has no literature default and a wrong one degrades seams silently, so the
+    pipeline raises rather than picking — the same rule the building thresholds follow.
+    """
+    config = _TEST_CLEANING_CONFIG.model_copy(update={"street_tile_size_m": 400.0})
+    with pytest.raises(ValueError, match="street_tile_buffer_m"):
+        clean_vectors(fixture_vector_source, SMALL_BBOX, config)
