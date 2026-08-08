@@ -55,12 +55,17 @@ from unit_scale_experiment import (  # noqa: E402 - sibling script, imported aft
     show,
 )
 
-#: 16x16 km centred on the committed fixture and snapped to the 100 m UTM grid, so its cells are
-#: the same cells — a figure here and a figure there describe the same ground where they overlap.
-BERLIN_WIDE_BBOX: BBox = (13.2902, 52.4467, 13.5207, 52.5937)
-
-#: Fallback if the run above is too slow: 12x12 km, 2715 labelled cells over six classes.
-BERLIN_MEDIUM_BBOX: BBox = (13.3190, 52.4651, 13.4918, 52.5753)
+#: Both windows are centred on the committed fixture and snapped to the 100 m UTM grid, so their
+#: cells are the fixture's cells — a figure here and a figure there describe the same ground where
+#: they overlap. Pick one on the command line; `wide` is the default.
+#:
+#: `wide` is the better test and much the slower: cleaning is superlinear in `neatnet`, and 256 km2
+#: of Berlin runs for over an hour before the arms start. `medium` exists because that is a real
+#: risk rather than a hypothetical one.
+WINDOWS: dict[str, BBox] = {
+    "wide": (13.2902, 52.4467, 13.5207, 52.5937),  # 16x16 km, 3584 cells, 8 classes
+    "medium": (13.3190, 52.4651, 13.4918, 52.5753),  # 12x12 km, 2715 cells, 6 classes
+}
 
 RELEASE = "2026-07-22.0"
 """Same pinned release as the committed fixtures, so the vector data is the data the offline
@@ -113,26 +118,30 @@ def clip_patches(source: Path, destination: Path, bbox: BBox) -> Path:
 
 
 def main() -> None:
+    window = sys.argv[1] if len(sys.argv) > 1 else "wide"
+    if window not in WINDOWS:
+        raise SystemExit(f"unknown window {window!r}; choose one of {sorted(WINDOWS)}")
     settings = Settings.load()
     settings.overture.release = RELEASE
-    bbox = BERLIN_WIDE_BBOX
+    bbox = WINDOWS[window]
+    name = f"berlin_{window}"
     started = time.time()
 
-    print(f"clipping rasters for {bbox}...", file=sys.stderr, flush=True)
-    worldcover = clip_raster(WORLDCOVER_URL, settings.run_dir / "worldcover_berlin_wide.tif", bbox)
+    print(f"clipping rasters for {window} {bbox}...", file=sys.stderr, flush=True)
+    worldcover = clip_raster(WORLDCOVER_URL, settings.run_dir / f"worldcover_{name}.tif", bbox)
     reference = clip_raster(
         str(settings.source_dir(LCZ_SOURCE_DIR_NAME) / LCZ_SOURCE_FILENAME),
-        settings.run_dir / "lcz_reference_berlin_wide.tif",
+        settings.run_dir / f"lcz_reference_{name}.tif",
         bbox,
     )
     ground_truth = clip_patches(
         settings.source_dir(SO2SAT_SOURCE_DIR_NAME) / SO2SAT_RELATIVE,
-        settings.run_dir / "so2sat_berlin_wide.parquet",
+        settings.run_dir / f"so2sat_{name}.parquet",
         bbox,
     )
 
     fixture = Fixture(
-        name="berlin_wide",
+        name=name,
         bbox=bbox,
         vectors=lambda: OvertureSource(settings),
         worldcover=worldcover,
@@ -140,13 +149,15 @@ def main() -> None:
         ground_truth=ground_truth,
     )
 
-    print("running the three arms (this is 256 km2)...", file=sys.stderr, flush=True)
+    print(f"running the three arms over {name}...", file=sys.stderr, flush=True)
     arms, cleaned, provenance = build_arms(fixture)
+    print(f"  cleaned in {time.time() - started:.0f}s; evaluating", file=sys.stderr, flush=True)
     results = evaluate(fixture, arms, provenance, cleaned.buildings_area)
     show(results)
 
     record: dict[str, Any] = {
         "experiment": "phase-6.7-berlin-wide",
+        "window": window,
         "run_id": settings.run_id,
         "overture_release": RELEASE,
         "config": {
@@ -159,7 +170,7 @@ def main() -> None:
         "fixtures": [results],
         "elapsed_s": round(time.time() - started, 1),
     }
-    destination = settings.run_dir / "berlin_wide_validation.json"
+    destination = settings.run_dir / f"{name}_validation.json"
     destination.write_text(json.dumps(record, indent=2, default=str) + "\n", encoding="utf-8")
     print(f"\nwrote {destination}")
 

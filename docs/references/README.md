@@ -90,6 +90,7 @@ Present ahead of need, so the context exists when SVF and roughness come off the
 | `fonte_2019_osm_lcz.pdf` | Fonte et al. (2019), *Urban Climate* 28, 100456 | `10.1016/j.uclim.2019.100456` | paywalled | — | Using OSM to enhance LCZ maps. |
 | `huang_2023_lcz_review.pdf` | Huang et al. (2023), *RSE* 292, 113573 | `10.1016/j.rse.2023.113573` | paywalled | — | Broad LCZ mapping review. |
 | `gousseff_lczexplore.pdf` | Gousseff et al., lczexplore | `10.5281/zenodo.7646866` | **OA** | 6 | The agreement-metric reporting format Phase 6 mirrors. |
+| `zhu_2020_so2sat_lcz42.pdf` | Zhu et al. (2020), *IEEE GRSM* 8(3), 76–89 | `10.1109/MGRS.2020.2964708` | paywalled | 6.7 | **The primary validation reference**, not a deferred training set. How the labels were drawn and by whom, and the patch sampling geometry — 320 m patches on a 100 m stride, which is why `lczkit.validation.labelled` anchors a label on the patch centre rather than overlaying it areally. Covers 52 cities; Berlin is one, Rotterdam is not. |
 
 ## Tier 4 — dataset documentation (`datasets/`)
 
