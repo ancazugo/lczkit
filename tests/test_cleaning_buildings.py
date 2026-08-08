@@ -181,11 +181,34 @@ def test_enforce_planarity_trims_the_larger_footprint_of_a_pair() -> None:
     assert after[1] < before[1]
 
 
-def test_enforce_planarity_refuses_to_report_a_layer_it_could_not_make_planar() -> None:
-    """Silently returning a still-overlapping layer is the failure mode this whole step exists to
-    end, so exhausting the passes raises rather than shrugging."""
-    with pytest.raises(RuntimeError, match="planar"):
-        enforce_planarity(_zero_area_overlap(), max_passes=0)
+def test_enforce_planarity_widens_the_buffer_between_passes() -> None:
+    """A *fixed* epsilon cannot converge, and the fixture was too small to show it.
+
+    A pair the buffer fails to separate at one width fails at that width however many passes it is
+    given, so the loop spins to its bound. Berlin's three fixture pairs all clear at one
+    micrometre; the metropolitan extent produced one that cleared at none of eight passes and
+    ended the run. The epsilon now grows per pass, capped a thousand times below survey precision.
+    """
+    _, step = enforce_planarity(_zero_area_overlap(), eps_m=1e-6)
+    assert step.detail["eps_final_m"] >= 1e-6
+    assert step.detail["eps_final_m"] <= 1e-3
+
+
+def test_enforce_planarity_drops_a_pair_it_cannot_separate_rather_than_ending_the_run() -> None:
+    """Last resort, and recorded rather than silent.
+
+    `buildings_topo` is the destructive layer and the one that must be planar for
+    `momepy.enclosures()`; `buildings_area` carries every area statistic and is untouched. One
+    pathological pair among a city's footprints should cost that pair, not the run — but an
+    unexplained gap in the topology layer is exactly what the cleaning report exists to surface,
+    so the count appears in the step.
+    """
+    result, step = enforce_planarity(_zero_area_overlap(), max_passes=0)
+
+    assert step.detail["n_dropped_unresolvable"] == 1
+    assert step.detail["n_passes"] == 0
+    assert len(result) == 1
+    assert geoplanar.is_planar_enforced(result, allow_gaps=True)
 
 
 def test_absorb_small_buildings_dissolves_touching_and_keeps_isolated() -> None:

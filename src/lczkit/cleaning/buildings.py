@@ -236,7 +236,20 @@ MAX_PLANARITY_PASSES = 8
 """Bound on the fixed-point loop in `enforce_planarity`.
 
 Separating one pair can expose another, so the loop is genuinely iterative — Berlin needs two
-passes for three pairs. The bound exists so a pathological layer fails loudly instead of hanging.
+passes for three pairs. The bound exists so a pathological layer terminates instead of hanging.
+"""
+
+PLANARITY_EPS_ESCALATION = 10.0
+MAX_PLANARITY_EPS_M = 1e-3
+"""Growth factor per pass, and the ceiling it grows to.
+
+A *fixed* epsilon cannot converge: a pair the buffer fails to separate at one width will fail at
+that width however many passes it is given, so the loop spins to its bound and raises. That is
+what a 9 km² fixture cannot show and 891 km² of Berlin did — three pairs on the fixture all clear
+at one micrometre, and one pair in the metropolitan extent cleared at none of the eight passes.
+
+The ceiling is one millimetre: still three orders of magnitude below survey precision, and six
+below a footprint, so escalating this far cannot move a building.
 """
 
 
@@ -273,13 +286,9 @@ def enforce_planarity(
 
     passes = 0
     n_pairs = 0
+    eps = eps_m
     pairs = _overlapping_pairs(working)
-    while pairs:
-        if passes >= max_passes:
-            raise RuntimeError(
-                f"could not clear {len(pairs)} overlapping footprint pair(s) in {max_passes} "
-                f"passes at eps_m={eps_m}; buildings_topo would not be a planar layer"
-            )
+    while pairs and passes < max_passes:
         passes += 1
         n_pairs = max(n_pairs, len(pairs))
 
@@ -287,7 +296,7 @@ def enforce_planarity(
         for first, second in pairs:
             larger = first if geometries[first].area >= geometries[second].area else second
             smaller = second if larger == first else first
-            geometries[larger] = geometries[larger].difference(geometries[smaller].buffer(eps_m))
+            geometries[larger] = geometries[larger].difference(geometries[smaller].buffer(eps))
             touched.add(larger)
 
         positions = sorted(touched)
@@ -298,6 +307,22 @@ def enforce_planarity(
             gpd.GeoSeries(geometries, index=working.index, crs=working.crs)
         )
         pairs = _overlapping_pairs(working)
+        # Widen for the next pass: the same width that just failed on a pair will keep failing.
+        eps = min(eps * PLANARITY_EPS_ESCALATION, MAX_PLANARITY_EPS_M)
+
+    # Last resort: drop the smaller footprint of whatever still overlaps. `buildings_topo` is the
+    # destructive layer and the one that must be planar for `momepy.enclosures()`; `buildings_area`
+    # carries every area statistic and is untouched by this. Recorded, never silent — an
+    # unexplained gap in the topology layer is exactly what CLAUDE.md's cleaning report exists to
+    # make visible, and it is preferable to ending a run over a whole city on one bad pair.
+    unresolvable = sorted(
+        {
+            second if geometries[first].area >= geometries[second].area else first
+            for first, second in pairs
+        }
+    )
+    if unresolvable:
+        working = working.drop(index=working.index[unresolvable])
 
     working = working.loc[working.geometry.notna() & ~working.geometry.is_empty].reset_index(
         drop=True
@@ -308,8 +333,10 @@ def enforce_planarity(
         working,
         stage="buildings_topo",
         eps_m=eps_m,
+        eps_final_m=eps / PLANARITY_EPS_ESCALATION if passes else eps_m,
         n_passes=passes,
         n_residual_pairs=n_pairs,
+        n_dropped_unresolvable=len(unresolvable),
         area_removed_m2=_area(buildings) - _area(working),
     )
 
