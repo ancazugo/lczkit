@@ -344,6 +344,12 @@ def lcz8_diagnostic(
 
     diagnostic: dict[str, Any] = {
         "n_cells": int(len(cells)),
+        # Recorded so the grid and enclosure figures below can be checked for describing the same
+        # ground. They need not: a unit enters either set when its own majority reference class is
+        # LCZ 8, and the two selections do not have to agree. On Berlin the enclosure set covers
+        # half the area the cells do, which makes that comparison a selection effect rather than a
+        # scale measurement — visible here, and invisible without it.
+        "total_area_m2": float(grid.loc[cells].geometry.area.sum()),
         "published_min": published_min,
         "published_max": published_max,
         **_bsf_shape(arm_a, cells, low, high),
@@ -603,7 +609,7 @@ def show_lcz8(diagnostic: dict[str, Any]) -> None:
     low, high = diagnostic["published_min"], diagnostic["published_max"]
     print(
         f"\n  LCZ 8 on {diagnostic['n_cells']} cells the reference calls LCZ 8 "
-        f"(published {low:.2f}-{high:.2f}):"
+        f"({diagnostic['total_area_m2'] / 1e6:.2f} km2, published {low:.2f}-{high:.2f}):"
     )
     print(
         f"    median {diagnostic['median']:.3f}   "
