@@ -256,55 +256,75 @@ It reads `DATA_DIR` and the network, so it is not a fixture and CI cannot run it
 clipped into the run directory; the only write under `input/` is Overture's own new cache entry.
 
 **Runtime is the binding constraint, and it is `neatnet`.** The Overture pull for 256 km² takes
-under a minute (34 MB of footprints). Street simplification does not: at the time of writing the
-16×16 km run had spent **2½ hours** inside `neatify_singletons` / `_best_link` without reaching the
-arms, and the 12×12 km run 1½ hours. The committed 9 km² fixture cleans in about a minute, so this
-is markedly superlinear in extent rather than 28× the work.
+under a minute (34 MB of footprints). Street simplification does not. The committed 9 km² fixture
+cleans in about a minute; 144 km² took roughly five hours and 256 km² was still inside
+`neatify_singletons` / `_best_link` after 4h12m, when it terminated without output. That is
+markedly superlinear in extent, not 28× the work.
 
 That is a finding in itself, and it bears on Phase 7 and on any real city run: **`clean_vectors` as
-it stands does not scale to a whole city on one core.** Nothing in CLAUDE.md's plan has needed it to
-until now, and it is not this phase's job to fix — but the A/B decision at metropolitan scale is
-gated on it, not on the classifier.
+it stands does not scale to a whole city on one core.** It is not this phase's job to fix — Phase 8
+profiles and fixes it — but the A/B decision at metropolitan scale is gated on it, not on the
+classifier.
 
-**Both runs were left in flight rather than killed**; they write `berlin_wide_validation.json` and
-`berlin_medium_validation.json` into their run directories when they land. The A/B recommendation
-below therefore rests on the fixture-scale evidence, and is stated as provisional for that reason.
+### The 12×12 km run landed; the 16×16 km run did not
+
+The 144 km² window completed after roughly five hours. The 256 km² one ran 4h12m and terminated
+without writing output. Both figures are Phase 8's problem, and are recorded there.
+
+**144 km², 14,625 cells, 2744 of them labelled across eight classes:**
+
+| | vs So2Sat labels | built | vs `lcz_v3` | built |
+|---|---:|---:|---:|---:|
+| ceiling — `lcz_v3` vs labels | **65.7%** | 65.8% | — | — |
+| arm A — grid, `buildings_area` | 40.8% | 40.7% | 28.8% | 25.6% |
+| arm B — enclosures | 40.6% | 40.6% | 28.1% | 25.5% |
+| arm C — grid, raw footprints | 40.9% | 40.8% | 28.8% | 25.6% |
+
+Natural share 10.5%, so the built figure carries the result rather than water. A ≡ C again, so the
+Phase 6.6 footprint fix still has nothing left to recover.
+
+**Two fixture-scale readings do not survive the wider extent, and both were mine.**
+
+*The A/B lead is gone.* B led Berlin by 4.5 points on 432 cells of two classes. On 2744 cells of
+eight it trails, 40.6% against 40.8%. The provisional recommendation was right for the right
+reason: the lead lived in one class of one city, and widening the extent removed it.
+
+*The axis inversion reverses again.* On the fixture, arm A against labels ran compactness 55.2% /
+height 17.0%. At 144 km² it is **height 22.7% / compactness 13.7%**. So the compactness dominance
+was itself a fixture artefact of a two-class, all-midrise reference — the same kind of artefact
+that made the height axis look dominant against `lcz_v3`. Two references and two extents have now
+each inverted this reading once.
+
+**What that means for the candidate order.** It should not be re-derived a third time from a
+single extent. Both instruments — reference and extent — have now been shown to move it, and the
+honest position is that neither axis is established as dominant until a second city at
+metropolitan scale says so. Phase 8 is what makes that measurable.
 
 ---
 
-## 5. A vs B — the evidence, and a provisional recommendation
+## 5. A vs B — do not adopt enclosures
 
 | | arm A (grid) | arm B (enclosures) |
 |---|---:|---:|
-| Berlin, vs labels | 40.9% | **45.4%** |
-| Berlin, vs `lcz_v3` | 24.3% | **28.4%** |
-| Berlin, LCZ 2 vs labels | 43.7% | **49.7%** |
-| Berlin, LCZ 5 vs labels | 32.1% | 32.1% |
-| Berlin, compactness-axis share | 55.2% | **49.0%** |
+| Berlin 9 km², vs labels (432 cells, 2 classes) | 40.9% | **45.4%** |
+| **Berlin 144 km², vs labels (2744 cells, 8 classes)** | **40.8%** | 40.6% |
+| Berlin 144 km², built vs labels | **40.7%** | 40.6% |
+| Berlin 9 km², compactness-axis share | 55.2% | **49.0%** |
+| Berlin 144 km², compactness-axis share | **13.7%** | 13.9% |
 | Rotterdam, built vs `lcz_v3` | **3.1%** | 2.2% |
-| Rotterdam, overall vs `lcz_v3` | **42.3%** | 42.0% |
 
-**B leads on Berlin against real labels, by 4.5 points, and the lead is in the right place** — it
-comes entirely from LCZ 2 (49.7% against 43.7%) with LCZ 5 unchanged, and it lowers the compactness
-axis' share of disagreement from 55.2% to 49.0%. That is what a better-sized unit should do to the
-axis that diagnoses unit size, and it is now measured against labels rather than against `lcz_v3`.
+**Recommendation: do not adopt enclosures.** No longer provisional. B's entire measured advantage
+was a property of the 9 km² fixture: at 144 km² on the same city against the same reference it
+leads on nothing, including the compactness axis it was supposed to improve.
 
-**B still trails on Rotterdam**, on both the built figure and overall, and Rotterdam has no labels
-to check that against.
+The Phase 6.5 rejection of the scale hypothesis is therefore **restored**, on better evidence than
+it originally had — measured against labelled ground truth, over eight classes, with a planar
+topology layer underneath and the footprint attrition fixed. The two conditions CLAUDE.md set for
+reconsidering enclosures have now been met, and the answer came back negative.
 
-**Provisional recommendation: do not adopt enclosures yet.** Two things are missing and both are
-cheap relative to the change:
-
-1. The class-diverse extent. Berlin's labelled cells are LCZ 2 and LCZ 5 only, so B's entire
-   measured lead lives in one class of one city. §4 exists to widen that and has not landed.
-2. Rotterdam's disagreement is unexplained rather than tolerated. §3 shows its enclosures moving
-   LCZ 8 *further* out of the published range on like ground, which is a reason B loses there, not
-   merely an observation that it does.
-
-The Phase 6.5 rejection of the scale hypothesis stays reopened, not reversed. What has changed since
-6.6 is that B's lead is now visible against ground truth and with a planar topology layer underneath
-it — the two conditions CLAUDE.md set for reconsidering. What has not changed is that one city and
-two classes is a thin basis for changing the package's unit of computation.
+One caveat kept honest: B still has no metropolitan-scale test on a second city, and Rotterdam is
+no longer a validation city. If enclosures are revisited it should be on that evidence, not on
+Berlin again.
 
 ---
 

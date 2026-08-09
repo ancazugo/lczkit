@@ -53,6 +53,26 @@ pairs on Berlin held the layer non-planar for two phases. Subtracting a one-micr
 them for 4.5×10⁻⁵ m² of 3.13 km² — see
 [`docs/experiments/phase-6.7-instrument-diagnostics.md`](docs/experiments/phase-6.7-instrument-diagnostics.md).
 
+**Street simplification is tiled above roughly 50 km².** `neatnet` is superlinear in extent — the
+exponent in area climbs from 0.95 at 1–4 km² to 1.67 at 36–64 km², because face artifacts percolate
+into a single rook-contiguous component holding 93–96% of them, and clusters are simplified one
+component at a time. 100 km² takes 50 minutes on one core; 256 km² was abandoned after 4h12m. Set
+`street_tile_size_m` and `street_tile_buffer_m` to engage `simplify_streets_tiled`, which splits the
+extent, pins one face-artifact threshold across all tiles so they cannot disagree about what an
+artifact is, and runs tiles across processes. Unset, the whole-extent path runs exactly as before,
+so every figure recorded before Phase 8 stays reproducible. On 16 km² of Berlin a 2×2 tiling with a
+600 m buffer agrees with the whole-extent result to **99.97%**.
+
+**Tiling the work was not enough on its own.** A 7.5-minute tiled simplification of Berlin's 891 km²
+still sat inside a fifteen-hour run that never finished, because two *other* steps were quadratic in
+extent: the threshold pinning that makes tiles agree, and the road-buffer rule in cross-layer
+topology, which intersected every footprint against one unioned road geometry and would have taken
+about 75 hours on its own. Both are now derived locally, each measured against the global operation
+it replaces. **Berlin's full 891 km² administrative extent now cleans end to end in 9.8 minutes**,
+retaining 99.947% of footprint area. A third "fix", restricting the seam stitch, was built and then
+discarded when measurement showed the bottleneck it targeted did not exist — see
+[`docs/experiments/phase-8-scaling.md`](docs/experiments/phase-8-scaling.md).
+
 **Building heights are sparse, and that is the data, not a defect.** Overture conflates
 footprints winner-takes-all, so in machine-learning dominated areas heights are near-absent —
 26% of footprints in the Berlin test fixture carry one. Nothing in ingestion or cleaning treats
@@ -287,25 +307,28 @@ labelled coverage** — So2Sat covers 52 cities and Rotterdam is not one of them
 its 359 built cells sit at 3.1%. That is the figure a built/natural split exists to stop anyone
 quoting.
 
-Three experiments in [`docs/experiments/`](docs/experiments/) record how those numbers got there.
+Four experiments in [`docs/experiments/`](docs/experiments/) record how those numbers got there.
 [Phase 6.5](docs/experiments/phase-6.5-unit-scale.md) tests the obvious explanation for the original
 17.7% — that Stewart & Oke's ranges describe an LCZ patch and a 100 m grid cell is not one — and
 rejects it, finding instead that Phase 1 cleaning was destroying 23.5% of the footprint area behind
 the metric. [Phase 6.6](docs/experiments/phase-6.6-footprint-attrition.md) fixes that.
-[Phase 6.7](docs/experiments/phase-6.7-instrument-diagnostics.md) wires the real reference, measures
-the ceiling, and **inverts the error diagnosis**: against `lcz_v3` the height axis carried 31.8% of
-Berlin's disagreement, but against real labels it is compactness at 55.2% and height at 17.0%. Most
-of the height-axis error attributed to lczkit was `lcz_v3`'s own tendency to read Berlin Mitte as
-compact high-rise.
+[Phase 6.7](docs/experiments/phase-6.7-instrument-diagnostics.md) wires the real reference and
+measures the ceiling.
 
-The remaining gap is 12.3 points against a real reference, and nothing downstream of it has been
-tuned. It points at unit definition and footprint coverage first, the metric's missing
-sky-view-factor dimension second, and the height cascade third.
+**Two of those diagnoses did not survive a wider extent, and the fixture is why.** Over 144 km² of
+Berlin — 14,625 cells, 2744 labelled across eight classes, against a 65.7% ceiling — arm A reaches
+40.8%. The error axes read height 22.7% and compactness 13.7%, where the 9 km² fixture had said
+compactness 55.2% and height 17.0% against the same reference. Switching reference inverted that
+diagnosis once, and widening the extent inverted it back. Neither axis should be treated as
+established until a second city at metropolitan scale says so.
 
-**Enclosure-based computation leads the 100 m grid on Berlin against real labels** — 45.4% against
-40.9%, the whole lead coming from LCZ 2 — but trails on Rotterdam, and Berlin's labelled cells hold
-only two classes. It has not been adopted; the evidence and what is still missing are in the Phase
-6.7 write-up.
+**Enclosure-based computation has not been adopted, and the case for it is now closed.** It led the
+100 m grid by 4.5 points on the 9 km² fixture (45.4% against 40.9%), entirely from LCZ 2. At 144 km²
+on the same city against the same reference it leads on nothing — 40.6% against 40.8% — including
+the compactness axis it was supposed to improve.
+
+[Phase 8](docs/experiments/phase-8-scaling.md) is what made that measurable, and is the reason the
+fixture stopped being the only evidence.
 
 ## Setup
 
