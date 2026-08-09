@@ -1,6 +1,6 @@
 """Phase 8 fix 2, the adopt bar: does the pooled threshold change any LCZ label?
 
-    uv run --active python scripts/phase8_threshold_labels.py [--extent 256]
+    uv run --active python scripts/phase8_threshold_labels.py [--extent 256] [--full]
 
 CLAUDE.md's condition for replacing the whole-network artifact threshold with a tile-pooled one is
 that the deviation **does not move any classification**. `phase8_threshold_equivalence.py` measures
@@ -18,6 +18,12 @@ because of the threshold and nothing else.
   fallback.
 - **64 km2 is the harsh case.** There the whole network finds no valley at all and falls back to
   7.0, while pooling may well find one. If pooling is going to move a label anywhere, it is here.
+
+`--full` runs the whole 891 km2 administrative extent instead of a concentric window. That is the
+extent the pooled threshold was adopted *for*, and the one condition attached to the adoption: a
+materially higher flip rate than the 0.0230% measured at 256 km2 reopens the decision. It is also
+expensive — the whole-network arm alone extrapolates to about 9.4 hours from the exponent-2.0 fit,
+before either pipeline run — so it is a background job rather than something to sit and watch.
 
 Each arm resolves its **own** whole-network threshold over its own window rather than reusing a
 figure from `phase8_threshold_equivalence.py`: that script windows in projected metres and this one
@@ -151,8 +157,13 @@ def compare(whole: pd.DataFrame, pooled: pd.DataFrame) -> dict[str, Any]:
 
 
 def main() -> None:
+    full = "--full" in sys.argv
     extents = (256, 64)
-    if "--extent" in sys.argv:
+    if full:
+        # A label, not a size: the whole bbox is 1714 km2 of which Berlin's administrative area is
+        # 891 km2, and rounding either number into `_window` would silently run a different extent.
+        extents = (0,)
+    elif "--extent" in sys.argv:
         extents = (int(sys.argv[sys.argv.index("--extent") + 1]),)
 
     settings = Settings.load()
@@ -160,10 +171,11 @@ def main() -> None:
 
     results: list[dict[str, Any]] = []
     for extent_km2 in extents:
-        bbox = _window(extent_km2)
-        print(f"\n{extent_km2} km2 {bbox}", flush=True)
+        bbox = BERLIN if full else _window(extent_km2)
+        extent_tag = "full" if full else f"{extent_km2}"
+        print(f"\n{extent_tag} km2 {bbox}", flush=True)
         worldcover = clip_raster(
-            WORLDCOVER_URL, settings.run_dir / f"worldcover_{extent_km2}.tif", bbox
+            WORLDCOVER_URL, settings.run_dir / f"worldcover_{extent_tag}.tif", bbox
         )
 
         # Arm "whole" pins the threshold the quadratic whole-network resolver would have chosen;
@@ -189,15 +201,19 @@ def main() -> None:
         whole = label(settings, bbox, worldcover, whole_threshold, "whole")
         pooled = label(settings, bbox, worldcover, None, "pooled")
         record = compare(whole, pooled) | {
-            "extent_km2": extent_km2,
+            "extent_km2": None if full else extent_km2,
+            "extent": extent_tag,
             "bbox": bbox,
             "whole_threshold": whole_threshold,
             "pooled_threshold": pooled.attrs.get("threshold"),
         }
         results.append(record)
-        verdict = "ADOPT" if record["adopt"] else "DOES NOT ADOPT"
+        # `adopt` is the pre-registered bar, which was superseded — see
+        # `docs/experiments/phase-8-scaling.md` section 4.2. It is still reported because the
+        # condition attached to the adoption is a *rate*, and a rate needs the count beside it.
+        verdict = "no cells moved" if record["adopt"] else "cells moved"
         print(
-            f"  {extent_km2} km2: {record['n_units_moved']} of {record['n_units']} cells moved "
+            f"  {extent_tag} km2: {record['n_units_moved']} of {record['n_units']} cells moved "
             f"({record['moved_fraction']:.4%}) -> {verdict}",
             flush=True,
         )

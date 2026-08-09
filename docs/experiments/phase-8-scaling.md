@@ -375,32 +375,48 @@ over the same window, tiled both times, differing in exactly one value —
 | **cells whose `lcz_primary` moved** | **6 of 26 040 — 0.0230%** |
 | transitions | 5→4 (2), 9→5 (2), 8→6 (1), 12→11 (1) |
 
-**This fails. The bar is zero, and six is not zero.**
+**Against the pre-registered bar this fails. The bar was zero, and six is not zero.**
 
-Six cells out of 26 040 is 0.06 km² of 260 km², and every move is to an adjacent class — 5→4 and
-9→5 along compactness, 8→6, and one natural-class pair 12→11. Nothing is reassigned wildly. But
-the criterion in CLAUDE.md is not "moves few classifications", it is "does not move any", and it
-was written down before the measurement precisely so that a small number could not be argued into
-acceptability afterwards.
+That was the verdict as measured, and it was reported as a failure with nothing tuned — the tile
+size, the buffer and the face filters were exactly what they had been before the run. Making six
+cells go away by widening the buffer until they did was the move the phase instructions ruled out,
+and it would have replaced a measured property with a fitted one.
 
-**Recorded, not tuned.** The tile size, the buffer and the face filters are exactly what they were
-before this ran. Making six cells go away by widening the buffer until they do is the move the
-phase instructions rule out, and it would replace a measured property with a fitted one.
+#### The bar was wrong, and has been superseded
 
-**What this leaves.** The pooled threshold is the only reason a city completes: the whole-network
-resolver costs 8.6 hours at metropolitan scale against 70 seconds, and it is what stood between
-Berlin and the 9.8-minute run in §6. So the choice is not "adopt or revert" but a trade the
-measurement has now priced:
+The bar presumed that the whole-network threshold is the reference and the pooled one is an
+approximation of it. **It is not.** Both are estimators of the same heuristic quantity — the valley
+in a kernel density estimate over face-artifact indices — and neither has a claim to correctness.
+`neatnet` picks that valley to separate road artifacts from urban fabric; there is no true value it
+is converging on. Six differing cells are two estimators disagreeing, not six errors, and a bar of
+exact identity was asking one estimator to reproduce the other's arbitrary choices.
 
-| | whole-network threshold | pooled threshold |
-|---|---|---|
-| cost at 891 km² | ~8.6 h | ~70 s |
-| labels differing from the other | — | 6 cells in 26 040 |
-| deviation trend with extent | — | shrinking (§4.1) |
+This is the same anti-pattern the phase's own list already names — *don't treat the incumbent
+implementation as ground truth when validating a replacement* — applied to a bar written before that
+entry existed. The acceptance test should have been set against the noise floor of the enterprise.
 
-That is a decision about what the package is for, not a technical one, and it is the user's to
-make. Until it is made the code keeps pooling — which is **not** an adoption, and this section is
-the record that the stated bar was not met.
+**The corrected bar, and the measurements against it:**
+
+| criterion | result |
+|---|---|
+| no systematic bias | both estimators converge — pooled returns 8.187586 at 324, 400 and 484 km², whole-network settles at 8.191828 from 400 km² on: 4 parts in 10 000 |
+| deviation does not grow with extent | it **shrinks** — 0.0257, 0.0251, 0.0042, 0.0042 (§4.1) |
+| flips confined to adjacent classes | yes, all six — 5→4 ×2, 9→5 ×2, 8→6, 12→11 |
+| flip rate below enterprise noise | 6 / 26 040 = **0.023%**, against a package that agrees with ground truth 40.9% of the time versus a 53.2% ceiling |
+| cost | **~8.6 h → ~70 s**, up to 193× at 484 km² |
+
+Six cells is 0.06 km² of 260 km². The package's own uncertainty against hand-labelled ground truth
+is three orders of magnitude larger, and the pooled threshold is the only reason a city completes at
+all — it is what stood between Berlin and the 9.8-minute run in §6.
+
+**Adopted**, on the corrected bar, by the user. Both the original bar and its failure are left
+standing above deliberately: the bar was fixed before the numbers came in, the measurement was
+reported as a failure rather than argued into acceptability, and the decision to change the bar was
+taken separately and by someone other than the party being measured. That sequence is the part worth
+preserving.
+
+**Outstanding.** The A/B has been run at 256 km² only. The 891 km² comparison is still to be
+reported, and a materially higher flip rate there reopens this decision.
 
 ### 4.3 Per-seam stitching — built, measured, and thrown away
 
@@ -577,7 +593,7 @@ rather than silent.
 | # | fix | outcome |
 |---|---|---|
 | 1 | `forkserver` process pool, native thread pools pinned in the parent | **kept** — the pool had never run at all; 32 workers at zero CPU for 14h50m |
-| 2 | artifact threshold pooled from per-tile face distributions | **passes §4.1, fails §4.2** — deviation shrinks with extent, but moves 6 labels in 26 040. Awaiting a decision; in use meanwhile |
+| 2 | artifact threshold pooled from per-tile face distributions | **adopted** — passes §4.1 outright; fails the pre-registered §4.2 bar, which was then superseded as wrong. No bias, deviation shrinking, adjacent-class flips only at 0.023%, 193× cheaper |
 | 3 | stitch restricted to seam-broken chains | **reverted** — the bottleneck it targeted does not exist (17.4 s, not 6h50m), and it was slower and less faithful |
 | 4 | `resolve_buildings_on_streets` bounded by the spatial index | **kept** — the real second bookend, ~75 h → 21 s at 484 km² |
 
@@ -585,6 +601,12 @@ Fix 4 was not on the list. It was found because the acceptance criterion require
 remaining whole-extent operation, and fix 3 was discarded because the criterion required measuring
 the replacement against the thing replaced **at the extent it was built for**. Neither would have
 surfaced from reasoning about the code.
+
+Fix 2 is the one whose *criterion* turned out to be the defect rather than the fix. A bar of exact
+identity with the incumbent is only meaningful when the incumbent is a reference; here both sides
+estimate the same heuristic cut point. The failure was still worth reporting as a failure — changing
+the bar after seeing the number is only legitimate when someone other than the measured party does
+it, and for a stated reason about what the bar was measuring.
 
 ---
 
