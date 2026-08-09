@@ -232,3 +232,56 @@ def test_a_misaligned_index_is_refused(settings: Settings) -> None:
             classifier.classify(parameters),
             classifier,
         )
+
+
+def test_context_layers_land_under_layers_and_are_named_in_the_manifest(
+    settings: Settings,
+) -> None:
+    """Phase 7's site is a pure transform of run outputs, so the geometry it draws has to be one of
+    them. Without this the only way to render a basemap would be to re-read `input/` at site-build
+    time, and an archived run directory could not rebuild its own map."""
+    units = make_units()
+    parameters = make_parameters(units)
+    classifier = PrototypeClassifier()
+
+    outputs = write_run(
+        settings,
+        units,
+        parameters,
+        classifier.classify(parameters),
+        classifier,
+        layers={"buildings": units.reset_index(), "streets": units.reset_index()},
+    )
+
+    assert set(outputs.layers) == {"streets", "buildings"}
+    assert all(path.is_file() for path in outputs.layers.values())
+    assert all(path.parent == settings.run_dir / "layers" for path in outputs.layers.values())
+    assert "layers/streets.parquet" in outputs.manifest.outputs
+    assert "layers/buildings.parquet" in outputs.manifest.outputs
+    # Fixed order, not the caller's, so two runs of the same city produce the same manifest.
+    assert list(outputs.layers) == ["streets", "buildings"]
+
+
+def test_an_unknown_context_layer_is_refused_rather_than_written(settings: Settings) -> None:
+    """`layers=` is a named set, not a free-form dump: a reader of a run directory should be able
+    to tell what `layers/streets.parquet` contains without consulting the code that wrote it."""
+    units = make_units()
+    parameters = make_parameters(units)
+    classifier = PrototypeClassifier()
+
+    with pytest.raises(ValueError, match="scratch"):
+        write_run(
+            settings,
+            units,
+            parameters,
+            classifier.classify(parameters),
+            classifier,
+            layers={"scratch": units.reset_index()},
+        )
+
+
+def test_a_run_without_context_layers_writes_no_layers_directory(settings: Settings) -> None:
+    _, _, outputs = run(settings)
+
+    assert outputs.layers == {}
+    assert not (settings.run_dir / "layers").exists()

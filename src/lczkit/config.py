@@ -722,6 +722,110 @@ class OutputConfig(BaseModel):
         return self
 
 
+class VizConfig(BaseModel):
+    """Configuration for the static map site `lczkit.viz.build_site` writes into a run.
+
+    Zoom ranges are here rather than derived because CLAUDE.md requires them to be *chosen
+    deliberately* and recorded — a tileset is only reproducible if the zooms that made it are
+    written down, and tippecanoe's cost and the site's size both scale with the range.
+    """
+
+    unit_min_zoom: int = 10
+    unit_max_zoom: int = 14
+    """Zooms for the unit tileset. A 100 m cell is about 21 px at z14 and 1 px at z10, so z14 is
+    where the grid stops gaining detail and z10 is where a whole metropolitan extent fits on a
+    screen. MapLibre overzooms past the maximum for free, so z14 is not a limit on how far in a
+    reader can go."""
+
+    basemap_min_zoom: int = 9
+    basemap_max_zoom: int = 13
+    """The basemap stops one zoom short of the units. It is a flat wash drawn *under* a translucent
+    unit fill, so its detail at z14 is invisible and expensive — dropping the top level halved a
+    measured land-use tileset, 2.66 MB to 1.45 MB, because the maximum-zoom level is the one
+    tippecanoe keeps at full precision. MapLibre overzooms it for free past the maximum."""
+
+    basemap_simplification: int = 10
+    """tippecanoe's `--simplification` for the basemap only. Context geometry is the one thing in
+    the site that carries no measurement, so it is the only thing that may be simplified for
+    display; the unit and building tilesets are left at tippecanoe's faithful default."""
+
+    basemap_layers: list[str] = Field(default_factory=lambda: ["water", "streets"])
+    """Which persisted context layers to draw, in draw order.
+
+    **Land use is available and off by default, on a measurement.** At 9 km² it was 1 864 polygons
+    carrying 401 162 vertices — 94% of the basemap's bytes and most of its build time — for a dark
+    wash underneath an 82%-opacity unit fill. Water and streets are what actually orient a reader
+    on a city map: rivers and arterials. Add `"land_use"` back if a run wants it."""
+
+    building_min_zoom: int = 14
+    building_max_zoom: int = 16
+    """Buildings are only ever seen extruded, which is a high-zoom view; tiling them from z10
+    would triple the tileset for pixels nobody looks at."""
+
+    include_buildings: bool = False
+    """Whether to tile the building footprints. **Off by default, and the default is measured:**
+    891 994 Berlin footprints tile to tens of megabytes, two to three times the rest of the site
+    combined. A reader who wants extrusions can turn it on and pay for it knowingly."""
+
+    render_columns: list[str] = Field(
+        default_factory=lambda: [
+            "lcz_primary",
+            "lcz_secondary",
+            "uniqueness",
+            "height_completeness",
+            "building_surface_fraction",
+            "impervious_surface_fraction",
+            "pervious_surface_fraction",
+            "tree_fraction",
+            "water_fraction",
+            "height_of_roughness_elements_m",
+            "aspect_ratio",
+            "street_openness",
+            "mean_building_area_m2",
+            "industrial_fraction",
+        ]
+    )
+    """Attributes carried at *every* zoom, because a choropleth needs them while the map is zoomed
+    out. Everything else in the viz table rides in a second tileset built at the maximum zoom only.
+
+    The split exists because MVT repeats the whole attribute table in every tile at every zoom: at
+    metropolitan scale a 38-column unit table costs more tiled than 892 000 building footprints do.
+    Columns named here that a run did not produce are skipped rather than raising — a run over a
+    small extent can legitimately lack a parameter."""
+
+    detail_max_features: int = 200_000
+    """Above this many units the click-detail tileset is skipped and the sidebar falls back to the
+    render attributes. A guard on the one part of the site whose size is unbounded in extent."""
+
+    @model_validator(mode="after")
+    def _check(self) -> VizConfig:
+        for low, high, name in (
+            (self.unit_min_zoom, self.unit_max_zoom, "unit"),
+            (self.basemap_min_zoom, self.basemap_max_zoom, "basemap"),
+            (self.building_min_zoom, self.building_max_zoom, "building"),
+        ):
+            if not 0 <= low <= high <= 24:
+                raise ValueError(
+                    f"{name} zooms must satisfy 0 <= min <= max <= 24, got {low} and {high}"
+                )
+        if self.detail_max_features < 1:
+            raise ValueError(
+                f"detail_max_features must be positive, got {self.detail_max_features}"
+            )
+        if self.basemap_simplification < 0:
+            raise ValueError(
+                f"basemap_simplification must not be negative, got {self.basemap_simplification}"
+            )
+        allowed = {"land_use", "water", "streets"}
+        unknown = sorted(set(self.basemap_layers) - allowed)
+        if unknown:
+            raise ValueError(
+                f"unknown basemap layers {', '.join(unknown)}; "
+                f"choose from {', '.join(sorted(allowed))}"
+            )
+        return self
+
+
 def _default_reference_dataset() -> LandCoverDatasetConfig:
     """The Demuzere global LCZ map, described as a categorical raster product.
 
@@ -816,6 +920,7 @@ class Settings(BaseModel):
     classification: ClassificationConfig = Field(default_factory=ClassificationConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
     validation: ValidationConfig = Field(default_factory=ValidationConfig)
+    viz: VizConfig = Field(default_factory=VizConfig)
 
     @field_validator("data_dir")
     @classmethod

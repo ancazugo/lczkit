@@ -1,0 +1,75 @@
+<!doctype html>
+<!--
+  lczkit static map site.
+
+  Everything this page loads is a sibling file. There is no CDN link, no basemap API key, no
+  analytics, and no font endpoint — a grep of this directory for "http" is part of the test suite.
+  Serve it with the bundled server (`python serve.py`) and open the address it prints.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>lczkit — Local Climate Zones</title>
+    <link rel="stylesheet" href="assets/vendor/maplibre-gl.css" />
+    <link rel="stylesheet" href="assets/app.css" />
+  </head>
+  <body>
+    <div id="map"></div>
+
+    <aside id="panel">
+      <header>
+        <h1>Local Climate Zones</h1>
+        <p id="run-id" class="muted"></p>
+      </header>
+
+      <section id="view-section">
+        <label for="view">Layer</label>
+        <select id="view"></select>
+        <p id="view-description" class="muted"></p>
+        <div id="legend"></div>
+      </section>
+
+      <section id="buildings-section" hidden>
+        <label class="checkbox">
+          <input type="checkbox" id="buildings-toggle" />
+          Buildings (extruded, zoom 14+)
+        </label>
+        <label for="buildings-colour">Colour by</label>
+        <select id="buildings-colour">
+          <option value="uniform">uniform</option>
+          <option value="height_source">height source</option>
+        </select>
+        <div id="buildings-legend"></div>
+      </section>
+
+      <section id="unit-section">
+        <h2>Unit</h2>
+        <p id="unit-empty" class="muted">Click a unit to inspect it.</p>
+        <div id="unit-detail" hidden>
+          <p id="unit-id" class="mono"></p>
+          <dl id="unit-summary"></dl>
+          <h3>Distance to each prototype</h3>
+          <div id="distance-chart"></div>
+          <h3>Height provenance</h3>
+          <dl id="unit-heights"></dl>
+          <h3>Urban canopy parameters</h3>
+          <dl id="unit-parameters"></dl>
+        </div>
+      </section>
+
+      <footer>
+        <p class="muted">
+          Vector data © OpenStreetMap contributors and Overture Maps Foundation contributors,
+          ODbL. LCZ classes and colours after Stewart &amp; Oke (2012) and Demuzere et al. (2022).
+          Rendered with MapLibre GL JS and PMTiles, both BSD-3-Clause — see
+          <span class="mono">assets/vendor/</span>.
+        </p>
+      </footer>
+    </aside>
+
+    <script src="assets/vendor/maplibre-gl.js"></script>
+    <script src="assets/vendor/pmtiles.js"></script>
+    <script src="assets/app.js"></script>
+  </body>
+</html>

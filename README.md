@@ -68,7 +68,11 @@ still sat inside a fifteen-hour run that never finished, because two *other* ste
 extent: the threshold pinning that makes tiles agree, and the road-buffer rule in cross-layer
 topology, which intersected every footprint against one unioned road geometry and would have taken
 about 75 hours on its own. Both are now derived locally, each measured against the global operation
-it replaces. **Berlin's full 891 km² administrative extent now cleans end to end in 9.8 minutes**,
+it replaces. The road rule is exact — 39× faster, symmetric difference 0.0 m². The pooled threshold
+is an approximation, and is reported as one: measured at six concentric extents its deviation from
+the whole-network value **shrinks** as extent grows (0.026 → 0.004), the two converge to four parts
+in ten thousand, and at 256 km² the difference moves 6 of 26 040 cell labels, all to adjacent
+classes. **Berlin's full 891 km² administrative extent now cleans end to end in 9.8 minutes**,
 retaining 99.947% of footprint area. A third "fix", restricting the seam stitch, was built and then
 discarded when measurement showed the bottleneck it targeted did not exist — see
 [`docs/experiments/phase-8-scaling.md`](docs/experiments/phase-8-scaling.md).
@@ -329,6 +333,68 @@ the compactness axis it was supposed to improve.
 
 [Phase 8](docs/experiments/phase-8-scaling.md) is what made that measurable, and is the reason the
 fixture stopped being the only evidence.
+
+## Phase 7 — the map site
+
+`lczkit.viz.build_site(run_dir)` turns a run into `output/lczkit/<run_id>/site/` — a directory that
+opens in a browser, reaches no network, and is meant to be archived beside a paper rather than run
+as a tool. It needs the `viz` extra, which is one pinned wheel:
+
+```sh
+uv add --active --optional viz tippecanoe
+python -c "from lczkit.viz import build_site; build_site('<run_dir>')"
+python <run_dir>/site/serve.py        # then open the address it prints
+```
+
+```
+site/
+├── index.html          # no inlined data, no CDN link, no API key
+├── style.json          # built from the run's legend and breaks, in Python
+├── serve.py            # standard library only
+├── assets/vendor/      # maplibre-gl 5.24.0 + pmtiles 4.4.1, both BSD-3-Clause, committed
+├── tiles/*.pmtiles     # units, click detail, basemap, optionally buildings
+└── manifest.json       # copied from the run, byte for byte
+```
+
+Four things about it are worth knowing before relying on it:
+
+- **It is a pure transform of run outputs, and that is enforced rather than intended.** The style's
+  LCZ colours are `classify.labels.legend()` and its choropleth boundaries are the manifest's own
+  `breaks`; a test asserts both. The style is generated in Python precisely so those assertions are
+  possible — the same claims made about `app.js` would be claims about a string. `write_run` gained
+  a `layers=` argument so the basemap and the extrusions come from geometry the *run* persisted,
+  which is what lets an archived run directory rebuild its own map with no access to `input/`.
+- **It needs a local server, and that is a browser constraint rather than a design choice.** PMTiles
+  reads byte ranges over `fetch`, and the Fetch standard leaves `file:` URLs unhandled, so a
+  `file://` open fails in both Chrome and Firefox. The shipped `serve.py` is standard library only —
+  including its own `Range`/206 support, because `SimpleHTTPRequestHandler` has none and would
+  re-send a whole tileset per tile. Nothing reaches the network: no CDN, no glyph endpoint, no
+  basemap key. What is given up is opening the file directly; what is kept is opening it offline.
+- **The basemap is the run's own Overture layers, not a Protomaps extract.** A Protomaps extract
+  needs a Go CLI or a ~120 GB download; the run's water and streets are already there, are correctly
+  attributable, and show the reader the same linework the classification was computed from. Land use
+  is available and off by default: at 9 km² it was 94% of the basemap's bytes, for a wash drawn
+  under a translucent fill.
+- **Buildings are off by default, and the default is measured.** See the table below.
+
+Site size at Berlin's full 891 km² — 172 181 units, 892 014 buildings — which is the scale that
+makes this a decision. The whole site builds in **67 seconds**:
+
+| tileset | zooms | features | size |
+|---|---|---:|---:|
+| `units.pmtiles` — render attributes | z10–14 | 172 181 | 28.09 MB |
+| `units_detail.pmtiles` — everything else | z14 | 172 181 | 18.46 MB |
+| `basemap.pmtiles` — water + streets | z9–13 | 201 144 | 9.24 MB |
+| **default site** | | | **55.79 MB** |
+| `buildings.pmtiles` — off by default | z14–16 | 892 014 | 76.85 MB |
+| with buildings | | | 132.63 MB |
+
+**Buildings are 58% of the site on their own**, which is why they are opt-in.
+
+- **Attributes, not geometry, are what a unit tileset costs.** MVT repeats a feature's whole
+  attribute table in every tile at every zoom. Tiling all 52 columns across z10–14 in one tileset
+  costs 59.82 MB against the split's 46.55 MB — a 22% saving, and more to the point it halves what
+  a reader fetches to pan around, since the detail tileset is touched only by a click at z14.
 
 ## Setup
 

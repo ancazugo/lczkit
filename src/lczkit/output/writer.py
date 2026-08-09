@@ -14,7 +14,8 @@ choropleth or sidebar reads past the third digit.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +37,12 @@ from lczkit.validation.agreement import AgreementReport
 UNITS_FILE = "units.parquet"
 VIZ_FILE = "units_viz.parquet"
 MANIFEST_FILE = "manifest.json"
+LAYERS_DIR = "layers"
+
+#: Context layers `write_run` will persist, in the order the site draws them. Restricted to a known
+#: set so a caller cannot quietly grow the run directory by an arbitrary GeoDataFrame, and so a
+#: reader of a run knows what a file called `layers/streets.parquet` contains.
+CONTEXT_LAYERS: tuple[str, ...] = ("land_use", "water", "streets", "buildings")
 
 #: Columns excluded from the precomputed breaks. The distance vector is rendered as a per-unit bar
 #: chart rather than a choropleth, and the two label columns are categorical codes whose quantiles
@@ -52,6 +59,8 @@ class RunOutputs:
     units_viz: Path
     manifest_path: Path
     manifest: RunManifest
+    layers: dict[str, Path] = field(default_factory=dict)
+    """Context layers persisted under `layers/`, by name. Empty unless the caller asked for them."""
 
 
 def write_run(
@@ -66,6 +75,7 @@ def write_run(
     height_fill: HeightFillReport | None = None,
     height_source_availability: SourceAvailability | None = None,
     validation: AgreementReport | None = None,
+    layers: Mapping[str, gpd.GeoDataFrame] | None = None,
 ) -> RunOutputs:
     """Write one run's three files into `settings.run_dir`, returning their paths.
 
@@ -73,9 +83,22 @@ def write_run(
     provenance and the Phase 4 land-cover fractions, typically. It is joined verbatim, so a
     column appearing in two inputs is an error rather than a silent overwrite.
 
+    `layers` persists the run's context geometry - the cleaned streets, water, land use and
+    buildings - under `layers/<name>.parquet`. It exists so that **Phase 7's site build is a pure
+    transform of run outputs**, which CLAUDE.md requires: without it the only way to draw a basemap
+    or extrude buildings would be to re-read `input/` at site-build time, which would make the site
+    depend on data the run does not carry and could not be rebuilt from an archived run directory.
+    Names outside `CONTEXT_LAYERS` are rejected rather than written.
+
     Nothing outside `run_dir` is touched, and nothing under `input/` is read.
     """
     check_units(units)
+    unknown = sorted(set(layers or {}) - set(CONTEXT_LAYERS))
+    if unknown:
+        raise ValueError(
+            f"unknown context layers {', '.join(unknown)}; "
+            f"write_run persists only {', '.join(CONTEXT_LAYERS)}"
+        )
     for name, frame in (("parameters", parameters), ("classification", classification)):
         if not frame.index.equals(units.index):
             raise ValueError(f"{name} index does not match units; both must be the same unit_id")
@@ -92,6 +115,13 @@ def write_run(
         and is_numeric_dtype(attributes[column])
         and not is_bool_dtype(attributes[column])
     ]
+    run_dir = settings.run_dir
+    run_dir.mkdir(parents=True, exist_ok=True)
+    units_path = run_dir / UNITS_FILE
+    viz_path = run_dir / VIZ_FILE
+    manifest_path = run_dir / MANIFEST_FILE
+
+    written = _write_layers(run_dir, layers)
     manifest = build_manifest(
         settings,
         classifier,
@@ -101,14 +131,13 @@ def write_run(
         height_fill=height_fill,
         height_source_availability=height_source_availability,
         validation=validation,
-        outputs=[UNITS_FILE, VIZ_FILE, MANIFEST_FILE],
+        outputs=[
+            UNITS_FILE,
+            VIZ_FILE,
+            MANIFEST_FILE,
+            *(str(path.relative_to(run_dir)) for path in written.values()),
+        ],
     )
-
-    run_dir = settings.run_dir
-    run_dir.mkdir(parents=True, exist_ok=True)
-    units_path = run_dir / UNITS_FILE
-    viz_path = run_dir / VIZ_FILE
-    manifest_path = run_dir / MANIFEST_FILE
 
     table.to_parquet(units_path)
     viz_table(attributes, settings).to_parquet(viz_path)
@@ -120,7 +149,29 @@ def write_run(
         units_viz=viz_path,
         manifest_path=manifest_path,
         manifest=manifest,
+        layers=written,
     )
+
+
+def _write_layers(run_dir: Path, layers: Mapping[str, gpd.GeoDataFrame] | None) -> dict[str, Path]:
+    """Persist the context layers under `layers/`, in `CONTEXT_LAYERS` order.
+
+    Written in a fixed order rather than the caller's so that two runs of the same city produce
+    the same `outputs` list in the manifest, which is otherwise a gratuitous diff.
+    """
+    if not layers:
+        return {}
+    directory = run_dir / LAYERS_DIR
+    directory.mkdir(parents=True, exist_ok=True)
+    written: dict[str, Path] = {}
+    for name in CONTEXT_LAYERS:
+        frame = layers.get(name)
+        if frame is None:
+            continue
+        path = directory / f"{name}.parquet"
+        frame.to_parquet(path)
+        written[name] = path
+    return written
 
 
 def classification_summary(classification: pd.DataFrame) -> dict[str, Any]:
