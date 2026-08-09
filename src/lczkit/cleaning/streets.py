@@ -12,29 +12,46 @@ Two entry points, same result shape:
 - `simplify_streets_tiled` splits the extent, simplifies each tile independently over a
   buffered window, and stitches the cores back together.
 
-**The tiled path pins the face-artifact threshold globally.** `neatnet` derives that threshold
-from the distribution of face-artifact-index values across whatever network it is handed — a
-kernel-density valley — so a tile computes a *different* threshold from the whole extent. On a
-2x2 tiling of 16 km2 of Berlin the whole extent found no valley and fell back to 7.0, while two
-of the four tiles found 8.10 and 7.58: a face with an index of 7.5 would have been an artifact
-in one tile and ordinary urban fabric in the run next to it. Computing the threshold once on the
-full network and passing it into every tile removes that class of seam disagreement outright,
-and it is cheap — artifact detection is 0.2 percent of `neatify`'s cost at 100 km2.
+**The tiled path pins one face-artifact threshold across every tile.** `neatnet` derives that
+threshold from the distribution of face-artifact-index values across whatever network it is
+handed — a kernel-density valley — so a tile left to itself computes a *different* threshold from
+its neighbour. On a 2x2 tiling of 16 km2 of Berlin the whole extent found no valley and fell back
+to 7.0, while two of the four tiles found 8.10 and 7.58: a face with an index of 7.5 would have
+been an artifact in one tile and ordinary urban fabric in the run next to it. Pinning one value
+across all tiles removes that class of seam disagreement outright.
+
+**Where that value comes from is the second scaling problem this module had.** Deriving it from
+the whole network, as `resolve_artifact_threshold` does, means running `neatnet.fix_topology`
+over the whole network — quadratic in feature count, measured at exponent 2.0 and projecting to
+~8.6 hours at metropolitan scale, against 7.5 minutes for the tiles themselves. Detection is not
+the expensive part; the preprocessing it needs is, at 8.3 s against 12 392 s at 484 km2. The
+index is a *per-face* quantity, so `pooled_artifact_threshold` assembles the same distribution
+from the per-tile windows at k * (n/k)**2, in parallel, and `resolve_artifact_threshold` remains
+as the reference the pooled one is measured against.
 """
 
 from __future__ import annotations
 
+import multiprocessing
 import os
+import sys
 import warnings
+from collections.abc import Iterator
 from concurrent.futures import ProcessPoolExecutor
+from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
+from typing import NamedTuple
 
 import geopandas as gpd
 import neatnet
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 import shapely
 from pyproj import CRS
+from scipy.signal import find_peaks
+from scipy.stats import gaussian_kde
 from shapely.geometry.base import BaseGeometry
 
 from lczkit.cleaning.report import CleaningStep
@@ -48,12 +65,102 @@ Restated here because the tiled path resolves the threshold itself and must fall
 as `neatify` would, so that a one-tile run and a whole-extent run agree.
 """
 
+TILE_RESULT_VERSION = 1
+"""Bumped whenever `_simplify_window` changes what it writes for a given input.
+
+Part of the per-tile cache key. Config and the `neatnet` version cover everything *outside* this
+module that changes a tile's contents; this covers what is inside it, which nothing else in the
+key would detect.
+"""
+
 SIMPLIFIED_COLUMN = "_simplified"
 """Per-edge flag: `False` marks linework that passed through a tile `neatnet` could not process.
 
 Carried out of cleaning rather than reduced to a count, so a downstream oddity can be traced to
 the tile that produced it instead of being attributed to the classifier.
 """
+
+THREAD_LIMIT_VARS = (
+    "OMP_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+    "MKL_NUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+)
+"""The native thread-pool controls every worker must see set to 1.
+
+Each worker runs GEOS and BLAS through geopandas, and each would otherwise start a thread pool
+sized to the whole machine. Thirty-two workers times thirty-two threads is not parallelism, it
+is the same oversubscription that makes the pool appear hung.
+"""
+
+
+@contextmanager
+def _single_threaded_children() -> Iterator[None]:
+    """Pin native thread pools to one thread for the duration of the block, then restore.
+
+    **Set in the parent, deliberately, and not in a pool `initializer`.** The `forkserver`
+    daemon inherits `environ` at the moment it starts, and libgomp and OpenBLAS read their
+    thread counts when the library initialises — which is before any initializer callable of
+    ours could run. Setting these anywhere later sets them too late to have an effect.
+
+    This is the one place in the package that writes `os.environ`. CLAUDE.md's rule is that no
+    module *reads* the environment outside the config model, because `DATA_DIR` must resolve
+    once; this reads nothing and configures a child process, and restoring on exit keeps it from
+    leaking into the rest of the run.
+    """
+    previous = {name: os.environ.get(name) for name in THREAD_LIMIT_VARS}
+    os.environ.update(dict.fromkeys(THREAD_LIMIT_VARS, "1"))
+    try:
+        yield
+    finally:
+        for name, value in previous.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+
+
+@contextmanager
+def _worker_pool(n_workers: int) -> Iterator[ProcessPoolExecutor]:
+    """A worker pool that starts its children from a fresh interpreter rather than forking.
+
+    **`forkserver`, not the default `fork`.** By the time simplification runs, the parent has
+    already been through DuckDB, GEOS and NumPy, all of which hold locks across threads that do
+    not exist in a forked child. Observed directly at metropolitan scale: parent and all 32
+    workers sat at zero CPU for 14h50m, having deadlocked before doing any work. `forkserver`
+    launches a clean interpreter to fork from, so no such lock is ever inherited.
+
+    Preloading this module makes the forkserver daemon import geopandas and neatnet once,
+    instead of every child paying for it.
+
+    **`__main__` is hidden from the children on purpose.** A `forkserver` child goes through the
+    same startup as a `spawn` child, which re-executes the parent's entry point so that a
+    callable defined there can be unpickled. Nothing here needs that — the only function sent to
+    a worker is this module's `_simplify_window`, referenced by qualified name — and paying for
+    it is worse than useless: every worker would re-import the whole entry script, and an entry
+    point without a real file (`python -c`, a heredoc, a notebook) fails outright with a
+    `BrokenProcessPool` whose traceback names neither the cause nor the fix.
+
+    The two attributes `multiprocessing` consults are handled differently because it reads them
+    differently: `__spec__` is dereferenced outright and so must exist and be `None`, while
+    `__file__` is read with `getattr(..., None)` and so must be absent. With both in that state
+    the children come up on a bare `__mp_main__`, importing only what unpickling asks for.
+    """
+    context = multiprocessing.get_context("forkserver")
+    context.set_forkserver_preload(["lczkit.cleaning.streets"])
+    main = sys.modules["__main__"]
+    had_file, file_value = hasattr(main, "__file__"), getattr(main, "__file__", None)
+    spec_value = getattr(main, "__spec__", None)
+    if had_file:
+        del main.__file__
+    main.__spec__ = None
+    try:
+        with ProcessPoolExecutor(max_workers=n_workers, mp_context=context) as pool:
+            yield pool
+    finally:
+        if had_file:
+            main.__file__ = file_value
+        main.__spec__ = spec_value
 
 
 def simplify_streets(
@@ -134,6 +241,199 @@ def resolve_artifact_threshold(
     return fallback if threshold is None else float(threshold)
 
 
+#: `neatnet.FaceArtifacts`'s own peak/valley parameters, restated so the pooled threshold is
+#: selected by the same rule as the whole-network one. Drift is caught by
+#: `test_threshold_from_index_reproduces_face_artifacts`, which asserts exact equality against
+#: `neatnet.FaceArtifacts(...).threshold` rather than trusting these to stay in step.
+FACE_INDEX_SAMPLES = 1000
+FACE_PEAK_HEIGHT_MAX = 0.008
+FACE_PEAK_PROMINENCE = 0.00075
+
+
+def _threshold_from_index(values: npt.NDArray[np.float64]) -> float | None:
+    """The face-artifact threshold implied by a distribution of face-artifact-index values.
+
+    `neatnet.FaceArtifacts` computes this from a network it polygonizes itself, which is exactly
+    what makes it whole-extent and therefore quadratic here. The index is a **per-face** quantity
+    — `log(minimum_bounding_circle_ratio * area)` — so the distribution it is read from can be
+    assembled tile by tile and the selection rule applied to the pool. This function is that
+    selection rule, separated from where the values came from.
+
+    Returns `None` when the distribution has no valley between peaks, which is what
+    `FaceArtifacts` reports in the same situation; the caller decides what to fall back to.
+
+    Reimplemented from `neatnet` 0.1.6 (BSD-3-Clause), not copied from a copyleft source.
+    """
+    linspace = np.linspace(values.min(), values.max(), FACE_INDEX_SAMPLES)
+    pdf = gaussian_kde(values, bw_method="silverman").pdf(linspace)
+
+    peaks, peak_data = find_peaks(
+        x=pdf,
+        height=FACE_PEAK_HEIGHT_MAX,
+        threshold=None,
+        distance=None,
+        prominence=FACE_PEAK_PROMINENCE,
+        width=1,
+        plateau_size=None,
+    )
+    valleys, _ = find_peaks(
+        x=-pdf + 1,
+        height=-np.inf,
+        threshold=None,
+        distance=None,
+        prominence=FACE_PEAK_PROMINENCE,
+        width=1,
+        plateau_size=None,
+    )
+    if len(peaks) < 2 or len(valleys) == 0:
+        return None
+
+    highest_peak = peaks[np.argmax(peak_data["peak_heights"])]
+    bounds = [b for b in zip(peaks[:-1], peaks[1:], strict=True) if highest_peak in b]
+    accepted = [v for v in valleys if any(v in range(low, high) for low, high in bounds)]
+    if not accepted:
+        # `FaceArtifacts` indexes straight into this list and raises `IndexError` when it is
+        # empty. Reported as "no threshold" instead: at metropolitan scale a distribution with
+        # peaks but no valley between the accepted pair is not rare enough to end a run over.
+        return None
+    return float(linspace[accepted[0]])
+
+
+class TileFaceIndex(NamedTuple):
+    """One tile's contribution to the pooled face-artifact-index distribution."""
+
+    values: npt.NDArray[np.float64]
+    n_dropped: int
+    dropped_area_m2: float
+    kept_area_m2: float
+
+
+def _tile_face_index(tile: Tile, streets: gpd.GeoDataFrame) -> TileFaceIndex:
+    """Index the faces of one tile's window, keeping only those the pool can trust.
+
+    Module-level and picklable, so it runs on the same worker pool as simplification.
+
+    Two filters, and both are load-bearing:
+
+    - **Attribute each face to the tile whose core contains its representative point.** Windows
+      overlap by the buffer, so a face near a seam is seen by several tiles; cores partition, so
+      exactly one of them claims it. Without this the pooled distribution would weight seam
+      neighbourhoods several times over and shift the valley.
+    - **Reject any face meeting the window boundary.** A face larger than the buffer is *cut* by
+      the window, and the fragment left behind indexes as a small compact face — a fictitious
+      artifact. Dropping it loses a real face rather than inventing a false one, which is the
+      right way round; the count and area of what was dropped are returned so the size of the
+      approximation is reported rather than assumed small.
+    """
+    if streets.empty:
+        return TileFaceIndex(np.empty(0, dtype=float), 0, 0.0, 0.0)
+    try:
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Input streets could not")
+            faces = neatnet.FaceArtifacts(_preprocess(streets)).polygons
+    except (ValueError, np.linalg.LinAlgError, KeyError):
+        return TileFaceIndex(np.empty(0, dtype=float), 0, 0.0, 0.0)
+    if faces is None or faces.empty or "face_artifact_index" not in faces:
+        return TileFaceIndex(np.empty(0, dtype=float), 0, 0.0, 0.0)
+
+    geometry = gpd.GeoSeries(faces.geometry, crs=streets.crs)
+    owned = geometry.representative_point().within(tile.core).to_numpy(dtype=bool)
+    whole = ~geometry.intersects(tile.window.exterior).to_numpy(dtype=bool)
+    keep, dropped = owned & whole, owned & ~whole
+    area = geometry.area.to_numpy(dtype=float)
+    return TileFaceIndex(
+        values=faces["face_artifact_index"].to_numpy(dtype=float)[keep],
+        n_dropped=int(dropped.sum()),
+        dropped_area_m2=float(area[dropped].sum()),
+        kept_area_m2=float(area[keep].sum()),
+    )
+
+
+@dataclass(frozen=True)
+class PooledThreshold:
+    """A face-artifact threshold pooled from per-tile distributions, with its error term."""
+
+    value: float
+    n_faces: int
+    n_faces_dropped: int
+    dropped_area_fraction: float
+    n_tiles_indexed: int
+    fallback_used: bool
+
+    def as_detail(self) -> dict[str, object]:
+        """The cleaning-report form. Every field travels; the error term is not a debug aid."""
+        return {
+            "artifact_threshold": self.value,
+            "threshold_source": "pooled",
+            "threshold_fallback_used": self.fallback_used,
+            "threshold_n_faces": self.n_faces,
+            "threshold_n_faces_dropped": self.n_faces_dropped,
+            "threshold_dropped_area_fraction": self.dropped_area_fraction,
+            "threshold_n_tiles_indexed": self.n_tiles_indexed,
+        }
+
+
+def pooled_artifact_threshold(
+    streets: gpd.GeoDataFrame,
+    tiles: list[Tile],
+    *,
+    workers: int = 1,
+    fallback: float = ARTIFACT_THRESHOLD_FALLBACK,
+) -> PooledThreshold:
+    """Pin the artifact threshold from the tiles, instead of from the whole network.
+
+    `resolve_artifact_threshold` gets the same number by running `neatnet.fix_topology` over the
+    entire extent, which is **quadratic in feature count** — measured at 481.7 s, 1916.9 s,
+    5004.6 s and 12392.6 s for 33.8k, 67.2k, 106.7k and 168.5k Berlin streets, an exponent of
+    2.0, and extrapolating to roughly 8.6 hours at the 267k streets of the metropolitan extent.
+    That is the whole of the gap between the 7.5 minutes the tiles actually take and the 15 hours
+    the first metropolitan run spent before it was killed.
+
+    Each tile already runs `fix_topology` over its own window inside `neatify`, so the same
+    distribution can be assembled from k windows at k * (n/k)**2 — and, unlike the whole-network
+    step, it parallelises.
+
+    **This is an approximation with a measured error, not an identity.** Faces spanning a window
+    boundary are absent from the pool (see `_tile_face_index`), so the pooled distribution is
+    missing its largest faces. `dropped_area_fraction` is that error; the equivalence measurement
+    against the whole-network threshold is in `docs/experiments/phase-8-scaling.md`.
+    """
+    assert_projected_crs(streets, "streets")
+    jobs = [(tile, subset(streets, tile.window)) for tile in tiles]
+    n_workers = max(1, min(workers, len(jobs)))
+    if n_workers == 1:
+        indexed = [_tile_face_index(*job) for job in jobs]
+    else:
+        with _single_threaded_children(), _worker_pool(n_workers) as pool:
+            indexed = list(pool.map(_tile_face_index, *zip(*jobs, strict=True)))
+
+    populated = [tile_index for tile_index in indexed if tile_index.values.size]
+    values = (
+        np.concatenate([tile_index.values for tile_index in populated])
+        if populated
+        else np.empty(0, dtype=float)
+    )
+    n_dropped = sum(tile_index.n_dropped for tile_index in indexed)
+    dropped_area = sum(tile_index.dropped_area_m2 for tile_index in indexed)
+    kept_area = sum(tile_index.kept_area_m2 for tile_index in indexed)
+    total_area = dropped_area + kept_area
+
+    threshold = None
+    if values.size > 1:
+        try:
+            threshold = _threshold_from_index(values)
+        except (ValueError, np.linalg.LinAlgError):
+            threshold = None
+    return PooledThreshold(
+        value=fallback if threshold is None else threshold,
+        n_faces=int(values.size),
+        n_faces_dropped=n_dropped,
+        dropped_area_fraction=dropped_area / total_area if total_area else 0.0,
+        n_tiles_indexed=len(populated),
+        fallback_used=threshold is None,
+    )
+
+
 def _cache_path(cache_dir: Path, tile: Tile, fingerprint: str) -> Path:
     return cache_dir / fingerprint / f"{tile.key}.parquet"
 
@@ -204,6 +504,16 @@ def _stitch(parts: list[gpd.GeoDataFrame], crs: CRS | None) -> gpd.GeoDataFrame:
     node there. `remove_interstitial_nodes` is what neatnet itself uses to drop nodes of degree
     2, so running it over the union restores the topology the untiled path would have produced
     wherever the two tiles agreed about the geometry.
+
+    **This runs over the whole stitched network, and that was checked rather than assumed.**
+    Phase 8 spent a while believing this step was the second quadratic bookend around the tiling,
+    on the strength of a fifteen-hour run that was sitting somewhere after the tiles were written.
+    Measured directly on Berlin's 209 553 stitched features it takes **17.4 s**. A per-seam
+    restriction was built, measured, and thrown away: it was *slower* (21.6 s), it left
+    `momepy.street_profile`'s aspect ratio about twice as far from the whole-extent answer, and at
+    metropolitan scale it did not even reproduce the same linework. The fifteen hours were
+    `resolve_buildings_on_streets`, several steps later — see
+    `docs/experiments/phase-8-scaling.md`.
     """
     populated = [part for part in parts if len(part)]
     if not populated:
@@ -227,6 +537,7 @@ def simplify_streets_tiled(
     workers: int | None = None,
     cache_dir: Path | None = None,
     cache_fingerprint: str = "default",
+    artifact_threshold: float | None = None,
 ) -> tuple[gpd.GeoDataFrame, CleaningStep]:
     """Tile the extent, simplify each tile over a buffered window, and stitch the cores.
 
@@ -236,6 +547,9 @@ def simplify_streets_tiled(
     tile geometry, and the pinned threshold — because tile keys alone are CRS-origin-aligned and
     therefore shared across runs.
 
+    `artifact_threshold` pins the face-artifact threshold explicitly; `None` pools it from the
+    tiles via `pooled_artifact_threshold`.
+
     Returns the same `(GeoDataFrame, CleaningStep)` shape as `simplify_streets`, so the caller
     does not branch on which path ran.
     """
@@ -244,12 +558,22 @@ def simplify_streets_tiled(
 
     extent = layer_extent(streets)
     tiles = build_tiles(extent, tile_size_m=tile_size_m, buffer_m=buffer_m, crs_hint="streets")
-    threshold = resolve_artifact_threshold(streets)
+    n_workers = workers if workers is not None else len(os.sched_getaffinity(0))
+    n_workers = max(1, min(n_workers, len(tiles)))
 
-    # The threshold is pinned from the *whole* extent, so the same tile genuinely simplifies
-    # differently under a different study area. It has to reach the cache key, or a second run
+    if artifact_threshold is None:
+        pooled = pooled_artifact_threshold(streets, tiles, workers=n_workers)
+        threshold, threshold_detail = pooled.value, pooled.as_detail()
+    else:
+        threshold = artifact_threshold
+        threshold_detail = {"artifact_threshold": threshold, "threshold_source": "configured"}
+
+    # The threshold reaches the cache key because it is pinned from the whole extent: the same
+    # tile genuinely simplifies differently under a different study area, and without this a run
     # over a larger city would read back tiles decided by the smaller one's threshold.
-    fingerprint = f"{cache_fingerprint}_thr{threshold:.6f}"
+    # `TILE_RESULT_VERSION` covers the other half — a change to what `_simplify_window` writes,
+    # which no amount of config hashing would notice.
+    fingerprint = f"{cache_fingerprint}_v{TILE_RESULT_VERSION}_thr{threshold:.6f}"
     jobs = [
         (
             tile,
@@ -262,13 +586,10 @@ def simplify_streets_tiled(
         for tile in tiles
     ]
 
-    n_workers = workers if workers is not None else len(os.sched_getaffinity(0))
-    n_workers = max(1, min(n_workers, len(jobs)))
-
     if n_workers == 1:
         parts = [_simplify_window(*job) for job in jobs]
     else:
-        with ProcessPoolExecutor(max_workers=n_workers) as pool:
+        with _single_threaded_children(), _worker_pool(n_workers) as pool:
             parts = list(pool.map(_simplify_window, *zip(*jobs, strict=True)))
 
     simplified = _stitch(parts, streets.crs)
@@ -286,9 +607,9 @@ def simplify_streets_tiled(
             "tile_size_m": tile_size_m,
             "buffer_m": buffer_m,
             "workers": n_workers,
-            "artifact_threshold": threshold,
             "cached": cache_dir is not None,
             "n_tiles_unsimplified": unsimplified,
+            **threshold_detail,
         },
     )
     return simplified, step
@@ -323,12 +644,3 @@ def seam_disagreement(
         "extra_km": extra / 1000.0,
         "agreement": 1.0 - missing / right.length if right.length else 1.0,
     }
-
-
-def seam_lines(tiles: list[Tile]) -> BaseGeometry:
-    """The union of tile core boundaries — where tiled and untiled may legitimately differ.
-
-    Lets a test separate disagreement that the seam explains from disagreement that it does not.
-    The second kind is the one that would mean the tiled path is wrong rather than merely cut.
-    """
-    return shapely.union_all([tile.core.exterior for tile in tiles])

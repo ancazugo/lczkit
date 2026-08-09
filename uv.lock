@@ -702,6 +702,7 @@ dependencies = [
     { name = "pypdf" },
     { name = "python-dotenv" },
     { name = "rasterio" },
+    { name = "scipy" },
 ]
 
 [package.dev-dependencies]
@@ -728,6 +729,7 @@ requires-dist = [
     { name = "pypdf", specifier = ">=6.15.0" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "rasterio", specifier = ">=1.5.0" },
+    { name = "scipy", specifier = ">=1.18.0" },
 ]
 
 [package.metadata.requires-dev]

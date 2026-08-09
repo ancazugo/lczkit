@@ -103,6 +103,17 @@ class CleaningConfig(BaseModel):
     street_tile_workers: int | None = None
     """Processes to run tiles across. `None` uses every core the process is allowed."""
 
+    street_artifact_threshold: float | None = None
+    """Face-artifact index above which a face is ordinary fabric rather than a road artifact.
+
+    `None` derives it from the data — pooled across tiles on the tiled path, whole-network on
+    the untiled one. Setting it pins the value, which is what an A/B between two thresholds
+    needs, and lets a recorded run restate its threshold instead of re-deriving it.
+
+    A threshold on a `neatnet` index, not a fallback: `neatnet`'s own fallback for a distribution
+    with no valley stays in `lczkit.cleaning.streets.ARTIFACT_THRESHOLD_FALLBACK`.
+    """
+
 
 class ArealTierConfig(BaseModel):
     """One areal raster tier of the Phase 3 height cascade (tiers 2-4).

@@ -120,6 +120,7 @@ def _simplify(
         workers=config.street_tile_workers,
         cache_dir=cache_dir,
         cache_fingerprint=tile_fingerprint(config),
+        artifact_threshold=config.street_artifact_threshold,
     )
 
 

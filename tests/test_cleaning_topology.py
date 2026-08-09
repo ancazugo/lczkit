@@ -9,8 +9,12 @@ from __future__ import annotations
 
 import geopandas as gpd
 import pytest
+from conftest import FIXTURE_BBOX, FixtureVectorSource
 from shapely.geometry import LineString, box
 
+from lczkit.cleaning.buildings import clean_buildings
+from lczkit.cleaning.geometry import largest_part
+from lczkit.cleaning.pipeline import reproject_to_local_utm
 from lczkit.cleaning.topology import (
     apply_cross_layer_topology,
     drop_buildings_on_waterbodies,
@@ -176,3 +180,63 @@ def test_apply_cross_layer_topology_leaves_streets_and_waterbodies_unchanged() -
         "drop_buildings_on_waterbodies",
         "drop_waterlines_through_buildings",
     ]
+
+
+def test_the_road_rule_is_bounded_by_the_index_not_by_the_city(
+    fixture_vector_source: FixtureVectorSource,
+) -> None:
+    """Phase 8: the index-bounded road rule must equal the global-union one it replaced.
+
+    The original unioned every buffered street into one geometry and intersected every footprint
+    against it, which costs O(footprints x road complexity) and so is quadratic in extent — 87.8 s
+    for 9563 footprints over 16 km2, projecting to roughly 75 hours over Berlin. It had never
+    appeared in a profile because no run had ever got that far.
+
+    Restricting each footprint to the road buffers it actually meets is exact, not approximate: a
+    part of the roadway a footprint does not touch changes neither its intersection nor its
+    difference. This asserts that exactness on real Berlin fabric, where the fixture's hand-built
+    geometries above could not — they have one street each.
+    """
+    _, layers = reproject_to_local_utm(
+        FIXTURE_BBOX,
+        buildings=fixture_vector_source.buildings(FIXTURE_BBOX),
+        streets=fixture_vector_source.streets(FIXTURE_BBOX),
+    )
+    streets = layers["streets"]
+    cleaned, _ = clean_buildings(
+        layers["buildings"],
+        max_area_m2=100_000.0,
+        min_area_m2=20.0,
+        merge_limit_m2=50.0,
+        overlap_limit=0.1,
+    )
+    buildings = cleaned.topo
+
+    # The replaced implementation, verbatim, as the reference. Restating it is the point: an
+    # assertion against a re-derived expectation would test the re-derivation.
+    road = streets.geometry.buffer(4.0).union_all()
+    footprint_area = buildings.geometry.area
+    fraction = (
+        buildings.geometry.intersection(road)
+        .area.div(footprint_area.where(footprint_area > 0))
+        .fillna(0.0)
+    )
+    dropped = fraction > 0.5
+    trimmed = (fraction > 0.0) & ~dropped
+    expected = buildings.loc[~dropped].copy()
+    to_trim = trimmed.loc[expected.index]
+    expected.loc[to_trim, "geometry"] = largest_part(
+        expected.loc[to_trim].geometry.difference(road)
+    ).to_numpy()
+    expected = expected.loc[expected.geometry.notna() & ~expected.geometry.is_empty]
+
+    kept, _ = resolve_buildings_on_streets(buildings, streets, buffer_m=4.0, overlap_limit=0.5)
+
+    assert len(kept) == len(expected)
+    assert set(kept["building_id"]) == set(expected["building_id"])
+    # Same ground, not merely the same amount of it.
+    difference = kept.geometry.union_all().symmetric_difference(expected.geometry.union_all())
+    assert difference.area == pytest.approx(0.0, abs=1e-6)
+    # Total area to ten significant figures: the two differ only by floating-point noise in the
+    # order GEOS unions the buffers, not by which ground each considers roadway.
+    assert kept.geometry.area.sum() == pytest.approx(expected.geometry.area.sum(), rel=1e-9)

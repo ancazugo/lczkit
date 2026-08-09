@@ -18,6 +18,7 @@ dependencies = [
     "pypdf>=6.15.0",
     "python-dotenv>=1.2.2",
     "rasterio>=1.5.0",
+    "scipy>=1.18.0",
 ]
 
 [build-system]
@@ -53,6 +54,12 @@ module = [
     "exactextract.*",
     "ee",
 ]
+ignore_missing_imports = true
+
+# `scipy-stubs` exists on PyPI, unlike the above, but is a whole extra dependency for the two
+# functions `cleaning.streets` imports to reproduce neatnet's face-artifact threshold.
+[[tool.mypy.overrides]]
+module = ["scipy.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

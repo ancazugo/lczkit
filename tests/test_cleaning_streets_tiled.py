@@ -22,18 +22,24 @@ What *is* guaranteed, and is tested here:
 from __future__ import annotations
 
 import geopandas as gpd
+import neatnet
+import numpy as np
 import pytest
 import shapely
-from conftest import SMALL_BBOX, FixtureVectorSource
+from conftest import FIXTURE_BBOX, SMALL_BBOX, FixtureVectorSource
 from shapely.geometry import LineString
 
 from lczkit.cleaning.pipeline import reproject_to_local_utm
 from lczkit.cleaning.streets import (
+    _preprocess,
+    _threshold_from_index,
+    pooled_artifact_threshold,
     resolve_artifact_threshold,
     seam_disagreement,
     simplify_streets,
     simplify_streets_tiled,
 )
+from lczkit.cleaning.tiles import build_tiles, layer_extent
 from lczkit.crs import assert_projected_crs
 
 CRS = "EPSG:32633"
@@ -358,3 +364,126 @@ def test_an_empty_tile_contributes_nothing_rather_than_failing() -> None:
     assert shapely.union_all(tiled.geometry.to_numpy()).length == pytest.approx(
         corner.geometry.iloc[0].length, rel=1e-6
     )
+
+
+# --------------------------------------------------------------------------------------------
+# Phase 8's three scaling fixes. Each replaces a whole-network step with a local one, so each
+# test below is an equivalence test in miniature; the extent-scale versions are in
+# `docs/experiments/phase-8-scaling.md`.
+# --------------------------------------------------------------------------------------------
+
+
+def test_threshold_from_index_reproduces_face_artifacts(
+    fixture_vector_source: FixtureVectorSource,
+) -> None:
+    """The pooled selection rule must be neatnet's rule, not merely one that resembles it.
+
+    `_threshold_from_index` restates `neatnet.FaceArtifacts`'s kernel-density valley search so
+    the distribution can be assembled tile by tile. Restating it invites drift, and this is the
+    guard: exact equality, not approximate, on the same distribution.
+    """
+    _, layers = reproject_to_local_utm(
+        FIXTURE_BBOX, streets=fixture_vector_source.streets(FIXTURE_BBOX)
+    )
+    faces = neatnet.FaceArtifacts(_preprocess(layers["streets"]))
+    values = faces.polygons["face_artifact_index"].to_numpy(dtype=float)
+    assert _threshold_from_index(values) == faces.threshold
+
+
+def test_threshold_from_index_reports_no_valley_rather_than_guessing() -> None:
+    """A distribution with no valley between peaks yields `None`, as `FaceArtifacts` does."""
+    assert _threshold_from_index(np.linspace(0.0, 1.0, 500)) is None
+
+
+def test_pooled_threshold_matches_the_whole_network_on_the_fixture(
+    fixture_vector_source: FixtureVectorSource,
+) -> None:
+    """The quadratic whole-network resolver and the pooled one must agree where both are cheap.
+
+    Pooling exists because `resolve_artifact_threshold` runs `neatnet.fix_topology` over the
+    whole extent, which is quadratic in feature count — ~8.6 hours at metropolitan scale. It is
+    only worth having if it gets the same answer, so at fixture scale, with tiles large enough
+    that no face is cut by a window boundary, "the same answer" means exactly equal.
+    """
+    _, layers = reproject_to_local_utm(
+        FIXTURE_BBOX,
+        streets=fixture_vector_source.streets(FIXTURE_BBOX),
+    )
+    streets = layers["streets"]
+    tiles = build_tiles(
+        layer_extent(streets), tile_size_m=1500.0, buffer_m=600.0, crs_hint="streets"
+    )
+    pooled = pooled_artifact_threshold(streets, tiles, workers=1)
+
+    assert len(tiles) > 1
+    # Both sides must find a real kernel-density valley. Agreeing on the fallback would be
+    # agreement about nothing -- `SMALL_BBOX` does exactly that, at 137 faces.
+    assert pooled.fallback_used is False
+    assert pooled.n_faces_dropped == 0
+    assert pooled.value == resolve_artifact_threshold(streets)
+
+
+def test_pooled_threshold_reports_the_faces_it_had_to_drop(
+    fixture_vector_source: FixtureVectorSource,
+) -> None:
+    """The approximation's error term must be a reported number, not an assumption.
+
+    A face larger than the buffer is cut by its tile's window and cannot be indexed honestly, so
+    it is dropped. CLAUDE.md calls that error unbounded until measured; these are the fields that
+    measure it, and they have to travel into the cleaning report rather than stay internal.
+    """
+    _, layers = reproject_to_local_utm(
+        SMALL_BBOX,
+        streets=fixture_vector_source.streets(SMALL_BBOX),
+    )
+    streets = layers["streets"]
+    tiles = build_tiles(
+        layer_extent(streets), tile_size_m=400.0, buffer_m=100.0, crs_hint="streets"
+    )
+    pooled = pooled_artifact_threshold(streets, tiles, workers=1)
+
+    assert pooled.n_faces > 0
+    assert pooled.n_faces_dropped > 0, "a 100 m buffer must cut some face"
+    assert 0.0 < pooled.dropped_area_fraction < 1.0
+    detail = pooled.as_detail()
+    assert detail["threshold_source"] == "pooled"
+    assert detail["threshold_n_faces_dropped"] == pooled.n_faces_dropped
+
+
+def test_tiled_simplification_runs_across_processes() -> None:
+    """The worker pool must survive a parent that has already used threaded native libraries.
+
+    `ProcessPoolExecutor`'s default `fork` context inherits locks held by threads that do not
+    exist in the child. At metropolitan scale that showed up as the parent and all 32 workers
+    sitting at zero CPU for 14h50m. Every other test here runs `workers=1` and so cannot see it.
+    """
+    streets = _coarse_network()
+    warmed = np.random.default_rng(0).random((256, 256))
+    warmed @ warmed  # touch BLAS in the parent, which is the condition that deadlocked fork
+
+    parallel, step = simplify_streets_tiled(
+        streets, _no_buildings(), tile_size_m=1000.0, buffer_m=300.0, workers=2
+    )
+    serial, _ = simplify_streets_tiled(
+        streets, _no_buildings(), tile_size_m=1000.0, buffer_m=300.0, workers=1
+    )
+
+    assert step.detail["workers"] == 2
+    report = seam_disagreement(parallel, serial)
+    assert report["missing_km"] == pytest.approx(0.0, abs=1e-9)
+    assert report["extra_km"] == pytest.approx(0.0, abs=1e-9)
+
+
+def test_a_configured_threshold_overrides_the_pooled_one() -> None:
+    """Pinning the threshold explicitly is what an A/B between two thresholds needs."""
+    streets = _grid_network()
+    _, step = simplify_streets_tiled(
+        streets,
+        _no_buildings(),
+        tile_size_m=500.0,
+        buffer_m=200.0,
+        workers=1,
+        artifact_threshold=9.25,
+    )
+    assert step.detail["artifact_threshold"] == 9.25
+    assert step.detail["threshold_source"] == "configured"
