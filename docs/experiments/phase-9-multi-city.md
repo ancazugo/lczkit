@@ -240,8 +240,136 @@ so almost every disagreement it could express *was* on one of the two axes. The 
 fifteen, and most disagreement is now off both axes entirely. Axis shares at the two scales are
 different quantities, and only the multi-city figures are comparable with each other.
 
-### 6.3 Remaining
+### 6.3 The full sweep — 15 cities, 4.8 hours
 
-Fifteen cities, including every non-European one. `height_tier_fractions` outside Europe — the
-measurement this phase exists to make — is in that remainder, and Berlin's 20.3% unresolved is a
-best case rather than a representative one.
+Hong Kong failed on a GEOS predicate (`orientationIndex encountered NaN/Inf`) and is excluded; the
+other fifteen completed. Every figure is against So2Sat labels.
+
+| city | region | cells | ceiling | A | B | A built | A/ceil | height ax | compact ax | tier 1 |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| berlin | Europe | 9 627 | 75.2% | 35.3% | 31.5% | 22.8% | 47% | 11.9% | 12.5% | 80% |
+| london | Europe | 8 693 | 67.5% | 36.7% | 31.8% | 21.5% | 54% | 19.9% | 2.6% | 66% |
+| paris | Europe | 5 827 | 81.3% | 58.7% | 63.8% | 49.0% | 72% | 10.6% | 10.8% | 52% |
+| cologne | Europe | 6 672 | 66.9% | 40.7% | 40.0% | 15.1% | 61% | 20.4% | 1.8% | 46% |
+| rome | Europe | 4 598 | 62.7% | 33.4% | 29.3% | 27.3% | 53% | 9.0% | 18.9% | 67% |
+| milan | Europe | 2 633 | 79.9% | 51.8% | 46.6% | 35.9% | 65% | 10.0% | 15.0% | 69% |
+| vancouver | N. America | 16 517 | 36.7% | 41.8% | 36.8% | 7.2% | **114%** | 2.6% | 2.5% | 71% |
+| sao_paulo | S. America | 10 161 | 74.1% | 31.3% | 32.5% | 10.3% | 42% | 16.9% | 3.7% | 48% |
+| rio_de_janeiro | S. America | 6 323 | 83.2% | 47.3% | 33.6% | 4.8% | 57% | 22.0% | 0.1% | 11% |
+| cairo | Africa | 7 044 | 42.5% | **3.4%** | 3.3% | 1.3% | 8% | 12.6% | 0.6% | **1%** |
+| nairobi | Africa | 4 594 | 38.9% | 11.9% | 11.3% | 4.9% | 31% | 9.4% | 0.4% | **1%** |
+| cape_town | Africa | 4 415 | 64.2% | 8.2% | 10.3% | 2.6% | 13% | 17.9% | 0.6% | **4%** |
+| islamabad | S. Asia | 4 921 | 45.1% | 24.5% | 23.2% | 4.3% | 54% | 17.6% | 0.3% | **1%** |
+| mumbai | S. Asia | 1 706 | 22.8% | 18.5% | 21.0% | 8.9% | 81% | 15.5% | 3.2% | **3%** |
+| jakarta | SE Asia | 2 552 | 59.0% | 28.4% | 34.5% | 8.3% | 48% | 26.1% | 3.2% | **7%** |
+
+---
+
+## 7. The founding premise, answered
+
+**This is the headline, and it is unambiguous.** Tier-1 height completeness, as a share of building
+area:
+
+| | tier 1 | overall agreement | built-class agreement |
+|---|---:|---:|---:|
+| Europe + North America (7 cities) | **64.3%** | 42.6% | **25.5%** |
+| everywhere else (8 cities) | **9.6%** | 21.7% | **5.7%** |
+
+Cairo 1%, Nairobi 1%, Islamabad 1%, Mumbai 3%, Cape Town 4%, Jakarta 7%. In those cities **92–99%
+of building footprint area has no height at all** — Overture carries the geometry and not the
+attribute, exactly as the package was founded on believing, and now measured rather than asserted.
+
+**And it is the binding constraint on accuracy.** Across the fifteen cities, tier-1 completeness
+correlates with built-class agreement at **r = 0.67**. Built-class agreement outside Europe and
+North America averages **5.7%** against 25.5% inside it. Cairo, with 1% tier-1 coverage, scores
+3.4% overall and 1.3% on built classes: with no height, `Hr` is null nearly everywhere, the
+distance metric runs on building surface fraction alone, and the built types stop being separable
+even in principle.
+
+So the premise is confirmed twice over: Overture's heights do collapse outside Europe, **and** that
+collapse is what stops the package working there. What has never been tested is the package's
+answer to it — no areal tier has ever fired, because none is on disk. That is now the single
+highest-value piece of work available, and §5 costs it at a download plus a config entry.
+
+São Paulo is the instructive exception: 48% tier-1 coverage, and its overall agreement (31.3%) sits
+with the European cities rather than the African ones. It is the one non-European city where OSM
+building attribution is dense, and it behaves accordingly.
+
+---
+
+## 8. Which axis dominates — and the answer is neither of the two on offer
+
+CLAUDE.md asks this to choose between SVF and unit definition. Across fifteen cities:
+
+| axis | min / median / max | mean |
+|---|---|---:|
+| height — 1↔2↔3, 4↔5↔6 | 2.6% / 15.5% / 26.1% | **14.8%** |
+| compactness — 1↔4, 2↔5, 3↔6 | 0.1% / 2.6% / 18.9% | **5.1%** |
+
+**The height axis dominates in 11 of 15 cities, by roughly three to one.** This *reverses* Phase
+6.7, which measured compactness at 55.2% against height at 17.0% and set the candidate order to
+"unit definition → SVF → height". That measurement came from 432 cells carrying two classes, both
+mid-rise — a fixture on which the height axis was very nearly untestable by construction. The four
+cities where compactness still leads are Berlin, Rome, Milan and Paris: European, high tier-1
+coverage, and the places where height is already known so the residual error has to be elsewhere.
+
+The correlation runs the right way to confirm the mechanism: tier-1 completeness against height-axis
+share is **r = −0.44**. Cities that know their heights make fewer height-band errors.
+
+**Recommendation: the next accuracy lever is an areal height tier, not SVF and not unit
+definition.** SVF carries weight 4 in a metric whose weight-6 dimension (`Hr`) is currently null
+across most of the world; adding a fourth dimension to a metric that cannot populate its second is
+the wrong order of work. Unit definition is worth less still — see §9.
+
+---
+
+## 9. A vs B — decided, and it is a split verdict
+
+| | B ahead in | mean delta |
+|---|---:|---:|
+| overall agreement | 5 of 15 | **−1.5 points** |
+| built classes only | **9 of 15** | **+2.4 points** |
+
+Enclosures **help where the classification is morphological and hurt on the natural classes**. That
+is a coherent mechanism rather than noise: an enclosure is bounded by streets, so in built fabric it
+approximates the LCZ patch Stewart & Oke describes, while in parkland or water it is large and
+heterogeneous and its majority label smears several natural classes into one. Rio is the extreme
+case at −13.8 overall and −0.9 built.
+
+**Do not adopt B as the default.** The overall figure is what a user gets, it is negative, and the
+built-class gain of 2.4 points is small beside the 20-point regional gap that height data explains.
+But the earlier reading — "the lead lives in one class of one city" — is now wrong in the other
+direction: the built-class advantage is consistent across two-thirds of cities and three continents.
+Enclosures are worth revisiting **after** an areal height tier lands, when built-class accuracy is
+high enough for 2.4 points to be worth the natural-class cost.
+
+---
+
+## 10. The ceiling is not a constant, and once it is not a bound
+
+`lcz_v3` against So2Sat labels ranges from **22.8%** (Mumbai) to **83.2%** (Rio) — mean 60.0%. Raw
+agreement is not comparable between cities without it, which is the main reason this phase reports
+both.
+
+**Vancouver: lczkit 41.8% against a ceiling of 36.7% — 114%.** The comparator is not an upper bound
+at all there, which retires the last of the framing in which `lcz_v3` stands in for truth. It is one
+estimator among two, and on that city it is the worse one.
+
+Berlin's 53.2% ceiling from Phase 6.7 was a small-sample artefact: 75.2% here, on 9 627 cells rather
+than 432.
+
+---
+
+## 11. What this changes
+
+1. **Place an areal height product.** GHS-BUILT-H (tier 4) at ~42 MB/tile is the cheap version and
+   `zonal_mean` already reprojects into its Mollweide grid; Google Open Buildings 2.5D (tier 2) is
+   the one CLAUDE.md singles out for these regions and is worth the extra work. Everything else in
+   the deferred list is downstream of this.
+2. **SVF drops below height in the deferred priority order.** It was first on the grounds of
+   carrying weight 4; it is a fourth dimension for a metric that cannot fill its second.
+3. **Berlin is not a representative fixture.** Agreement across cities spans 3.4–58.7% and Berlin's
+   35.3% sits mid-pack, but its 80% tier-1 coverage is near the top of the range. Any future
+   single-city conclusion should say which end of that distribution it was drawn from.
+4. **Hong Kong's GEOS failure** is unexplained and worth a look before the paper — a city dropping
+   out on a geometry predicate is a robustness gap, not a data gap.
