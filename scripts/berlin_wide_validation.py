@@ -150,9 +150,9 @@ def main() -> None:
     )
 
     print(f"running the three arms over {name}...", file=sys.stderr, flush=True)
-    arms, cleaned, provenance = build_arms(fixture)
+    arms, cleaned, provenance, completeness = build_arms(fixture)
     print(f"  cleaned in {time.time() - started:.0f}s; evaluating", file=sys.stderr, flush=True)
-    results = evaluate(fixture, arms, provenance, cleaned.buildings_area)
+    results = evaluate(fixture, arms, provenance, cleaned.buildings_area, completeness)
     show(results)
 
     record: dict[str, Any] = {

@@ -252,13 +252,30 @@ def test_tiled_output_keeps_a_projected_crs_and_line_geometry() -> None:
     assert tiled.geometry.geom_type.isin(["LineString", "MultiLineString"]).all()
 
 
+def _linework(frame: gpd.GeoDataFrame) -> list[bytes]:
+    """A run's geometry as a canonical, order-independent value.
+
+    Sorted WKB rather than `seam_disagreement`, which compares through a 0.5 m buffer and so
+    reports agreement between two networks that are not the same network. For a reproducibility
+    claim the buffered metric is the wrong instrument: it is designed to tolerate exactly the
+    re-noding differences that a determinism test exists to catch.
+    """
+    return sorted(geom.wkb for geom in frame.geometry)
+
+
 def test_per_tile_results_are_cached_and_reused(tmp_path: object) -> None:
-    """A cache hit must be indistinguishable from a recomputation, and must actually be a hit."""
+    """A cache hit must be indistinguishable from a recomputation, and must actually be a hit.
+
+    The identity assertion is exact. This test previously accepted `seam_disagreement(...) == 1.0`,
+    which passes on two networks differing by a metre — so the property the cache most needs to
+    have was the one least tested, and a 75-feature divergence at metropolitan scale went
+    unnoticed here.
+    """
     from pathlib import Path
 
     cache_dir = Path(str(tmp_path)) / "tiles"
     streets = _grid_network()
-    first, _ = simplify_streets_tiled(
+    first, cold = simplify_streets_tiled(
         streets,
         _no_buildings(),
         tile_size_m=1000.0,
@@ -269,8 +286,9 @@ def test_per_tile_results_are_cached_and_reused(tmp_path: object) -> None:
     )
     written = sorted(cache_dir.rglob("*.parquet"))
     assert written, "expected per-tile parquet files to be written"
+    assert cold.detail["n_tiles_reused"] == 0, "the first run has nothing to reuse"
 
-    second, step = simplify_streets_tiled(
+    second, warm = simplify_streets_tiled(
         streets,
         _no_buildings(),
         tile_size_m=1000.0,
@@ -279,8 +297,88 @@ def test_per_tile_results_are_cached_and_reused(tmp_path: object) -> None:
         cache_dir=cache_dir,
         cache_fingerprint="testfp",
     )
-    assert step.detail["cached"] is True
-    assert seam_disagreement(second, first)["agreement"] == pytest.approx(1.0)
+    assert warm.detail["cache_dir_configured"] is True
+    assert warm.detail["n_tiles_reused"] == len(written), "expected every tile to be a hit"
+    assert warm.n_out == cold.n_out
+    assert _linework(second) == _linework(first)
+    # A healthy tile must still read as healthy after a parquet round-trip. An all-null object
+    # column comes back as float NaN, so `is not None` would report every cached tile as failed.
+    assert warm.detail["tiles_unsimplified"] == cold.detail["tiles_unsimplified"] == {}
+
+
+def test_two_cold_runs_produce_the_same_network(tmp_path: object) -> None:
+    """The property the cache test cannot check: the pipeline is a function of its input.
+
+    A cached run replaying stored tiles proves the store round-trips, not that the computation
+    is reproducible. Phase 8's 75-feature divergence was between two *independent* runs, and was
+    written up as a cache defect because no test separated the two claims.
+    """
+    streets = _grid_network()
+    first, step_a = simplify_streets_tiled(
+        streets, _no_buildings(), tile_size_m=1000.0, buffer_m=300.0, workers=1
+    )
+    second, step_b = simplify_streets_tiled(
+        streets, _no_buildings(), tile_size_m=1000.0, buffer_m=300.0, workers=1
+    )
+    assert step_a.n_out == step_b.n_out
+    assert _linework(first) == _linework(second)
+
+
+def test_simplification_depends_on_input_row_order() -> None:
+    """Pinning the known limitation, not asserting it away.
+
+    `neatnet` re-nodes and re-merges a network in the order it receives it, so a shuffled input
+    gives the same feature count and the same total length with the edges split at different
+    points. That is a property of the library, not a bug this package can fix, and a test
+    claiming order-invariance here would be asserting something false.
+
+    What follows from it is a requirement one level up: the row order reaching cleaning has to be
+    canonical already, or two runs over the same city disagree. `OvertureSource` is where that is
+    established and where it is tested — see `test_overture_source.py`. This test exists so that
+    if `neatnet` ever does become order-invariant, the constraint is revisited deliberately
+    rather than left in place forever.
+    """
+    streets = _grid_network()
+    shuffled = streets.sample(frac=1.0, random_state=7).reset_index(drop=True)
+
+    ordered, _ = simplify_streets_tiled(
+        streets, _no_buildings(), tile_size_m=1000.0, buffer_m=300.0, workers=1
+    )
+    reordered, _ = simplify_streets_tiled(
+        shuffled, _no_buildings(), tile_size_m=1000.0, buffer_m=300.0, workers=1
+    )
+    assert len(ordered) == len(reordered)
+    assert ordered.geometry.length.sum() == pytest.approx(reordered.geometry.length.sum())
+    assert _linework(ordered) != _linework(reordered), (
+        "neatnet has become order-invariant; the canonical-order requirement on VectorSource "
+        "can be revisited"
+    )
+
+
+def test_the_cache_key_separates_thresholds_finer_than_six_decimals(tmp_path: object) -> None:
+    """Two thresholds are two answers, however close.
+
+    The key used to render the threshold as `:.6f`. A pooled threshold comes out of a
+    kernel-density valley search, so it differs run to run well beyond the sixth decimal — and
+    two such runs hashed to the same directory, the second reading tiles simplified against a
+    threshold it had not used. Nothing reported this: both runs printed the same rounded value.
+    """
+    from pathlib import Path
+
+    cache_dir = Path(str(tmp_path)) / "tiles"
+    streets = _grid_network()
+    for threshold in (8.1312364, 8.1312361):
+        simplify_streets_tiled(
+            streets,
+            _no_buildings(),
+            tile_size_m=1000.0,
+            buffer_m=300.0,
+            workers=1,
+            cache_dir=cache_dir,
+            cache_fingerprint="testfp",
+            artifact_threshold=threshold,
+        )
+    assert len({path.parent.name for path in cache_dir.rglob("*.parquet")}) == 2
 
 
 def test_the_cache_key_separates_different_tilings(tmp_path: object) -> None:
@@ -304,6 +402,26 @@ def test_the_cache_key_separates_different_tilings(tmp_path: object) -> None:
             cache_fingerprint=fingerprint,
         )
     assert len({path.parent.name for path in cache_dir.rglob("*.parquet")}) == 2
+
+
+def test_a_passed_through_tile_is_named_in_the_report() -> None:
+    """34 of Berlin's 594 tiles take the pass-through path. A count cannot tell two runs that
+    degraded on *different* tiles apart, and that is exactly the comparison Phase 8 needed to
+    make and could not — so the report carries the tile key and the exception class.
+
+    An acyclic network encloses nothing, so `neatnet` raises out of its own face detection. That
+    is outside neatnet's domain rather than a tiling bug, which is why the tile is passed through
+    rather than the run ended.
+    """
+    streets = gpd.GeoDataFrame(geometry=[LineString([(10.0, 10.0), (900.0, 10.0)])], crs=CRS)
+    simplified, step = simplify_streets_tiled(
+        streets, _no_buildings(), tile_size_m=1000.0, buffer_m=300.0, workers=1
+    )
+
+    assert step.detail["n_tiles_unsimplified"] == 1
+    assert step.detail["tiles_unsimplified"] == {"tile_0_0": "KeyError"}
+    assert not simplified["_simplified"].any(), "the pass-through must be flagged per edge"
+    assert set(simplified["_tile_key"]) == {"tile_0_0"}, "and traceable to the tile that failed"
 
 
 def test_seam_disagreement_compares_only_common_ground() -> None:

@@ -111,6 +111,30 @@ _LAND_USE = _LayerQuery(
 )
 
 
+def _canonical_order(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Rows in GERS `id` order, so the same query is the same frame every time.
+
+    **This is the pipeline's reproducibility boundary.** `_fetch` runs a DuckDB scan across many
+    remote parquet files with no `ORDER BY`, so its row order is whatever the parallel readers
+    finished in — nondeterministic between runs, and different again from the order a cached
+    file replays. That would be harmless if nothing downstream cared, but `neatnet` re-nodes and
+    re-merges a network by the order it receives it: on the test grid, a shuffled input yields
+    the same feature count and the same total length with the edges split at different points,
+    which reaches `momepy.street_profile` and so `aspect_ratio`.
+
+    Sorting here rather than in SQL is deliberate. It costs one sort instead of a distributed
+    one, and — the reason that matters — it applies to the cache-hit path too, so the files
+    already written under `input/Overture_Maps/` yield the canonical order without being
+    rewritten. Nothing under `input/` is shared with other projects and then modified.
+
+    `id` is Overture's GERS identifier: present in every layer this module selects, unique per
+    feature, and stable across releases for a feature that persists.
+    """
+    if "id" not in gdf.columns:
+        raise ValueError(f"expected an `id` column to order on; got {list(gdf.columns)}")
+    return gdf.sort_values("id", kind="stable").reset_index(drop=True)
+
+
 class OvertureSource:
     """Reads `buildings`, `streets`, `rail`, `water` and `land_use` layers from a pinned
     Overture release."""
@@ -197,11 +221,11 @@ class OvertureSource:
             gdf = gpd.read_parquet(cache_path)
             if not isinstance(gdf, gpd.GeoDataFrame):
                 raise TypeError(f"cached file is not a GeoDataFrame: {cache_path}")
-            return gdf
+            return _canonical_order(gdf)
         gdf = self._fetch(query, bbox)
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         gdf.to_parquet(cache_path)
-        return gdf
+        return _canonical_order(gdf)
 
     def _fetch(self, query: _LayerQuery, bbox: BBox) -> gpd.GeoDataFrame:
         minx, miny, maxx, maxy = bbox

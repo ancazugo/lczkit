@@ -68,7 +68,8 @@ from lczkit.config import (
     UcpConfig,
     ValidationConfig,
 )
-from lczkit.heights.cascade import fill_heights
+from lczkit.heights.cascade import cascade_height_sources, fill_heights
+from lczkit.heights.completeness import FRACTION_PREFIX, height_metrics
 from lczkit.heights.inherit import inherit_heights
 from lczkit.heights.tiers import build_cascade
 from lczkit.landcover.local import LocalRasterSource
@@ -222,13 +223,24 @@ def raw_footprints(source: VectorSource, bbox: BBox, crs: Any) -> gpd.GeoDataFra
     return frame[frame.geom_type == "Polygon"].reset_index(drop=True)
 
 
-def build_arms(fixture: Fixture) -> tuple[list[Arm], CleanedVectors, dict[str, Any]]:
-    """Run all three arms on one fixture, returning them with the cleaning provenance."""
+def build_arms(
+    fixture: Fixture,
+    cleaning: CleaningConfig | None = None,
+    cache_dir: Path | None = None,
+) -> tuple[list[Arm], CleanedVectors, dict[str, Any], pd.Series]:
+    """Run all three arms on one fixture, returning them with the cleaning provenance.
+
+    `cleaning` defaults to this module's fixture-scale config, which has **no tiling**: the
+    committed fixtures are 9 km2 and the whole-extent path is what every figure recorded before
+    Phase 8 was produced with. Any caller working at city scale must pass a tiled config —
+    `neatnet` is superlinear in extent, so the whole-extent path does not finish over a
+    metropolitan window, and it does not fail either, which is the unpleasant part.
+    """
     source = fixture.vectors()
-    cleaned = clean_vectors(source, fixture.bbox, CLEANING)
+    cleaned = clean_vectors(source, fixture.bbox, cleaning or CLEANING, cache_dir=cache_dir)
     tiers = build_cascade(HEIGHTS, lambda name: FIXTURES / "landcover")
 
-    cleaned_buildings, _ = fill_heights(cleaned.buildings_area, tiers)
+    cleaned_buildings, height_report = fill_heights(cleaned.buildings_area, tiers)
     topo_buildings = inherit_heights(cleaned.buildings_topo, cleaned_buildings)
     raw_buildings, _ = fill_heights(raw_footprints(source, fixture.bbox, cleaned.crs), tiers)
 
@@ -260,10 +272,30 @@ def build_arms(fixture: Fixture) -> tuple[list[Arm], CleanedVectors, dict[str, A
         arm("B", enclosures, cleaned_buildings, "enclosures, buildings_area"),
         arm("C", grid, raw_buildings, "100 m grid, raw Overture footprints (control)"),
     ]
+    # Per-unit height provenance on the grid, so `agreement` can stratify by it and so the
+    # multi-city table can report `height_tier_fractions` outside Europe — the measurement the
+    # height cascade was built to make and, until Phase 9, had never been asked for.
+    sources = cascade_height_sources(tiers)
+    height_frames = height_metrics(cleaned_buildings, grid, sources)
+
     provenance = {
         "buildings_raw": int(len(raw_buildings)),
         "buildings_area": int(len(cleaned_buildings)),
         "buildings_topo": int(len(topo_buildings)),
+        "height_sources": list(sources),
+        "height_fill": height_report.model_dump(),
+        # Area-weighted across the whole extent, which is what makes it comparable between
+        # cities: a per-unit mean would weight a cell holding one shed like a city block.
+        "height_tier_fractions": {
+            column.removeprefix(FRACTION_PREFIX): _area_weighted(
+                height_frames[column], grid.geometry.area
+            )
+            for column in height_frames.columns
+            if column.startswith(FRACTION_PREFIX)
+        },
+        "height_completeness_mean": _area_weighted(
+            height_frames["height_completeness"], grid.geometry.area
+        ),
         "building_area_raw_m2": float(raw_buildings.geometry.area.sum()),
         "building_area_cleaned_m2": float(cleaned_buildings.geometry.area.sum()),
         "buildings_area_retention": cleaned.report.area_retention("buildings_area"),
@@ -277,7 +309,19 @@ def build_arms(fixture: Fixture) -> tuple[list[Arm], CleanedVectors, dict[str, A
         ),
         "cleaning_steps": [step.model_dump() for step in cleaned.report.steps],
     }
-    return arms, cleaned, provenance
+    return arms, cleaned, provenance, height_frames["height_completeness"]
+
+
+def _area_weighted(values: pd.Series, area: pd.Series) -> float | None:
+    """`values` averaged by unit area, ignoring units the measurement does not apply to.
+
+    Null is a real answer here — `height_metrics` returns all-null for a unit holding no
+    building — and averaging those as zero would report a park as a height-data failure.
+    """
+    usable = values.notna()
+    weight = area.reindex(values.index).where(usable)
+    total = float(weight.sum())
+    return float((values.where(usable) * weight).sum() / total) if total > 0 else None
 
 
 def project(arm: Arm, grid: gpd.GeoDataFrame) -> pd.Series:
@@ -422,6 +466,7 @@ def evaluate(
     arms: list[Arm],
     provenance: dict[str, Any],
     buildings: gpd.GeoDataFrame,
+    height_completeness: pd.Series | None = None,
 ) -> dict[str, Any]:
     """Agreement and BSF-versus-published-range for every arm, on one fixture."""
     grid = next(arm.units for arm in arms if arm.name == "A")
@@ -450,6 +495,7 @@ def evaluate(
             labels["reference_lcz"],
             grid_area,
             coverage=labels["reference_coverage"],
+            height_completeness=height_completeness,
             config=VALIDATION,
             reference_file=str(fixture.ground_truth and fixture.ground_truth.name),
         ).model_dump()
@@ -461,6 +507,7 @@ def evaluate(
             grid_reference["reference_lcz"],
             grid_area,
             coverage=grid_reference["reference_coverage"],
+            height_completeness=height_completeness,
             config=VALIDATION,
             reference_file=fixture.reference.name,
         )
@@ -483,6 +530,7 @@ def evaluate(
                     truth[0]["reference_lcz"],
                     grid_area,
                     coverage=truth[0]["reference_coverage"],
+                    height_completeness=height_completeness,
                     config=VALIDATION,
                     reference_file=str(fixture.ground_truth and fixture.ground_truth.name),
                 ).model_dump()
@@ -651,8 +699,8 @@ def main() -> None:
     }
     for fixture in FIXTURE_CITIES:
         print(f"running {fixture.name}...", file=sys.stderr, flush=True)
-        arms, cleaned, provenance = build_arms(fixture)
-        results = evaluate(fixture, arms, provenance, cleaned.buildings_area)
+        arms, cleaned, provenance, completeness = build_arms(fixture)
+        results = evaluate(fixture, arms, provenance, cleaned.buildings_area, completeness)
         record["fixtures"].append(results)
         show(results)
 

@@ -20,6 +20,14 @@ to 7.0, while two of the four tiles found 8.10 and 7.58: a face with an index of
 been an artifact in one tile and ordinary urban fabric in the run next to it. Pinning one value
 across all tiles removes that class of seam disagreement outright.
 
+**Simplification is sensitive to input row order.** `neatnet` re-nodes and re-merges a network in
+the order it receives it: a shuffled input yields the same feature count and the same total length
+with the edges split at different points, which reaches `momepy.street_profile` and so
+`aspect_ratio`. Nothing here can fix that, and nothing here should paper over it — what it means
+is that the row order arriving from a `VectorSource` has to be canonical *already*, or two runs
+over the same city disagree. `lczkit.sources.overture._canonical_order` is where that is
+established; this module only depends on it.
+
 **Where that value comes from is the second scaling problem this module had.** Deriving it from
 the whole network, as `resolve_artifact_threshold` does, means running `neatnet.fix_topology`
 over the whole network — quadratic in feature count, measured at exponent 2.0 and projecting to
@@ -65,12 +73,15 @@ Restated here because the tiled path resolves the threshold itself and must fall
 as `neatify` would, so that a one-tile run and a whole-extent run agree.
 """
 
-TILE_RESULT_VERSION = 1
+TILE_RESULT_VERSION = 2
 """Bumped whenever `_simplify_window` changes what it writes for a given input.
 
 Part of the per-tile cache key. Config and the `neatnet` version cover everything *outside* this
 module that changes a tile's contents; this covers what is inside it, which nothing else in the
 key would detect.
+
+Version 2 adds `_tile_key` and `_failure`, so a cached tile replays the *report* as well as the
+geometry.
 """
 
 SIMPLIFIED_COLUMN = "_simplified"
@@ -79,6 +90,36 @@ SIMPLIFIED_COLUMN = "_simplified"
 Carried out of cleaning rather than reduced to a count, so a downstream oddity can be traced to
 the tile that produced it instead of being attributed to the classifier.
 """
+
+TILE_KEY_COLUMN = "_tile_key"
+"""Per-edge tile provenance: which tile emitted this line.
+
+`SIMPLIFIED_COLUMN` alone says an edge came from a tile that failed, not *which* tile, so it
+could not actually be traced back — the claim that it could was made and never exercised. With
+the key present, a suspect enclosure downstream resolves to one tile and one window.
+"""
+
+FAILURE_COLUMN = "_failure"
+"""Internal, dropped before the stitch: the exception class that made a tile pass through.
+
+Written into the per-tile cache so a cached run reconstructs the same cleaning report a cold run
+would have produced. A cache that reproduces the geometry but not the record of how it was
+obtained is still not transparent.
+"""
+
+
+def _threshold_tag(threshold: float) -> str:
+    """The threshold's contribution to the cache key, at full precision.
+
+    `repr` of a float round-trips exactly; the `:.6f` this used to be did not. Two runs whose
+    pooled thresholds differed beyond the sixth decimal — which is the ordinary case, since the
+    value comes out of a kernel-density valley search — hashed to the same directory, so the
+    second silently read tiles simplified against a threshold it never used. That is precisely
+    the "same tile, different answer" the key exists to prevent, and it was invisible because
+    the printed threshold matched to the precision anyone looked at.
+    """
+    return repr(float(threshold)).replace("-", "m")
+
 
 THREAD_LIMIT_VARS = (
     "OMP_NUM_THREADS",
@@ -457,6 +498,7 @@ def _simplify_window(
         if isinstance(cached, gpd.GeoDataFrame):
             return cached
 
+    failure: str | None = None
     if streets.empty:
         result = streets.iloc[:0].copy()
         result[SIMPLIFIED_COLUMN] = pd.Series(dtype="bool")
@@ -468,16 +510,24 @@ def _simplify_window(
                 artifact_threshold=threshold,
             )
             simplified[SIMPLIFIED_COLUMN] = True
-        except Exception:  # noqa: BLE001 - see below; the tile is passed through, not lost
+        except MemoryError:
+            # Deliberately not caught with the rest. Every other exception here is a statement
+            # about this tile's geometry and means the same thing on every run; running out of
+            # memory is a statement about the machine, so swallowing it makes the map depend on
+            # what else the node happened to be doing. That is a reproducibility hole, and a
+            # silent one — the run still produces a plausible map, just not the same map twice.
+            raise
+        except Exception as error:  # noqa: BLE001 - see below; the tile is passed through
             # neatnet raises out of its own face detection on networks it cannot polygonize or
             # whose face indices are degenerate. One such tile must not end a run over a whole
-            # city, so the streets pass through unsimplified and the tile is *counted* — a
-            # silently unsimplified tile would show up downstream as a strangely shaped
-            # enclosure and be impossible to trace back here.
+            # city, so the streets pass through unsimplified and the tile is *recorded* — with
+            # its key and the exception class, because a count alone cannot tell two runs that
+            # degraded on different tiles apart, and 34 of Berlin's 594 tiles take this path.
             #
             # Preprocessed rather than raw: `neatify` returns topologically-fixed streets when
             # it finds no artifacts, so an unnoded pass-through would leave crossings unsplit
             # and put this tile's topology out of step with every tile around it.
+            failure = type(error).__name__
             simplified = _preprocess(streets)
             simplified[SIMPLIFIED_COLUMN] = False
         clipped = simplified.copy()
@@ -490,6 +540,9 @@ def _simplify_window(
         result = clipped[~clipped.geometry.is_empty & clipped.geometry.notna()]
         result = result.explode(index_parts=False).reset_index(drop=True)
         result = result[result.geometry.geom_type == "LineString"].copy()
+
+    result[TILE_KEY_COLUMN] = tile.key
+    result[FAILURE_COLUMN] = failure
 
     if cache_path is not None:
         cache_path.parent.mkdir(parents=True, exist_ok=True)
@@ -573,7 +626,7 @@ def simplify_streets_tiled(
     # over a larger city would read back tiles decided by the smaller one's threshold.
     # `TILE_RESULT_VERSION` covers the other half — a change to what `_simplify_window` writes,
     # which no amount of config hashing would notice.
-    fingerprint = f"{cache_fingerprint}_v{TILE_RESULT_VERSION}_thr{threshold:.6f}"
+    fingerprint = f"{cache_fingerprint}_v{TILE_RESULT_VERSION}_thr{_threshold_tag(threshold)}"
     jobs = [
         (
             tile,
@@ -586,16 +639,29 @@ def simplify_streets_tiled(
         for tile in tiles
     ]
 
+    # Counted before anything runs, because `_simplify_window` writes the file it would have
+    # read. Asking afterwards reports every tile as a hit and tells you nothing.
+    n_cached = sum(1 for job in jobs if job[4] is not None and job[4].exists())
+
     if n_workers == 1:
         parts = [_simplify_window(*job) for job in jobs]
     else:
         with _single_threaded_children(), _worker_pool(n_workers) as pool:
             parts = list(pool.map(_simplify_window, *zip(*jobs, strict=True)))
 
+    # Aggregated before the stitch and sorted by tile key, so two runs that degraded on
+    # different tiles are distinguishable from the report alone rather than by re-running.
+    # `pd.notna`, not `is not None`: an all-null object column round-trips out of parquet as a
+    # float NaN column, so a cached healthy tile would otherwise be reported as having failed
+    # with the reason "nan" — a bug visible only on the cache path, which is the worst kind.
+    passed_through = {
+        str(part[TILE_KEY_COLUMN].iloc[0]): str(part[FAILURE_COLUMN].iloc[0])
+        for part in parts
+        if len(part) and pd.notna(part[FAILURE_COLUMN].iloc[0])
+    }
+    parts = [part.drop(columns=[FAILURE_COLUMN]) for part in parts]
+
     simplified = _stitch(parts, streets.crs)
-    unsimplified = sum(
-        1 for part in parts if len(part) and not bool(part[SIMPLIFIED_COLUMN].to_numpy().all())
-    )
     step = CleaningStep(
         stage="streets",
         operation="simplify_streets_tiled",
@@ -607,8 +673,14 @@ def simplify_streets_tiled(
             "tile_size_m": tile_size_m,
             "buffer_m": buffer_m,
             "workers": n_workers,
-            "cached": cache_dir is not None,
-            "n_tiles_unsimplified": unsimplified,
+            # Two separate facts. The old single `cached` flag recorded only that a directory
+            # was configured, and was read as "this run reused tiles" — which is how a run that
+            # had computed all 594 of its own tiles came to be reported as a cached run, and a
+            # cold/cold difference came to be written up as a cache defect.
+            "cache_dir_configured": cache_dir is not None,
+            "n_tiles_reused": n_cached,
+            "n_tiles_unsimplified": len(passed_through),
+            "tiles_unsimplified": dict(sorted(passed_through.items())),
             **threshold_detail,
         },
     )

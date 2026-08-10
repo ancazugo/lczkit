@@ -63,6 +63,45 @@ def test_cache_hit_never_touches_network(tmp_path: Path, monkeypatch: pytest.Mon
     assert list(result["id"]) == ["a"]
 
 
+def test_a_layer_arrives_in_canonical_order_whatever_the_cache_holds(tmp_path: Path) -> None:
+    """The pipeline's reproducibility boundary, asserted where it is enforced.
+
+    DuckDB scans Overture's parquet in parallel with no `ORDER BY`, so `_fetch` returns rows in
+    whatever order the readers finished — different between runs, and different again from the
+    order a cached file replays. That would not matter if nothing downstream cared, but `neatnet`
+    splits a network's edges according to the order it is handed (see
+    `test_cleaning_streets_tiled.test_simplification_depends_on_input_row_order`), so an
+    unordered source makes two runs over the same city produce two different maps.
+
+    The cache file here is written deliberately out of order, standing in for what the S3 scan
+    can return on any given run.
+    """
+    settings = _settings(tmp_path)
+    source = OvertureSource(settings)
+    bbox: BBox = (13.39, 52.50, 13.41, 52.51)
+
+    scrambled = gpd.GeoDataFrame(
+        {
+            "id": ["08b2f5", "08b1aa", "08b3cc", "08b0ff"],
+            "height": [5.0, 6.0, 7.0, 8.0],
+            "num_floors": [2, 2, 3, 3],
+            "sources": [None, None, None, None],
+        },
+        geometry=[box(i, i, i + 1, i + 1) for i in range(4)],
+        crs="EPSG:4326",
+    )
+    cache_path = source._cache_path("buildings", bbox, _BUILDINGS.key)
+    cache_path.parent.mkdir(parents=True)
+    scrambled.to_parquet(cache_path)
+
+    result = source.buildings(bbox)
+
+    assert list(result["id"]) == sorted(scrambled["id"]), "rows must arrive in GERS id order"
+    assert list(result.index) == list(range(len(result))), "and on a fresh RangeIndex"
+    # The attribute must still travel with its own geometry, not merely be sorted alongside it.
+    assert result.loc[result["id"] == "08b0ff", "height"].iloc[0] == 8.0
+
+
 def test_streets_and_rail_cache_to_distinct_files(tmp_path: Path) -> None:
     """`streets()` and `rail()` both read `theme=transportation/type=segment`; the cache must
     key on more than `(theme, type_)` or one silently overwrites the other's cached file."""
