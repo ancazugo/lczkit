@@ -190,31 +190,36 @@ style document, and the style test asserts that names no glyphs, no sprite, and 
 
 ---
 
-## 5. Two Phase 8 discrepancies this run surfaced
+## 5. Two Phase 8 numbers this run appeared to contradict — and what more data did to them
 
-The first end-to-end metropolitan run through `write_run` produced two numbers that do not match
-Phase 8's. Both are recorded here and **not** reconciled — neither has been diagnosed, and guessing
-at a cause is the anti-pattern this project has paid for three times.
+The first end-to-end metropolitan run through `write_run` produced two figures that did not match
+Phase 8's. Both were written down before being explained. The 891 km² threshold A/B finished
+afterwards and, between its two arms, supplied three more measurements of the same quantities — which
+shrank one to nothing and the other by a factor of forty. Recording the sequence is the point: the
+first reading of a discrepancy is not usually the right one.
 
-**`clean_vectors` took 4 469.1 s against Phase 8's 585.6 s, with a *warm* tile cache.** The street
-step reports `"cached": true`, 594 tiles, and the identical pooled threshold 8.131236, so
-simplification — the 7.5 minutes that dominated the Phase 8 run — was essentially free this time and
-the run was still 7.6× slower. That points at the serial building-cleaning prefix, which Phase 8
-measured as near-linear and inferred at roughly two minutes for 892 000 footprints. The run shared
-the node with a nine-hour whole-network threshold job and with several other users' jobs, which is a
-plausible confound and not a measurement. Nothing here was profiled; the honest statement is that
-the figure is unexplained.
+**`clean_vectors` at 4 469.1 s against Phase 8's 585.6 s — an outlier, not a regression.** The street
+step reported `"cached": true` and the identical pooled threshold, so simplification was nearly free
+and the run was still 7.6× slower. Two independent cold runs of the same cleaning over the same
+891 km² then came in at **456 s** and **551 s**, bracketing the 585.6 s benchmark. Nothing is wrong
+with the code. The site build overlapped with the peak of a 10-hour single-core whole-network
+`fix_topology` job on a node also carrying several other users' work, and that is the most likely
+cause — but it is a coincidence in time, not a measurement, and it is recorded as such.
 
-**The same cache produced a different feature count.** `simplify_streets_tiled` reports
-`n_out = 198 879` where the Phase 8 run that *wrote* that cache reported `195 508` — 1.7% apart,
-from identical per-tile inputs and an identical threshold. The candidate worth checking first is
-order: `_stitch` concatenates the parts and runs `neatnet.remove_interstitial_nodes` over the
-result, and a cache read need not return tiles in the order a cold run computed them. If that is it,
-the tiled path is order-dependent at the seams, which matters more than 1.7% of a line count
-suggests — it would mean a cached run and a cold run are not the same run.
+**The feature count differs by 0.04%, not 1.7%.** `simplify_streets_tiled` reported `n_out = 198 879`
+against the Phase 8 run's `195 508`, which looked like a 1.7% gap from an identical cache. It is not
+the right comparison: the Phase 8 run predates the road-rule and pooled-threshold work in the same
+phase. The three post-fix runs at this extent report **198 698** (whole-threshold arm, cold),
+**198 804** (pooled arm, cold) and **198 879** (this run, pooled, cached). The first two differ
+because their thresholds differ, which is expected. The last two share a threshold and differ by
+**75 features in 198 804 — 0.04%** — one cached, one cold.
 
-Both belong to Phase 8 rather than to the map site, and both were found only because Phase 7 was the
-first thing to run the whole pipeline end to end at this extent.
+That residual is small and it is still a residual: a cached run and a cold run are not producing
+byte-identical linework. `_stitch` concatenates the per-tile parts and runs
+`neatnet.remove_interstitial_nodes` over the result, and a cache read need not return tiles in the
+order a cold run computed them, so ordering is the first thing to check. Not chased here — it
+belongs to Phase 8, and it was only visible because Phase 7 was the first thing to run the whole
+pipeline end to end at this extent.
 
 ---
 

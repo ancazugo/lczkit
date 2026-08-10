@@ -70,9 +70,10 @@ topology, which intersected every footprint against one unioned road geometry an
 about 75 hours on its own. Both are now derived locally, each measured against the global operation
 it replaces. The road rule is exact — 39× faster, symmetric difference 0.0 m². The pooled threshold
 is an approximation, and is reported as one: measured at six concentric extents its deviation from
-the whole-network value **shrinks** as extent grows (0.026 → 0.004), the two converge to four parts
-in ten thousand, and at 256 km² the difference moves 6 of 26 040 cell labels, all to adjacent
-classes. **Berlin's full 891 km² administrative extent now cleans end to end in 9.8 minutes**,
+the whole-network value **does not grow** with extent (0.026 → 0.004), the two converge to four
+parts in ten thousand, and the label difference *falls* as the extent widens — 6 of 26 040 cells at
+256 km², **10 of 172 181 at the full 891 km²**, 0.023% down to 0.0058%. The whole-network
+alternative takes **10 h 39 m** at that extent against about 70 seconds. **Berlin's full 891 km² administrative extent now cleans end to end in 9.8 minutes**,
 retaining 99.947% of footprint area. A third "fix", restricting the seam stitch, was built and then
 discarded when measurement showed the bottleneck it targeted did not exist — see
 [`docs/experiments/phase-8-scaling.md`](docs/experiments/phase-8-scaling.md).

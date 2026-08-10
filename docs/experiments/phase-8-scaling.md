@@ -415,8 +415,36 @@ reported as a failure rather than argued into acceptability, and the decision to
 taken separately and by someone other than the party being measured. That sequence is the part worth
 preserving.
 
-**Outstanding.** The A/B has been run at 256 km² only. The 891 km² comparison is still to be
-reported, and a materially higher flip rate there reopens this decision.
+#### The 891 km² A/B — the condition attached to the adoption
+
+The adoption carried one condition: a materially higher flip rate at the full extent reopens it.
+That measurement has now been made, at the extent the pooled threshold exists for.
+
+| | 256 km² | **891 km²** |
+|---|---|---|
+| whole-network threshold | 8.159813 | **8.140679** — 38 372 s, **10 h 39 m** over 267 021 streets |
+| pooled threshold | 8.134131 | **8.131236** — ~70 s |
+| deviation | 0.025681 | **0.009443** |
+| cells | 26 040 | 172 181 |
+| **cells whose `lcz_primary` moved** | 6 — 0.0230% | **10 — 0.0058%** |
+| transitions | 5→4 ×2, 9→5 ×2, 8→6, 12→11 | 11→12 ×3, 10→6 ×2, 12→14 ×2, 10→5, 10→8, 12→11 |
+
+**The flip rate falls by a factor of four, and the condition is not met.** The adoption stands.
+
+Two things are worth stating precisely rather than being folded into that.
+
+**The cost figure was optimistic, not pessimistic.** The ~8.6 h extrapolated from the exponent-2.0
+fit is in fact **10 h 39 m** measured. Against ~70 s for the pooled equivalent that is roughly
+**550×** at the extent that matters — and it is the difference between a city that completes and one
+that does not, since each of the two pipeline arms downstream took only 456 s and 551 s.
+
+**Three of the ten moves involve LCZ 10, which the distance metric does not assign.** LCZ 10 is
+assigned functionally from `industrial_fraction`, a building-area quantity, so a street threshold
+should not reach it. The route it does have is real and worth naming: `resolve_buildings_on_streets`
+consumes the *simplified* network, so a different simplification drops and trims different
+footprints, and every building-area parameter — `industrial_fraction` included — moves with it. That
+is a mechanism, not a measurement; it has not been verified, and it is recorded here as the first
+thing to check if these transitions ever matter.
 
 ### 4.3 Per-seam stitching — built, measured, and thrown away
 
