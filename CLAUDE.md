@@ -730,6 +730,58 @@ time; tiled and untiled simplification agree on a fixture-scale extent; per-tile
 
 ---
 
+**891 km² A/B — adoption CONFIRMED.** Whole-network 8.140679 (38 372 s / 10h39m) against pooled
+8.131236 (~70 s): deviation 0.009443, **10 of 172 181 cells moved (0.0058%)** — a four-fold fall
+from 0.0230% at 256 km². The reopening condition is not met. Note the exponent-2.0 fit projected
+~8.6 h against a measured 10h39m: **power-law extrapolations from small extents run optimistic**,
+so treat such fits as lower bounds when deciding feasibility. Downstream pipeline arms took 456 s
+and 551 s.
+
+Three of the ten moves involve LCZ 10, which the distance metric never assigns. The path is real
+and unverified: `resolve_buildings_on_streets` consumes the simplified network, so a different
+threshold trims different footprints and every building-area parameter — including
+`industrial_fraction` — moves with it. **Check this first if those transitions ever matter.**
+
+**Open, low-cost, fix before the paper:** cached and cold runs differ by 75 of ~198 800 features.
+The pipeline is therefore not run-to-run deterministic and **the cache is not transparent** — a
+cache that changes results is a different object from one that skips work. This holes the
+reproducibility claim that the pinned manifest exists to make. Stitch ordering is the suspect;
+likely an unsorted set or dict iteration.
+
+---
+
+### Phase 9 — Multi-city validation — NEXT
+
+**Everything known about lczkit's accuracy comes from one city.** 40.9% against a 53.2% ceiling on
+Berlin may be typical, fortunate or unfortunate, and this project's history is of
+single-measurement conclusions turning out to be artefacts. The economics have inverted: a full
+city runs in ~8–9 minutes and **So2Sat's 42 cities are already on local disk** at
+`$DATA_DIR/input/So2Sat-LCZ42/v4/cities/`. Ten cities is an afternoon.
+
+Run ≥10 So2Sat cities end to end. For each, report: per-city ceiling (`lcz_v3` vs labels), lczkit
+agreement vs labels, built-class agreement separately, both confusion axes, and
+`height_tier_fractions`.
+
+This resolves three open questions in one pass:
+
+1. **A vs B.** Deferred twice because the lead lived in one class of one city. Unit definition is
+   55.2% of Berlin's disagreement — the largest available lever. Decide it here.
+2. **Generalisation.** One number becomes a distribution, which is what the paper needs regardless.
+3. **The founding premise.** The height cascade was built for cities where OSM heights fail and has
+   never run outside Europe. **Include São Paulo and at least one South/Southeast Asian city.**
+   `height_tier_fractions` there is the first real test of the argument this package was started to
+   make.
+
+**Do this before SVF.** SVF is weeks and answers one question; this is a day and answers three —
+including whether SVF is the right next lever at all. If the residual is compactness-dominated
+across cities, unit definition matters more than a fourth metric dimension.
+
+*Acceptance:* a per-city table of the metrics above for ≥10 cities including ≥2 outside Europe; an
+A/B recommendation with multi-city evidence; a stated recommendation for the next accuracy lever
+based on which confusion axis dominates across cities.
+
+---
+
 ### Phase 7 — Static map site (~5 days, post-MVP)
 
 Build **after** the MVP is complete. The deliverable is a self-contained, archivable directory
@@ -908,6 +960,11 @@ reconcile silently.** That flagging behaviour is working; keep it.
 | Per-seam stitching | Built, measured at the extent it was designed for, **reverted**. Global stitch is 17.4 s not 6h50m; per-seam was slower and less accurate. Premise was an unmeasured inference. | 8 |
 | 6h50m stall attributed to `_stitch` | Wrong by inference-from-adjacency. Real cause was `resolve_buildings_on_streets` intersecting every footprint against one unioned road geometry, ~75 h extrapolated. Index-bounding is exact: 39.3× faster, 0.0 m² symmetric difference. | 8 |
 | `forkserver` child re-executes the parent entry point | Like spawn. Hide `__main__`'s `__file__` and `__spec__` for the life of the pool. | 8 |
+| Pooled threshold at 891 km² | **Adoption confirmed.** 10 of 172 181 cells (0.0058%), four-fold below the 256 km² rate. Whole-network cost measured at 10h39m against ~70 s. | 8 |
+| `clean_vectors` at 4 469 s | **Outlier, not regression.** Two cold runs over the same extent gave 456 s and 551 s, bracketing the 585.6 s benchmark. Overlapped a 10-hour single-core job on a shared node — plausible cause, recorded as coincidence in time rather than measurement. | 8 |
+| Feature-count gap of 1.7% | **Wrong baseline.** 195 508 predates this phase's road-rule and threshold fixes. Post-fix runs give 198 698 / 198 804 / 198 879 — a 0.04% gap. | 8 |
+| Cached and cold runs differ by 75 features | **Open.** The pipeline is not run-to-run deterministic and the cache is not transparent, which holes the manifest's reproducibility claim. Fix before the paper. Stitch ordering; suspect unsorted set or dict iteration. | 8 |
+| Power-law extrapolation of runtime | Ran 24% optimistic (8.6 h projected, 10h39m measured). Treat such fits as lower bounds when deciding feasibility. | 8 |
 
 ---
 
