@@ -203,4 +203,45 @@ placing a source product is the user's call, not the script's.
 
 ## 6. Results
 
-*(pending — the sweep is running)*
+The sixteen-city sweep runs at roughly 21 minutes per city. What follows is the first city, which
+already carries a result worth recording on its own.
+
+### 6.1 Berlin at 30 km does not look like Berlin at 9 km²
+
+| | 9 km² fixture | 30 km window |
+|---|---:|---:|
+| labelled cells | 432 | **9 627** |
+| ceiling — `lcz_v3` vs So2Sat labels | 53.2% | **75.2%** |
+| lczkit arm A vs labels | 40.9% | 35.3% |
+| arm B (enclosures) vs labels | 45.4% | **31.5%** |
+| arm A, built classes only | — | 22.8% |
+| arm A as a share of the ceiling | 77% | **47%** |
+
+Two things follow, both provisional on one city until the sweep lands.
+
+**The 53.2% ceiling was a small-sample artefact.** On 9 627 cells rather than 432, `lcz_v3` reaches
+**75.2%** against the same labels, in the same city, through the same code path. The "lczkit is at
+77% of the comparator" framing recorded at the end of Phase 6.7 does not survive the larger sample:
+it is 47% here. That is a worse position than the MVP close-out claimed, and it is the more
+trustworthy number — 432 cells carrying two classes was never enough to place a ceiling.
+
+**Arm B's lead reverses.** Enclosures led Berlin by +4.5 points on the fixture and trail by **−3.8**
+here (−0.4 on built classes alone). This is the third time the A/B comparison has changed sign when
+the instrument changed, which is the substantive argument for not deciding it on one city — and the
+reason the decision waits for the full sweep rather than being taken now in the other direction.
+
+**Height provenance, Berlin:** 55.7% Overture `height`, 24.0% `num_floors`, 20.3% unresolved.
+
+### 6.2 On reading the confusion axes at this scale
+
+Berlin's axes come out near-even — height 11.9%, compactness 12.5% — against 17.0% and 55.2% on the
+fixture. That is not a contradiction and must not be read as one. The fixture carried two classes,
+so almost every disagreement it could express *was* on one of the two axes. The 30 km window carries
+fifteen, and most disagreement is now off both axes entirely. Axis shares at the two scales are
+different quantities, and only the multi-city figures are comparable with each other.
+
+### 6.3 Remaining
+
+Fifteen cities, including every non-European one. `height_tier_fractions` outside Europe — the
+measurement this phase exists to make — is in that remainder, and Berlin's 20.3% unresolved is a
+best case rather than a representative one.
