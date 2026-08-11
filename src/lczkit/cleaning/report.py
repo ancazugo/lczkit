@@ -19,7 +19,21 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-Stage = Literal["buildings", "buildings_area", "buildings_topo", "streets", "land_use", "topology"]
+Stage = Literal[
+    "ingestion",
+    "buildings",
+    "buildings_area",
+    "buildings_topo",
+    "streets",
+    "land_use",
+    "topology",
+]
+"""The pipeline stages a step can belong to.
+
+`"ingestion"` covers repairs made to raw source data before any layer-specific cleaning starts —
+at present only the clipping of features that have no finite representation in the study area's
+UTM zone. It spans every layer at once, which is why it is not any one of the others.
+"""
 
 
 class CleaningStep(BaseModel):

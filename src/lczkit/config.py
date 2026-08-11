@@ -157,16 +157,106 @@ class ArealTierConfig(BaseModel):
 def _default_areal_tiers() -> list[ArealTierConfig]:
     """CLAUDE.md's tiers 2, 3 and 4, in cascade order, all inert until a COG is placed.
 
-    `source_dir_name` follows CLAUDE.md's `input/` diagram. Note that none of these three
-    directories exists on the system this was developed against — `input/GHS/` is present but
-    holds GHS-SMOD and GHS-UCDB, not GHS-BUILT-H — so expect to override the name as
-    `OvertureConfig.source_dir_name` already does for `Overture_Maps`.
+    `source_dir_name` follows CLAUDE.md's `input/` diagram. `GHSL` is deliberately not the
+    `input/GHS/` already on this system: that directory holds GHS-SMOD and GHS-UCDB for other
+    projects, and a new sibling costs nothing while writing into a shared directory risks
+    something.
+
+    The per-product raster parameters below are read from each product's own documentation —
+    see `HeightProductsConfig` — not inferred from the files. `filename` stays `None`, because a
+    tier's file is resolved per study area by `lczkit.sources.height_products` and a filename
+    baked in here would be a filename for one city.
     """
     return [
-        ArealTierConfig(name="gob25d", source_dir_name="GOB25D"),
-        ArealTierConfig(name="wsf3d", source_dir_name="WSF3D"),
-        ArealTierConfig(name="ghsl", source_dir_name="GHSL"),
+        ArealTierConfig(name="gob25d", source_dir_name="GOB25D", scale=1.0, min_height_m=0.0),
+        ArealTierConfig(
+            name="wsf3d", source_dir_name="WSF3D", scale=0.1, nodata=-32767.0, min_height_m=0.0
+        ),
+        ArealTierConfig(
+            name="ghsl", source_dir_name="GHSL", scale=1.0, nodata=255.0, min_height_m=0.0
+        ),
     ]
+
+
+class Wsf3dConfig(BaseModel):
+    """Tier 3 — WSF-3D V02 building height (DLR, TanDEM-X derived), CC-BY-4.0.
+
+    Parameters from DLR's own `README_BuildingHeight.txt`: 2.8 arcsec (~90 m at the equator),
+    "provided in meter with a gain factor of 0.1 for storage optimization (Int16)", nodata
+    -32767. The gain is why the tier carries `scale=0.1`; reading it as metres would report a
+    ten-storey block as a kerbstone.
+    """
+
+    tier_name: str = "wsf3d"
+    source_dir_name: str = "WSF3D"
+    version: str = "V02"
+    filename: str = "WSF3D_V02_BuildingHeight.tif"
+    url: str = "https://download.geoservice.dlr.de/WSF3D/files/global/WSF3D_V02_BuildingHeight.tif"
+    """The global product, a tiled GeoTIFF with overviews — read by window, never clipped."""
+
+
+class GhslProductConfig(BaseModel):
+    """Tier 4 — GHS-BUILT-H ANBH R2023A (JRC), free reuse with attribution.
+
+    ANBH, not the AGBH published beside it: the GHSL Data Package 2023 (p. 26) defines
+    `ANBH = BUVOL / BUSURF`, building volume over *built-up* surface, so it is the mean height of
+    the built fabric rather than a height averaged over open ground. Float32 metres, nodata 255,
+    100 m World Mollweide (p. 36).
+    """
+
+    tier_name: str = "ghsl"
+    source_dir_name: str = "GHSL"
+    release: str = "R2023A"
+    epoch: str = "E2018"
+    product: str = "ANBH"
+    crs: str = "ESRI:54009"
+    tile_template: str = "GHS_BUILT_H_ANBH_E2018_GLOBE_R2023A_54009_100_V1_0_R{row}_C{column}"
+    url_template: str = (
+        "https://jeodpp.jrc.ec.europa.eu/ftp/jrc-opendata/GHSL/GHS_BUILT_H_GLOBE_R2023A/"
+        "GHS_BUILT_H_ANBH_E2018_GLOBE_R2023A_54009_100/V1-0/tiles/{name}.zip"
+    )
+    citation: str = "Pesaresi, M. & Politis, P. (2023), GHS-BUILT-H R2023A, JRC"
+
+
+class OpenBuildings25dConfig(BaseModel):
+    """Tier 2 — Google Open Buildings 2.5D Temporal v1, CC-BY-4.0, via Earth Engine.
+
+    The highest-value tier for exactly the regions where tier 1 fails, and the only one with no
+    public bucket behind it. `building_height` is metres above terrain in `[0, 100]` at an
+    effective 4 m resolution, annual 2016-2023, over Africa, South and South-East Asia, Latin
+    America and the Caribbean.
+
+    The two request caps are Earth Engine's, and they are here rather than in code because they
+    are a property of the service, not of this package — when they move, this moves.
+    """
+
+    tier_name: str = "gob25d"
+    source_dir_name: str = "GOB25D"
+    collection: str = "GOOGLE/Research/open-buildings-temporal/v1"
+    band: str = "building_height"
+    year: int = 2023
+    """Latest annual epoch. Pinned rather than "latest" for the same reason the Overture release
+    is: a run that silently changes epoch is a run nobody can reproduce."""
+
+    scale_m: float = 4.0
+    """The product's effective resolution. Requesting the underlying 0.5 m grid would multiply
+    the payload sixty-four-fold for detail the model does not carry."""
+
+    max_pixels_per_request: int = 50_331_648
+    max_bytes_per_request: int = 33_554_432
+
+
+class HeightProductsConfig(BaseModel):
+    """Where the areal height products come from, pinned for the manifest.
+
+    Separate from `HeightConfig`, which says how a tier *reads* a raster. This says how the
+    raster gets onto disk — release strings, URLs, the Earth Engine collection and epoch. Both
+    are serialised into the run manifest; only together do they make a cascade reproducible.
+    """
+
+    wsf3d: Wsf3dConfig = Field(default_factory=Wsf3dConfig)
+    ghsl: GhslProductConfig = Field(default_factory=GhslProductConfig)
+    gob25d: OpenBuildings25dConfig = Field(default_factory=OpenBuildings25dConfig)
 
 
 class HeightConfig(BaseModel):
@@ -915,6 +1005,7 @@ class Settings(BaseModel):
     overture: OvertureConfig = Field(default_factory=OvertureConfig)
     cleaning: CleaningConfig = Field(default_factory=CleaningConfig)
     heights: HeightConfig = Field(default_factory=HeightConfig)
+    height_products: HeightProductsConfig = Field(default_factory=HeightProductsConfig)
     land_cover: LandCoverConfig = Field(default_factory=LandCoverConfig)
     ucp: UcpConfig = Field(default_factory=UcpConfig)
     classification: ClassificationConfig = Field(default_factory=ClassificationConfig)

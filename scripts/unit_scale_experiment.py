@@ -47,7 +47,7 @@ from __future__ import annotations
 import json
 import sys
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
@@ -73,7 +73,7 @@ from lczkit.heights.completeness import FRACTION_PREFIX, height_metrics
 from lczkit.heights.inherit import inherit_heights
 from lczkit.heights.tiers import build_cascade
 from lczkit.landcover.local import LocalRasterSource
-from lczkit.protocols import BBox, VectorSource
+from lczkit.protocols import BBox, HeightSource, VectorSource
 from lczkit.ucp import compute_parameters
 from lczkit.units.aggregate import aggregate
 from lczkit.units.enclosures import EnclosureUnits, assemble_barriers
@@ -223,12 +223,29 @@ def raw_footprints(source: VectorSource, bbox: BBox, crs: Any) -> gpd.GeoDataFra
     return frame[frame.geom_type == "Polygon"].reset_index(drop=True)
 
 
-def build_arms(
+@dataclass(frozen=True)
+class CleanedFixture:
+    """One fixture's vectors, cleaned once, ready for any number of height cascades.
+
+    Cleaning is by far the most expensive stage and is entirely independent of which height
+    products are configured, so Phase 10 pays for it once and scores three cascades against it.
+    That is not only cheaper: it removes the confound. A before/after comparison in which the two
+    sides cleaned separately would be measuring the cascade *and* any run-to-run difference in
+    the vectors underneath it, and telling those apart afterwards is not possible.
+    """
+
+    source: VectorSource
+    cleaned: CleanedVectors
+    raw: gpd.GeoDataFrame
+    """Untouched Overture footprints — arm C's control, filled by whichever cascade is running."""
+
+
+def clean_for_arms(
     fixture: Fixture,
     cleaning: CleaningConfig | None = None,
     cache_dir: Path | None = None,
-) -> tuple[list[Arm], CleanedVectors, dict[str, Any], pd.Series]:
-    """Run all three arms on one fixture, returning them with the cleaning provenance.
+) -> CleanedFixture:
+    """Clean one fixture's vectors, without touching heights, units or classification.
 
     `cleaning` defaults to this module's fixture-scale config, which has **no tiling**: the
     committed fixtures are 9 km2 and the whole-extent path is what every figure recorded before
@@ -238,11 +255,35 @@ def build_arms(
     """
     source = fixture.vectors()
     cleaned = clean_vectors(source, fixture.bbox, cleaning or CLEANING, cache_dir=cache_dir)
-    tiers = build_cascade(HEIGHTS, lambda name: FIXTURES / "landcover")
+    return CleanedFixture(
+        source=source,
+        cleaned=cleaned,
+        raw=raw_footprints(source, fixture.bbox, cleaned.crs),
+    )
+
+
+def build_arms(
+    fixture: Fixture,
+    cleaning: CleaningConfig | None = None,
+    cache_dir: Path | None = None,
+    tiers: Sequence[HeightSource] | None = None,
+    prepared: CleanedFixture | None = None,
+) -> tuple[list[Arm], CleanedVectors, dict[str, Any], pd.Series]:
+    """Run all three arms on one fixture, returning them with the cleaning provenance.
+
+    `tiers` defaults to the cascade `HEIGHTS` configures against the committed fixture rasters —
+    tier 1 alone, in practice, since no areal product sits under `tests/fixtures/`. Phase 10
+    passes a real cascade instead. `prepared` skips the cleaning this would otherwise do, so
+    several cascades can be scored against one cleaning; pass the result of `clean_for_arms`.
+    """
+    ready = prepared or clean_for_arms(fixture, cleaning, cache_dir)
+    source, cleaned = ready.source, ready.cleaned
+    if tiers is None:
+        tiers = build_cascade(HEIGHTS, lambda name: FIXTURES / "landcover")
 
     cleaned_buildings, height_report = fill_heights(cleaned.buildings_area, tiers)
     topo_buildings = inherit_heights(cleaned.buildings_topo, cleaned_buildings)
-    raw_buildings, _ = fill_heights(raw_footprints(source, fixture.bbox, cleaned.crs), tiers)
+    raw_buildings, _ = fill_heights(ready.raw, tiers)
 
     grid = GridUnits().generate(fixture.bbox)
     rail = source.rail(fixture.bbox).to_crs(cleaned.crs)

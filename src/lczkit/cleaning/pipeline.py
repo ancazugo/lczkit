@@ -11,6 +11,9 @@ from importlib.metadata import version
 from pathlib import Path
 
 import geopandas as gpd
+import numpy as np
+import pandas as pd
+import shapely
 from pyproj import CRS
 
 from lczkit.cleaning.buildings import clean_buildings
@@ -47,17 +50,78 @@ def tile_fingerprint(config: CleaningConfig) -> str:
 
 def reproject_to_local_utm(
     bbox: BBox, **layers: gpd.GeoDataFrame
-) -> tuple[CRS, dict[str, gpd.GeoDataFrame]]:
-    """Compute one UTM CRS from `bbox` and reproject every layer in `layers` into it.
+) -> tuple[CRS, dict[str, gpd.GeoDataFrame], dict[str, int]]:
+    """Compute one UTM CRS from `bbox`, reproject every layer into it, and guarantee finiteness.
 
     Computed once from the bbox itself, not from any individual layer — `estimate_utm_crs()`
     can differ between layers covering nearly the same area (e.g. near a UTM zone boundary),
     which would silently break cross-layer topology if each layer picked its own zone. Takes
     layers by keyword and returns them by name so that adding a layer cannot quietly reorder
     an unpacked tuple at a call site.
+
+    The third return value counts, per layer, the features that had to be clipped to the study
+    extent to survive the projection at all — see `_repair_unprojectable`. Zero for every city
+    measured before Phase 10.
     """
     target = local_utm_crs(bbox)
-    return target, {name: layer.to_crs(target) for name, layer in layers.items()}
+    projected: dict[str, gpd.GeoDataFrame] = {}
+    repaired: dict[str, int] = {}
+    for name, layer in layers.items():
+        frame, count = _repair_unprojectable(layer.to_crs(target), layer, bbox, target)
+        projected[name] = frame
+        repaired[name] = count
+    return target, projected, repaired
+
+
+def _repair_unprojectable(
+    projected: gpd.GeoDataFrame, source: gpd.GeoDataFrame, bbox: BBox, target: CRS
+) -> tuple[gpd.GeoDataFrame, int]:
+    """Clip any feature whose projection is non-finite back to the study extent, and reproject.
+
+    A UTM zone is 6 degrees wide; a geometry spanning the globe has no finite representation in
+    one. Overture's `base/land_use` carries such features — two marine `species_management_area`
+    polygons spanning the full 360 degrees of longitude intersect the Hong Kong window, and
+    projecting them into UTM 50N produced 663 non-finite coordinates. The first thing to touch
+    one was `make_valid()`, which failed with `CGAlgorithmsDD::orientationIndex encountered
+    NaN/Inf numbers` and took the whole city down.
+
+    Clipping rather than dropping: the part of such a feature inside the study area is real, and
+    it is the only part any statistic here uses. A feature that is still unprojectable after
+    clipping is dropped, because nothing else can be done with it.
+
+    The test is exact and carries no threshold — a coordinate is finite or it is not. Anything
+    keyed on "how many degrees is too many" would be a guess about projections rather than a
+    measurement of them.
+    """
+    if projected.empty:
+        return projected, 0
+    coords = shapely.get_coordinates(projected.geometry.values)
+    if np.isfinite(coords).all():
+        return projected, 0
+
+    finite = np.fromiter(
+        (bool(np.isfinite(shapely.get_coordinates(geom)).all()) for geom in projected.geometry),
+        dtype=bool,
+        count=len(projected),
+    )
+    window = shapely.box(*bbox)
+    clipped = source.loc[~finite].copy()
+    clipped["geometry"] = shapely.intersection(clipped.geometry.values, window)
+    clipped = clipped.to_crs(target)
+
+    still_bad = np.fromiter(
+        (
+            geom is None
+            or geom.is_empty
+            or not bool(np.isfinite(shapely.get_coordinates(geom)).all())
+            for geom in clipped.geometry
+        ),
+        dtype=bool,
+        count=len(clipped),
+    )
+    repaired = pd.concat([projected.loc[finite], clipped.loc[~still_bad]])
+    out = gpd.GeoDataFrame(repaired.loc[projected.index.intersection(repaired.index)], crs=target)
+    return out, int((~finite).sum())
 
 
 @dataclass(frozen=True)
@@ -147,20 +211,33 @@ def clean_vectors(
     road_overlap_limit = _require(config.building_road_overlap_limit, "building_road_overlap_limit")
 
     raw_waterlines, raw_waterbodies = source.water(bbox)
-    crs, layers = reproject_to_local_utm(
-        bbox,
-        buildings=source.buildings(bbox),
-        streets=source.streets(bbox),
-        waterlines=raw_waterlines,
-        waterbodies=raw_waterbodies,
-        land_use=source.land_use(bbox),
-    )
+    raw = {
+        "buildings": source.buildings(bbox),
+        "streets": source.streets(bbox),
+        "waterlines": raw_waterlines,
+        "waterbodies": raw_waterbodies,
+        "land_use": source.land_use(bbox),
+    }
+    crs, layers, repaired = reproject_to_local_utm(bbox, **raw)
     buildings = layers["buildings"]
     streets = layers["streets"]
     waterlines = layers["waterlines"]
     waterbodies = layers["waterbodies"]
 
     steps: list[CleaningStep] = []
+    if any(repaired.values()):
+        # Recorded even though it is almost always zero: a feature clipped to the study extent
+        # has been changed, and a change nobody can see in the report is the failure mode this
+        # phase's own history keeps demonstrating.
+        steps.append(
+            CleaningStep(
+                stage="ingestion",
+                operation="clip_unprojectable_features",
+                n_in=sum(len(frame) for frame in raw.values()),
+                n_out=sum(len(frame) for frame in layers.values()),
+                detail={name: count for name, count in repaired.items() if count},
+            )
+        )
 
     layers_out, building_steps = clean_buildings(
         buildings,

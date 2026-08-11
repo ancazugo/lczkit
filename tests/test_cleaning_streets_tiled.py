@@ -148,7 +148,7 @@ def test_a_single_tile_reproduces_the_whole_extent_path(
     fixture_vector_source: FixtureVectorSource,
 ) -> None:
     """Real Berlin topology, one tile big enough to hold it: the machinery must add no drift."""
-    _, layers = reproject_to_local_utm(
+    _, layers, _ = reproject_to_local_utm(
         SMALL_BBOX,
         buildings=fixture_vector_source.buildings(SMALL_BBOX),
         streets=fixture_vector_source.streets(SMALL_BBOX),
@@ -174,7 +174,7 @@ def test_the_tiled_path_reports_what_it_did(
     A run that silently tiled differently from another run is a run whose numbers cannot be
     compared, and Phase 1's report is where that has to be visible.
     """
-    _, layers = reproject_to_local_utm(
+    _, layers, _ = reproject_to_local_utm(
         SMALL_BBOX,
         buildings=fixture_vector_source.buildings(SMALL_BBOX),
         streets=fixture_vector_source.streets(SMALL_BBOX),
@@ -500,7 +500,7 @@ def test_threshold_from_index_reproduces_face_artifacts(
     the distribution can be assembled tile by tile. Restating it invites drift, and this is the
     guard: exact equality, not approximate, on the same distribution.
     """
-    _, layers = reproject_to_local_utm(
+    _, layers, _ = reproject_to_local_utm(
         FIXTURE_BBOX, streets=fixture_vector_source.streets(FIXTURE_BBOX)
     )
     faces = neatnet.FaceArtifacts(_preprocess(layers["streets"]))
@@ -523,7 +523,7 @@ def test_pooled_threshold_matches_the_whole_network_on_the_fixture(
     only worth having if it gets the same answer, so at fixture scale, with tiles large enough
     that no face is cut by a window boundary, "the same answer" means exactly equal.
     """
-    _, layers = reproject_to_local_utm(
+    _, layers, _ = reproject_to_local_utm(
         FIXTURE_BBOX,
         streets=fixture_vector_source.streets(FIXTURE_BBOX),
     )
@@ -550,7 +550,7 @@ def test_pooled_threshold_reports_the_faces_it_had_to_drop(
     it is dropped. CLAUDE.md calls that error unbounded until measured; these are the fields that
     measure it, and they have to travel into the cleaning report rather than stay internal.
     """
-    _, layers = reproject_to_local_utm(
+    _, layers, _ = reproject_to_local_utm(
         SMALL_BBOX,
         streets=fixture_vector_source.streets(SMALL_BBOX),
     )

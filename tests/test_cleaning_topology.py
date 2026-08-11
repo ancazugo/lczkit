@@ -8,12 +8,15 @@ distinction it now has to make: a block fronting a street is kept, a shed standi
 from __future__ import annotations
 
 import geopandas as gpd
+import numpy as np
 import pytest
+import shapely
 from conftest import FIXTURE_BBOX, FixtureVectorSource
 from shapely.geometry import LineString, box
 
 from lczkit.cleaning.buildings import clean_buildings
 from lczkit.cleaning.geometry import largest_part
+from lczkit.cleaning.land_use import clean_land_use
 from lczkit.cleaning.pipeline import reproject_to_local_utm
 from lczkit.cleaning.topology import (
     apply_cross_layer_topology,
@@ -197,7 +200,7 @@ def test_the_road_rule_is_bounded_by_the_index_not_by_the_city(
     difference. This asserts that exactness on real Berlin fabric, where the fixture's hand-built
     geometries above could not — they have one street each.
     """
-    _, layers = reproject_to_local_utm(
+    _, layers, _ = reproject_to_local_utm(
         FIXTURE_BBOX,
         buildings=fixture_vector_source.buildings(FIXTURE_BBOX),
         streets=fixture_vector_source.streets(FIXTURE_BBOX),
@@ -240,3 +243,64 @@ def test_the_road_rule_is_bounded_by_the_index_not_by_the_city(
     # Total area to ten significant figures: the two differ only by floating-point noise in the
     # order GEOS unions the buffers, not by which ground each considers roadway.
     assert kept.geometry.area.sum() == pytest.approx(expected.geometry.area.sum(), rel=1e-9)
+
+
+def test_a_globe_spanning_feature_is_clipped_rather_than_taking_the_city_down() -> None:
+    """Overture's `base/land_use` carries marine protected areas spanning all 360 degrees.
+
+    Two `species_management_area` polygons with bounds -180..180 intersect the Hong Kong study
+    window. A UTM zone is 6 degrees wide, so projecting them into UTM 50N produced 663 non-finite
+    coordinates, and the first thing to touch one — `make_valid()` in `clean_land_use` — failed
+    with `CGAlgorithmsDD::orientationIndex encountered NaN/Inf numbers`, taking the whole city
+    out of the Phase 9 sweep. A city that crashes is worse than a city that scores badly.
+
+    The clipped remainder is the part inside the study area, which is the only part any statistic
+    here uses.
+    """
+    bbox = (114.0, 22.2, 114.1, 22.3)
+    ordinary = shapely.box(114.02, 22.22, 114.04, 22.24)
+    # Vertices taken from where the real feature actually diverges. Transverse Mercator runs to
+    # infinity 90 degrees from its central meridian, worst at the equator — UTM 50N is centred on
+    # 117E, and the failing coordinates sit near 158W at 3S. A polygon merely spanning -180..180
+    # at Hong Kong's own latitude projects perfectly finitely, which is why the first version of
+    # this test passed against the broken code.
+    ocean_wide = shapely.Polygon(
+        [
+            (114.02, 22.22),
+            (114.04, 22.24),
+            (170.0, 22.0),
+            (-158.0, -3.0),
+            (-160.0, 0.5),
+            (-177.0, 10.0),
+        ]
+    )
+    land_use = gpd.GeoDataFrame(
+        {"subtype": ["residential", "protected"]},
+        geometry=[ordinary, ocean_wide],
+        crs="EPSG:4326",
+    )
+
+    _, layers, repaired = reproject_to_local_utm(bbox, land_use=land_use)
+    projected = layers["land_use"]
+
+    assert repaired["land_use"] == 1
+    assert len(projected) == 2, "the clipped feature is kept, not dropped"
+    coords = shapely.get_coordinates(projected.geometry.values)
+    assert np.isfinite(coords).all(), "nothing non-finite may reach make_valid()"
+    # And the operation the crash happened in now completes.
+    clean_land_use(projected)
+
+
+def test_an_ordinary_layer_is_not_touched_by_the_repair() -> None:
+    """Zero for every city measured before Phase 10, and it must stay that way — the repair is a
+    guard against unrepresentable geometry, not a general clip to the study extent."""
+    bbox = (114.0, 22.2, 114.1, 22.3)
+    outside = shapely.box(114.15, 22.35, 114.16, 22.36)
+    land_use = gpd.GeoDataFrame({"subtype": ["residential"]}, geometry=[outside], crs="EPSG:4326")
+
+    _, layers, repaired = reproject_to_local_utm(bbox, land_use=land_use)
+
+    assert repaired["land_use"] == 0
+    assert layers["land_use"].geometry.iloc[0].bounds == pytest.approx(
+        gpd.GeoSeries([outside], crs="EPSG:4326").to_crs(layers["land_use"].crs).total_bounds
+    )

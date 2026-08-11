@@ -117,11 +117,12 @@ def write_height_raster(
 ) -> Path:
     """Write a single-band float32 GeoTIFF for the height-cascade tests, returning `path`.
 
-    Height rasters are synthesised rather than committed. Unlike the Overture fixture there is
-    no real product to clip — none of the tier 2-4 datasets (Google Open Buildings 2.5D, WSF-3D,
-    GHS-BUILT-H) is present on this system — so any committed file would be invented data in
-    binary form, able to drift silently from the code that made it. Generating it here keeps the
-    values readable in the test that asserts on them, and still exercises the real rasterio read.
+    Height rasters are synthesised rather than committed. The tier 2-4 products are now placed
+    under `DATA_DIR` by `lczkit.sources.height_products` (Phase 10), but CI has no `DATA_DIR` and
+    the smallest of them is a 1000 km tile, so clipping one into `tests/fixtures/` is not an
+    option. Generating it here keeps the values readable in the test that asserts on them, and
+    still exercises the real rasterio read. What the real products pin instead is their *scale
+    and nodata*, asserted against their documentation in `tests/test_height_products.py`.
 
     `origin` is the *top-left* corner, matching `rasterio.transform.from_origin`.
     """

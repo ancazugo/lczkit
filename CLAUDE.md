@@ -613,12 +613,20 @@ trails Rotterdam. Revisit only with metropolitan-scale evidence.
 
 ## MVP COMPLETE — baseline recorded
 
-**Berlin 40.9% against So2Sat ground truth, ceiling 53.2%.** 77% of the comparator's performance,
-outperforming it on LCZ 5. This is the baseline. **Stop optimising agreement.**
+**Berlin 40.9% against So2Sat ground truth.** WARNING: **the 53.2% ceiling this was originally
+judged against was a small-sample artefact of 432 cells. The real Berlin ceiling is 75.2% on 9 627
+cells** (Phase 9). So 40.9% is ~54% of ceiling, not 77%. **Both sides need re-measuring on the full
+cell set** — the lczkit figure came from the same 432 cells.
 
-The remaining 12.3 points are no longer a mystery to be investigated: SVF is weight 4 in a metric
-currently running on three dimensions, and the compactness axis points at unit definition. Both
-are scoped deferred work. Do not open further diagnostic phases against the 9 km² fixture.
+The decision to stop optimising agreement stands, but on the correct grounds: the remaining causes
+are scoped work rather than mysteries. It was **not** because the package was near its ceiling.
+
+**Never report "% of ceiling" as a metric.** Vancouver scores 41.8% against a 36.7% ceiling — 114%.
+The comparator is another estimator, not an upper bound, and lczkit beats it in places. Report raw
+agreement and ceiling side by side, or their difference. Ceilings range 22.8% (Mumbai) to 83.2%
+(Rio), so raw agreement is not comparable across cities without its ceiling beside it.
+
+Do not open further diagnostic phases against the 9 km² fixture.
 
 ---
 
@@ -747,38 +755,76 @@ The pipeline is therefore not run-to-run deterministic and **the cache is not tr
 cache that changes results is a different object from one that skips work. This holes the
 reproducibility claim that the pinned manifest exists to make. Stitch ordering is the suspect;
 likely an unsorted set or dict iteration.
+### Phase 9 — Multi-city validation — CONCLUDED
+
+**The founding premise is confirmed, and it is the binding constraint.**
+
+| | tier-1 height | overall | built-class |
+|---|---|---|---|
+| Europe + N. America (7 cities) | 64.3% | 42.6% | 25.5% |
+| Everywhere else (8 cities) | 9.6% | 21.7% | 5.7% |
+
+Cairo 1%, Nairobi 1%, Islamabad 1%, Mumbai 3%, Cape Town 4%, Jakarta 7% tier-1 coverage — 92–99%
+of building area with no height at all. **corr(tier-1 completeness, built-class agreement) = 0.67.**
+São Paulo is the discriminating case: 48% coverage, agreement sitting with the European cities.
+
+The mechanism, stated precisely: with `Hr` null nearly everywhere the metric runs on building
+surface fraction alone and **the built types stop being separable in principle** — not inaccurate,
+not separable. Cairo: 3.4% overall, 1.3% built.
+
+**The height axis dominates, reversing Phase 6.7.** Median 15.5% versus 2.6% compactness, in 11 of
+15 cities, roughly three to one. corr(tier-1, height-axis share) = −0.44. Phase 6.7's opposite
+finding came from 432 Berlin cells carrying two classes, both mid-rise — a fixture on which the
+height axis was **near-untestable by construction**. Candidate order is now: **areal height tiers →
+unit definition → SVF**.
+
+**A vs B: split verdict, not adopted.** B ahead in 5/15 overall (mean −1.5 pts) but **9/15 on built
+classes (mean +2.4 pts)**. Enclosures approximate an LCZ patch in built fabric and smear the natural
+classes, which are large and heterogeneous (Rio: −13.8 overall, −0.9 built). Overall is what a user
+gets, so not adopting — but "the lead lives in one class of one city" is dead: the built-class
+advantage spans three continents. Revisit after height lands.
+
+Caveats for the paper: Hong Kong failed on a GEOS predicate (`orientationIndex` encountered
+NaN/Inf) — a robustness gap. Windows retain a median 51% of each city's patches, so these are
+**urban cores, not whole cities**.
 
 ---
 
-### Phase 9 — Multi-city validation — NEXT
+### Phase 10 — Height cascade completion — THE PRIORITY
 
-**Everything known about lczkit's accuracy comes from one city.** 40.9% against a 53.2% ceiling on
-Berlin may be typical, fortunate or unfortunate, and this project's history is of
-single-measurement conclusions turning out to be artefacts. The economics have inverted: a full
-city runs in ~8–9 minutes and **So2Sat's 42 cities are already on local disk** at
-`$DATA_DIR/input/So2Sat-LCZ42/v4/cities/`. Ten cities is an afternoon.
+**Phase 3 specified a four-tier cascade. Only tier 1 exists.** GOB 2.5D, WSF-3D and GHS-BUILT-H
+were written into the spec for exactly these regions and never built — deferred, then forgotten
+behind seven phases of Berlin. Phase 9 shows this is the single thing standing between the package
+and working outside Europe.
 
-Run ≥10 So2Sat cities end to end. For each, report: per-city ceiling (`lcz_v3` vs labels), lczkit
-agreement vs labels, built-class agreement separately, both confusion axes, and
-`height_tier_fractions`.
+**Do not build SVF.** It is weight 4 added to a metric that cannot fill its weight-6 dimension
+across most of the world.
 
-This resolves three open questions in one pass:
+Build tiers 2–4 per Phase 3. `zonal_mean` already reprojects to Mollweide; GHS-BUILT-H is ~42 MB
+per tile.
 
-1. **A vs B.** Deferred twice because the lead lived in one class of one city. Unit definition is
-   55.2% of Berlin's disagreement — the largest available lever. Decide it here.
-2. **Generalisation.** One number becomes a distribution, which is what the paper needs regardless.
-3. **The founding premise.** The height cascade was built for cities where OSM heights fail and has
-   never run outside Europe. **Include São Paulo and at least one South/Southeast Asian city.**
-   `height_tier_fractions` there is the first real test of the argument this package was started to
-   make.
+**Pre-register these predictions before building, and test them after:**
 
-**Do this before SVF.** SVF is weeks and answers one question; this is a day and answers three —
-including whether SVF is the right next lever at all. If the residual is compactness-dominated
-across cities, unit definition matters more than a fourth metric dimension.
+1. Filling `Hr` is **necessary but may not be sufficient**. Phase 3 already warned that areal
+   products assign a neighbourhood mean and cannot resolve height bands *within* a heterogeneous
+   unit — which is the axis now dominating. Fine-resolution GOB 2.5D should discriminate;
+   GHS-BUILT-H should not, within a unit.
+2. **GHS-BUILT-H at 100 m matches the 100 m grid exactly and is coarser than most enclosures.** If
+   so it favours the grid, and is a fourth input to the A/B question.
 
-*Acceptance:* a per-city table of the metrics above for ≥10 cities including ≥2 outside Europe; an
-A/B recommendation with multi-city evidence; a stated recommendation for the next accuracy lever
-based on which confusion axis dominates across cities.
+Then **re-run the Phase 9 harness before/after on the eight low-coverage cities.** Same harness,
+pre-registered hypothesis, clean test. Report built-class agreement change against tier-coverage
+change per city.
+
+Also in scope, both cheap and both blocking the paper:
+- **Hong Kong's GEOS `orientationIndex` NaN/Inf failure.** A city that crashes is worse than a city
+  that scores badly.
+- **Re-measure Berlin on the full 9 627 cells**, both lczkit and ceiling. The headline baseline
+  currently rests on 432.
+
+*Acceptance:* tiers 2–4 implemented with provenance; before/after built-class agreement for the
+eight low-coverage cities; the two predictions above measured and stated as confirmed or refuted;
+Hong Kong completes; Berlin re-measured at full sample.
 
 ---
 
@@ -965,6 +1011,12 @@ reconcile silently.** That flagging behaviour is working; keep it.
 | Feature-count gap of 1.7% | **Wrong baseline.** 195 508 predates this phase's road-rule and threshold fixes. Post-fix runs give 198 698 / 198 804 / 198 879 — a 0.04% gap. | 8 |
 | Cached and cold runs differ by 75 features | **Open.** The pipeline is not run-to-run deterministic and the cache is not transparent, which holes the manifest's reproducibility claim. Fix before the paper. Stitch ordering; suspect unsorted set or dict iteration. | 8 |
 | Power-law extrapolation of runtime | Ran 24% optimistic (8.6 h projected, 10h39m measured). Treat such fits as lower bounds when deciding feasibility. | 8 |
+| Berlin's 53.2% ceiling | **Small-sample artefact of 432 cells. Real ceiling is 75.2% on 9 627.** The MVP-complete framing rested on it. Re-measure both lczkit and ceiling at full sample. | 6.7, 9 |
+| "% of ceiling" as a metric | **Broken.** Vancouver: 41.8% against a 36.7% ceiling = 114%. The comparator is another estimator, not a bound. Report raw agreement and ceiling side by side. | 9 |
+| Phase 6.7's axis order (compactness → SVF → height) | **Reversed by Phase 9.** It came from 432 Berlin cells carrying two classes, both mid-rise, where the height axis was near-untestable by construction. Across 15 cities height dominates 15.5% vs 2.6%. | 6.7, 9 |
+| SVF as the next accuracy lever | **Dropped.** Weight 4 added to a metric that cannot fill its weight-6 `Hr` dimension across most of the world. Height tiers first. | 9, 10 |
+| Height cascade tiers 2–4 | **Specified in Phase 3, never built.** Phase 9 shows this is the binding constraint outside Europe. Now Phase 10. | 3, 10 |
+| A vs B | Split verdict: B ahead 9/15 on built classes (+2.4 pts) but 5/15 overall (−1.5). Enclosures smear large heterogeneous natural units. Not adopted; the one-class-one-city objection no longer applies. Revisit after height. | 9 |
 
 ---
 

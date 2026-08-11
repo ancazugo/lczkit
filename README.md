@@ -298,15 +298,24 @@ share stated beside it, agreement stratified by `height_completeness` band, and 
 axes, apart because they are different instruments: the height axis (1↔2↔3, 4↔5↔6) diagnoses the
 height estimate, the compactness axis (1↔4, 2↔5, 3↔6) diagnoses footprint coverage and unit size.
 
-Measured on the Berlin fixture, over the 432 cells carrying both references:
+Measured on metropolitan Berlin, over the **9 627 cells** carrying both references:
 
 | | agreement |
 |---|---:|
-| lczkit, against the labelled polygons | **40.9%** |
-| `lcz_v3`, against the same labelled polygons — **the ceiling** | 53.2% |
-| lczkit, against `lcz_v3` | 24.3% |
+| lczkit, against the labelled polygons | **35.3%** |
+| `lcz_v3`, against the same labelled polygons — **the ceiling** | 75.2% |
 
-All 432 are built cells, so there is no natural cover inflating anything. Rotterdam has **no
+**Do not use the 432-cell figures this table used to carry** — 40.9% against a 53.2% ceiling. Both
+came from the 9 km² fixture, whose labelled cells span two classes and both mid-rise, and the
+ceiling in particular was a small-sample artefact: `lcz_v3` reaches 75.2% on the full cell set, not
+53.2%. [Phase 9](docs/experiments/phase-9-multi-city.md) re-measured both.
+
+**Never quote agreement as a percentage of the ceiling.** Vancouver scores 41.8% against a 36.7%
+ceiling — 114% — because the comparator is another estimator, not an upper bound, and lczkit beats
+it in places. Ceilings across the fifteen cities measured run from 22.8% (Mumbai) to 83.2% (Rio),
+so raw agreement is not comparable between cities without its ceiling beside it.
+
+Rotterdam has **no
 labelled coverage** — So2Sat covers 52 cities and Rotterdam is not one of them — so it stays on
 `lcz_v3` alone at 42.3% over 657 cells, of which 45.4% are natural: its water agrees at 95.5% while
 its 359 built cells sit at 3.1%. That is the figure a built/natural split exists to stop anyone
@@ -327,10 +336,13 @@ compactness 55.2% and height 17.0% against the same reference. Switching referen
 diagnosis once, and widening the extent inverted it back. Neither axis should be treated as
 established until a second city at metropolitan scale says so.
 
-**Enclosure-based computation has not been adopted, and the case for it is now closed.** It led the
-100 m grid by 4.5 points on the 9 km² fixture (45.4% against 40.9%), entirely from LCZ 2. At 144 km²
-on the same city against the same reference it leads on nothing — 40.6% against 40.8% — including
-the compactness axis it was supposed to improve.
+**Enclosure-based computation has not been adopted, but the case for it is not closed.** It led the
+100 m grid by 4.5 points on the 9 km² fixture (45.4% against 40.9%), entirely from LCZ 2, and at
+144 km² on the same city it led on nothing. Across fifteen cities, though, the verdict splits:
+enclosures are ahead overall in 5 of 15 (mean −1.5 points) but ahead **on the built classes in 9 of
+15** (mean +2.4). They approximate an LCZ patch in built fabric and smear the natural classes,
+which are large and heterogeneous. Overall agreement is what a user gets, so the grid stays the
+default — but "the lead lives in one class of one city" no longer holds.
 
 [Phase 8](docs/experiments/phase-8-scaling.md) is what made that measurable, and is the reason the
 fixture stopped being the only evidence.

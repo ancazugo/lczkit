@@ -201,3 +201,48 @@ def test_only_the_city_with_labelled_coverage_declares_ground_truth(script: Modu
     assert by_name["berlin"].ground_truth is not None
     assert by_name["berlin"].ground_truth.is_file()
     assert by_name["rotterdam"].ground_truth is None
+
+
+def test_a_shared_cleaning_gives_the_same_arms_as_cleaning_inline(script: ModuleType) -> None:
+    """`build_arms(prepared=...)` must equal `build_arms()` — the whole before/after rests on it.
+
+    Phase 10 scores three height cascades against one cleaning so that a difference between them
+    is the cascade and nothing else. If reusing a cleaning changed anything at all, every
+    before/after number in that phase would be measuring the refactor as well.
+    """
+    fixture = script.FIXTURE_CITIES[0]
+
+    inline, _, inline_provenance, _ = script.build_arms(fixture)
+    shared_input = script.clean_for_arms(fixture)
+    shared, _, shared_provenance, _ = script.build_arms(fixture, prepared=shared_input)
+
+    assert [arm.name for arm in shared] == [arm.name for arm in inline]
+    for one, other in zip(inline, shared, strict=True):
+        assert one.units.index.equals(other.units.index)
+        pd.testing.assert_series_equal(one.labels, other.labels)
+        pd.testing.assert_frame_equal(one.parameters, other.parameters)
+    assert shared_provenance["building_area_cleaned_m2"] == pytest.approx(
+        inline_provenance["building_area_cleaned_m2"]
+    )
+    assert shared_provenance["buildings_raw"] == inline_provenance["buildings_raw"]
+
+
+def test_a_cascade_passed_in_is_the_one_that_runs(script: ModuleType) -> None:
+    """Passing `tiers` must actually change the recorded provenance, not be quietly ignored.
+
+    The failure this guards against is silent: an ignored `tiers` argument would make all three
+    Phase 10 variants identical, and the phase would report a confident "no effect".
+    """
+    fixture = script.FIXTURE_CITIES[0]
+    prepared = script.clean_for_arms(fixture)
+
+    _, _, default_provenance, _ = script.build_arms(fixture, prepared=prepared)
+    _, _, empty_provenance, _ = script.build_arms(fixture, tiers=[], prepared=prepared)
+
+    assert default_provenance["height_sources"] == [
+        "overture_height",
+        "overture_num_floors",
+        "unresolved",
+    ]
+    assert empty_provenance["height_sources"] == ["unresolved"]
+    assert empty_provenance["height_fill"]["n_resolved"] == 0
