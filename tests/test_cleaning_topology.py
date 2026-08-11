@@ -304,3 +304,31 @@ def test_an_ordinary_layer_is_not_touched_by_the_repair() -> None:
     assert layers["land_use"].geometry.iloc[0].bounds == pytest.approx(
         gpd.GeoSeries([outside], crs="EPSG:4326").to_crs(layers["land_use"].crs).total_bounds
     )
+
+
+def test_the_repair_leaves_row_order_untouched() -> None:
+    """Phase 8 spent a commit making the pipeline run-to-run deterministic by pinning row order.
+
+    A repair that reordered rows — concatenating the clipped features onto the end, say — would
+    reintroduce exactly the defect that cost, and would do it only in cities that trip the repair,
+    which is the hardest kind of non-determinism to find.
+    """
+    bbox = (114.0, 22.2, 114.1, 22.3)
+    ocean_wide = shapely.Polygon(
+        [(114.02, 22.22), (114.04, 22.24), (170.0, 22.0), (-158.0, -3.0), (-177.0, 10.0)]
+    )
+    geometries, names = [], []
+    for i in range(6):
+        if i == 2:
+            geometries.append(ocean_wide)
+            names.append("wide")
+        else:
+            geometries.append(shapely.box(114.01 + i * 0.01, 22.21, 114.015 + i * 0.01, 22.215))
+            names.append(f"ordinary_{i}")
+    land_use = gpd.GeoDataFrame({"name": names}, geometry=geometries, crs="EPSG:4326")
+
+    _, layers, repaired = reproject_to_local_utm(bbox, land_use=land_use)
+
+    assert repaired["land_use"] == 1
+    assert list(layers["land_use"]["name"]) == names
+    assert list(layers["land_use"].index) == list(land_use.index)

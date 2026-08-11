@@ -33,6 +33,7 @@ from __future__ import annotations
 import json
 import sys
 import time
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -177,6 +178,21 @@ def cascade_for(
     return config, placed
 
 
+UNIT_COLUMN = "_unit"
+"""Name given to the joined unit id.
+
+`gpd.sjoin` names the right frame's index column after that index — `unit_id` here, not the
+`index_right` the documentation's examples show, because the units are indexed by `unit_id`.
+Renaming it explicitly is what stops that detail from being rediscovered.
+"""
+
+
+def _join_to_units(buildings: gpd.GeoDataFrame, grid: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Each building tagged with the unit it falls in, under a name this module controls."""
+    units = grid[["geometry"]].reset_index().rename(columns={grid.index.name: UNIT_COLUMN})
+    return gpd.sjoin(buildings, units, how="inner", predicate="intersects")
+
+
 def dispersion_by_source(buildings: gpd.GeoDataFrame, grid: gpd.GeoDataFrame) -> dict[str, Any]:
     """Within-unit spread of building heights, grouped by which tier supplied them.
 
@@ -185,16 +201,11 @@ def dispersion_by_source(buildings: gpd.GeoDataFrame, grid: gpd.GeoDataFrame) ->
     none. Reported as the coefficient of variation so tall and short cities are comparable, and
     as the share of units whose heights are literally constant, which is the sharper statement.
     """
-    joined = gpd.sjoin(
-        buildings[["height", "height_source", "geometry"]],
-        grid[["geometry"]],
-        how="inner",
-        predicate="intersects",
-    )
+    joined = _join_to_units(buildings[["height", "height_source", "geometry"]], grid)
     joined = joined[joined["height"].notna()]
     out: dict[str, Any] = {}
     for source, part in joined.groupby("height_source"):
-        grouped = part.groupby("index_right")["height"]
+        grouped = part.groupby(UNIT_COLUMN)["height"]
         stats = grouped.agg(["count", "mean", "std"])
         stats = stats[stats["count"] >= MIN_BUILDINGS_PER_UNIT]
         if stats.empty:
@@ -229,9 +240,7 @@ def held_out_fidelity(
     if truth.empty:
         return {"n_buildings": 0}
 
-    cells = gpd.sjoin(
-        truth[["height", "geometry"]], grid[["geometry"]], how="inner", predicate="intersects"
-    )
+    cells = _join_to_units(truth[["height", "geometry"]], grid)
     cells = cells[~cells.index.duplicated(keep="first")]
     actual = cells["height"].to_numpy()
 
@@ -246,7 +255,7 @@ def held_out_fidelity(
         error = predicted[usable] - actual[usable]
         frame = pd.DataFrame(
             {
-                "unit": cells["index_right"].to_numpy()[usable],
+                "unit": cells[UNIT_COLUMN].to_numpy()[usable],
                 "actual": actual[usable],
                 "predicted": predicted[usable],
             }
@@ -370,12 +379,22 @@ def run_city(key: str, settings: Settings) -> dict[str, Any] | None:
             # mechanism tests refill here. It is a second pass over the same tiers rather than a
             # change to `build_arms`, whose signature four other scripts depend on.
             filled, _ = fill_heights(ready.cleaned.buildings_area, tiers)
-            record["dispersion"] = dispersion_by_source(filled, grid)
-            record["held_out"] = held_out_fidelity(filled, grid, products)
-            record["implausible"] = implausible_share(filled)
-            record["unit_size"] = unit_size_against_the_grid(
-                next(arm.units for arm in arms if arm.name == "B")
-            )
+            enclosures = next(arm.units for arm in arms if arm.name == "B")
+            # Isolated from the cascades deliberately. These are diagnostics computed *after* all
+            # three cascades have already succeeded, and the first version of this block threw a
+            # `KeyError` that sent a fully-measured Cairo — three cascades, 18 minutes — into the
+            # skipped list with nothing kept. A diagnostic must not be able to discard evidence.
+            for name, compute in (
+                ("dispersion", partial(dispersion_by_source, filled, grid)),
+                ("held_out", partial(held_out_fidelity, filled, grid, products)),
+                ("implausible", partial(implausible_share, filled)),
+                ("unit_size", partial(unit_size_against_the_grid, enclosures)),
+            ):
+                try:
+                    record[name] = compute()
+                except Exception as error:  # noqa: BLE001 - a diagnostic must not lose a city
+                    record[name] = {"error": f"{type(error).__name__}: {error}"}
+                    print(f"  {name}: FAILED — {error}", file=sys.stderr, flush=True)
 
     record["elapsed_s"] = round(time.time() - started, 1)
     return record
@@ -415,15 +434,36 @@ def summarise(record: dict[str, Any]) -> None:
         f"\n{'city':16}{'resolved: none':>15}{'coarse':>9}{'full':>8}"
         f"{'  |  built: none':>17}{'coarse':>9}{'full':>8}{'delta':>8}"
     )
+    coverage_gain: list[float] = []
+    built_gain: list[float] = []
+    overall_gain: list[float] = []
     for city in cities:
         built = {v: _built(city, v, "A") for v in CASCADES}
         delta = (built["full"] or 0.0) - (built["none"] or 0.0)
+        coverage_gain.append(_resolved_share(city, "full") - _resolved_share(city, "none"))
+        built_gain.append(delta)
+        overall_gain.append(
+            (_overall(city, "full", "A") or 0.0) - (_overall(city, "none", "A") or 0.0)
+        )
         print(
             f"{city['fixture']:16}"
             f"{_resolved_share(city, 'none'):>15.1%}{_resolved_share(city, 'coarse'):>9.1%}"
             f"{_resolved_share(city, 'full'):>8.1%}   |  "
             f"{built['none']:>12.1%}{built['coarse']:>9.1%}{built['full']:>8.1%}"
             f"{100 * delta:>+8.1f}"
+        )
+    print(
+        f"\n   mean built-class change {100 * float(np.mean(built_gain)):+.1f} pts, "
+        f"overall {100 * float(np.mean(overall_gain)):+.1f} pts; "
+        f"improved in {sum(1 for d in built_gain if d > 0)} of {len(built_gain)} cities"
+    )
+    if len(cities) > 2:
+        # The acceptance criterion: agreement change against tier-coverage change, per city. If
+        # filling Hr is what matters, the cities that gained the most coverage gained the most
+        # agreement — and if it is not, this is the number that says so.
+        print(
+            f"   corr(coverage gain, built-class gain) = "
+            f"{float(np.corrcoef(coverage_gain, built_gain)[0, 1]):+.2f}"
         )
 
     print("\n2. P1 — WITHIN-UNIT DISPERSION by the tier that supplied the height")
