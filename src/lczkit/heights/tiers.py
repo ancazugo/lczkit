@@ -222,6 +222,8 @@ def build_cascade(config: HeightConfig, source_dir: Callable[[str], Path]) -> li
     An areal tier with no `filename` is skipped — the product is simply not available, and a
     shorter cascade with an honest `height_completeness` beats a failure. A tier that *names* a
     file which is not there raises, because that is a misconfiguration rather than an absence.
+    A tier with `enabled=False` is skipped whether or not its file is there: the flag means off,
+    and a flag whose meaning depended on which function read it would be worse than no flag.
     """
     tiers: list[HeightSource] = [
         OvertureAttributeTier(
@@ -235,7 +237,7 @@ def build_cascade(config: HeightConfig, source_dir: Callable[[str], Path]) -> li
         if tier_config.name in seen:
             raise ValueError(f"duplicate height tier name: {tier_config.name!r}")
         seen.add(tier_config.name)
-        if tier_config.filename is None:
+        if tier_config.filename is None or not tier_config.enabled:
             continue
         path = source_dir(tier_config.source_dir_name) / tier_config.filename
         if not path.is_file():

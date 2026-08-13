@@ -182,7 +182,11 @@ def test_the_three_arms_are_declared_with_the_control_marked_as_one(script: Modu
     """Arm C is a diagnostic, never a pipeline option. Keeping that in the arm's own description
     means it travels into the JSON record and the printed table rather than living only in a
     docstring a reader of the output never sees."""
-    assert {fixture.name for fixture in script.FIXTURE_CITIES} == {"berlin", "rotterdam"}
+    assert [fixture.name for fixture in script.FIXTURE_CITIES] == [
+        "hongkong",
+        "berlin",
+        "rotterdam",
+    ]
     assert script.TESTED_PARAMETER == "building_surface_fraction"
     for fixture in script.FIXTURE_CITIES:
         assert fixture.worldcover.is_file()
@@ -192,15 +196,34 @@ def test_the_three_arms_are_declared_with_the_control_marked_as_one(script: Modu
         assert Path(fixture.vectors.args[0]).is_dir()
 
 
-def test_only_the_city_with_labelled_coverage_declares_ground_truth(script: ModuleType) -> None:
-    """Berlin has So2Sat polygons and Rotterdam does not, and the difference must be structural
-    rather than a caveat in prose: a `None` here is what makes the harness print that Rotterdam's
-    figures are against an estimate, and what keeps a ceiling from being fabricated for it."""
+def test_only_the_cities_with_labelled_coverage_declare_ground_truth(script: ModuleType) -> None:
+    """Hong Kong and Berlin have So2Sat polygons and Rotterdam does not, and the difference must be
+    structural rather than a caveat in prose: a `None` here is what makes the harness print that
+    Rotterdam's figures are against an estimate, and what keeps a ceiling from being fabricated."""
     by_name = {fixture.name: fixture for fixture in script.FIXTURE_CITIES}
 
-    assert by_name["berlin"].ground_truth is not None
-    assert by_name["berlin"].ground_truth.is_file()
+    for name in ("hongkong", "berlin"):
+        assert by_name[name].ground_truth is not None
+        assert by_name[name].ground_truth.is_file()
     assert by_name["rotterdam"].ground_truth is None
+
+
+def test_the_primary_fixture_comes_first_and_can_test_the_height_axis(script: ModuleType) -> None:
+    """Phase 11's fixture switch, asserted where the harness reads it.
+
+    `FIXTURE_CITIES[0]` is what a reader of the printed output sees first and what a new diagnostic
+    reaches for. Berlin held that position through Phase 10 while carrying two labelled classes,
+    both mid-rise — so 1-2-3 and 4-5-6 had no pair to confuse on and the height axis was not
+    measurable there at all. Phase 6.7 ranked the axes from it anyway and got the order backwards
+    for three phases.
+    """
+    primary = script.FIXTURE_CITIES[0]
+
+    assert primary.name == "hongkong"
+    labels = gpd.read_parquet(primary.ground_truth)
+    present = set(labels["LCZ_class"].astype(int))
+    assert {1, 2, 3} <= present, "no height pair among the compact types"
+    assert {1, 4} <= present and {2, 5} <= present, "no compactness pair"
 
 
 def test_a_shared_cleaning_gives_the_same_arms_as_cleaning_inline(script: ModuleType) -> None:

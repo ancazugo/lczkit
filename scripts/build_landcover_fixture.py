@@ -32,14 +32,19 @@ BERLIN_FIXTURE_BBOX = (13.3789, 52.5057, 13.4231, 52.5327)
 # second fixture can be classified rather than only cleaned.
 ROTTERDAM_FIXTURE_BBOX = (4.3000, 51.8850, 4.3400, 51.9050)
 
+# Matches HONGKONG_FIXTURE_BBOX in scripts/build_overture_fixture.py, added in Phase 11 as the
+# primary fixture. See that script for why.
+HONGKONG_FIXTURE_BBOX = (114.1645, 22.3210, 114.1931, 22.3485)
+
 FIXTURES_DIR = Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "landcover"
 
 #: `output filename -> (source URL, bbox)`. All are 10 m EPSG:4326 uint8 global products tiled on
-#: a 3-degree grid; N51E012 holds Berlin and N51E003 holds Rotterdam.
+#: a 3-degree grid; N51E012 holds Berlin, N51E003 Rotterdam and N21E114 Hong Kong.
 #:
-#: Rotterdam gets WorldCover only. The ETH canopy product is a second, competing tree estimate that
-#: Phase 4 documents as reading high, and Phase 5 defaults to the WorldCover route; the Rotterdam
-#: fixture exists to exercise the LCZ 8/10 rule, where tree cover is beside the point.
+#: Rotterdam and Hong Kong get WorldCover only. The ETH canopy product is a second, competing tree
+#: estimate that Phase 4 documents as reading high, and Phase 5 defaults to the WorldCover route;
+#: Rotterdam exists to exercise the LCZ 8/10 rule and the Hong Kong window carries no natural class
+#: at all, so in neither is tree cover the thing under test.
 SOURCES = {
     "worldcover_berlin.tif": (
         "https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map/"
@@ -55,6 +60,11 @@ SOURCES = {
         "https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map/"
         "ESA_WorldCover_10m_2021_v200_N51E003_Map.tif",
         ROTTERDAM_FIXTURE_BBOX,
+    ),
+    "worldcover_hongkong.tif": (
+        "https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map/"
+        "ESA_WorldCover_10m_2021_v200_N21E114_Map.tif",
+        HONGKONG_FIXTURE_BBOX,
     ),
 }
 

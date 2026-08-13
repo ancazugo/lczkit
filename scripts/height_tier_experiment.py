@@ -33,6 +33,7 @@ from __future__ import annotations
 import json
 import sys
 import time
+from collections.abc import Sequence
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -48,12 +49,7 @@ from lczkit.heights.cascade import UNRESOLVED, cascade_height_sources, fill_heig
 from lczkit.heights.raster import zonal_mean
 from lczkit.heights.tiers import OVERTURE_HEIGHT, OVERTURE_NUM_FLOORS, build_cascade
 from lczkit.protocols import BBox
-from lczkit.sources.height_products import (
-    GhslBuiltHSource,
-    HeightProductSource,
-    OpenBuildings25dSource,
-    Wsf3dSource,
-)
+from lczkit.sources.height_products import resolve_areal_tiers
 from lczkit.units.grid import GridUnits
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -65,9 +61,11 @@ from multi_city_validation import (  # noqa: E402 - sibling script
     prepare,
 )
 from unit_scale_experiment import (  # noqa: E402 - sibling script
+    AREAL_CONFIDENCE,
     HEIGHTS,
     UCP,
     VALIDATION,
+    Fixture,
     build_arms,
     clean_for_arms,
     evaluate,
@@ -79,9 +77,16 @@ CASCADES: dict[str, tuple[str, ...]] = {
     "none": (),
     "coarse": ("wsf3d", "ghsl"),
     "full": ("gob25d", "wsf3d", "ghsl"),
+    "full_reversed": ("wsf3d", "ghsl", "gob25d"),
 }
-"""The three variants, in the order they are reported. `full` is the configured cascade order —
-finest product first, so a coarser tier only ever claims what a finer one could not."""
+"""The variants, in the order they are reported, **each tuple being the cascade order itself**.
+
+`full` is finest-product-first, so a coarser tier only ever claims what a finer one could not.
+`full_reversed` inverts that: the coarse products claim first and Open Buildings 2.5D gets only
+what they left. Phase 11 measures the difference — see `cascade_for`, which orders the tiers by
+this tuple rather than by the configured list, because a reordering experiment that quietly does
+not reorder would report a confident null.
+"""
 
 #: The eight cities Phase 9 measured below 50% tier-1 coverage, plus Berlin as a high-coverage
 #: control. Berlin gets no GOB 2.5D — the product stops at Europe — but WSF-3D and GHS-BUILT-H are
@@ -102,15 +107,6 @@ SELECTED = ("berlin", *LOW_COVERAGE)
 MIN_BUILDINGS_PER_UNIT = 5
 """Units below this are dropped from the within-unit statistics. A rank correlation over three
 buildings is noise, and averaging noise across thousands of cells produces a confident zero."""
-
-AREAL_CONFIDENCE = {"gob25d": 0.5, "wsf3d": 0.35, "ghsl": 0.25}
-"""`height_confidence` per areal tier, descending with coarseness below tier 1's 0.9 / 0.6.
-
-Ordinal, with no published number behind it — the same standing as the two Overture confidences
-this module inherits, and set here rather than defaulted in `lczkit.config` for exactly the reason
-`HeightConfig` gives: an invented default would travel into every run's manifest as if it were
-measured. Recorded in the manifest, so the choice is visible.
-"""
 
 AREAL_READ = {tier.name: (tier.scale, tier.nodata) for tier in HeightConfig().areal_tiers}
 """Each product's unit scale and nodata, from its own documentation via `lczkit.config`."""
@@ -154,28 +150,28 @@ def cascade_for(
     product has no coverage here — Open Buildings stops at Europe — is left out of the cascade
     rather than configured to read a file that is not there, which is the difference between a
     shorter cascade and a crash.
+
+    **The tiers come back in `CASCADES[variant]` order, not in configured order.** The package
+    default is `coarse`, so `gob25d` ships `enabled=False` and the configured list is no longer
+    the thing a variant can be read off; and `full_reversed` differs from `full` in nothing but
+    order, so taking the order from the config would make the two variants identical while still
+    printing two rows.
     """
     wanted = CASCADES[variant]
     config = HEIGHTS.model_copy(deep=True)
-    fetchers: dict[str, HeightProductSource] = {
-        "ghsl": GhslBuiltHSource(settings),
-        "wsf3d": Wsf3dSource(settings),
-        "gob25d": OpenBuildings25dSource(settings),
-    }
-    placed: dict[str, str | None] = {}
-    tiers = []
+    by_name = {tier.name: tier for tier in config.areal_tiers}
+    ordered = []
+    for name in wanted:
+        tier = by_name[name]
+        tier.enabled = True
+        tier.confidence = AREAL_CONFIDENCE[name]
+        ordered.append(tier)
     for tier in config.areal_tiers:
         if tier.name not in wanted:
-            continue
-        path = fetchers[tier.name].ensure(bbox)
-        placed[tier.name] = str(path) if path is not None else None
-        if path is None:
-            continue
-        tier.filename = str(path.relative_to(settings.source_dir(tier.source_dir_name)))
-        tier.confidence = AREAL_CONFIDENCE[tier.name]
-        tiers.append(tier)
-    config.areal_tiers = tiers
-    return config, placed
+            tier.enabled = False
+            ordered.append(tier)
+    config.areal_tiers = ordered
+    return resolve_areal_tiers(settings, bbox, config)
 
 
 UNIT_COLUMN = "_unit"
@@ -339,9 +335,29 @@ def _finite(value: Any) -> float | None:
     return number if np.isfinite(number) else None
 
 
-def run_city(key: str, settings: Settings) -> dict[str, Any] | None:
-    """One city, cleaned once, scored under all three cascades."""
-    prepared = prepare(BY_KEY[key], settings)
+PHASE_10_VARIANTS = ("none", "coarse", "full")
+"""What Phase 10 ran, kept as the default so this module still reproduces its own record."""
+
+
+def run_city(
+    key: str,
+    settings: Settings,
+    variants: Sequence[str] = PHASE_10_VARIANTS,
+    diagnostics_on: str | None = "full",
+    prepared: tuple[Fixture, dict[str, Any]] | None = None,
+) -> dict[str, Any] | None:
+    """One city, cleaned once, scored under each of `variants`.
+
+    `diagnostics_on` names the variant whose filled heights the P1 mechanism tests run against —
+    they are statements about a *product*, so they need the cascade that fires every tier. Pass
+    `None` where no such cascade runs; the enclosure-size measurement is unconditional, because
+    it is one pass over an area array and it speaks to the A/B question rather than to heights.
+
+    `prepared` skips the `prepare()` this would otherwise do, for a caller that already needed
+    the window — Phase 11 resolves each city's variant list from whether Open Buildings covers
+    its bbox, and clipping three rasters twice to answer that would be work for nothing.
+    """
+    prepared = prepared or prepare(BY_KEY[key], settings)
     if prepared is None:
         return None
     fixture, window = prepared
@@ -355,7 +371,7 @@ def run_city(key: str, settings: Settings) -> dict[str, Any] | None:
     grid = GridUnits().generate(fixture.bbox)
     products: dict[str, Path] = {}
 
-    for variant in CASCADES:
+    for variant in variants:
         mark = time.time()
         config, placed = cascade_for(settings, fixture.bbox, variant)
         products.update({name: Path(path) for name, path in placed.items() if path is not None})
@@ -374,38 +390,39 @@ def run_city(key: str, settings: Settings) -> dict[str, Any] | None:
             file=sys.stderr,
             flush=True,
         )
-        if variant == "full":
+        enclosures = next(arm.units for arm in arms if arm.name == "B")
+        diagnostics = [("unit_size", partial(unit_size_against_the_grid, enclosures))]
+        if variant == diagnostics_on:
             # `build_arms` returns the cleaned vectors, not the height-filled buildings, so the
             # mechanism tests refill here. It is a second pass over the same tiers rather than a
             # change to `build_arms`, whose signature four other scripts depend on.
             filled, _ = fill_heights(ready.cleaned.buildings_area, tiers)
-            enclosures = next(arm.units for arm in arms if arm.name == "B")
-            # Isolated from the cascades deliberately. These are diagnostics computed *after* all
-            # three cascades have already succeeded, and the first version of this block threw a
-            # `KeyError` that sent a fully-measured Cairo — three cascades, 18 minutes — into the
-            # skipped list with nothing kept. A diagnostic must not be able to discard evidence.
-            for name, compute in (
+            diagnostics += [
                 ("dispersion", partial(dispersion_by_source, filled, grid)),
                 ("held_out", partial(held_out_fidelity, filled, grid, products)),
                 ("implausible", partial(implausible_share, filled)),
-                ("unit_size", partial(unit_size_against_the_grid, enclosures)),
-            ):
-                try:
-                    record[name] = compute()
-                except Exception as error:  # noqa: BLE001 - a diagnostic must not lose a city
-                    record[name] = {"error": f"{type(error).__name__}: {error}"}
-                    print(f"  {name}: FAILED — {error}", file=sys.stderr, flush=True)
+            ]
+        # Isolated from the cascades deliberately. These are diagnostics computed *after* the
+        # cascade has already succeeded, and the first version of this block threw a `KeyError`
+        # that sent a fully-measured Cairo — three cascades, 18 minutes — into the skipped list
+        # with nothing kept. A diagnostic must not be able to discard evidence.
+        for name, compute in diagnostics:
+            try:
+                record[name] = compute()
+            except Exception as error:  # noqa: BLE001 - a diagnostic must not lose a city
+                record[name] = {"error": f"{type(error).__name__}: {error}"}
+                print(f"  {name}: FAILED — {error}", file=sys.stderr, flush=True)
 
     record["elapsed_s"] = round(time.time() - started, 1)
     return record
 
 
-def _built(city: dict[str, Any], variant: str, arm: str) -> float | None:
+def built_agreement(city: dict[str, Any], variant: str, arm: str) -> float | None:
     report = city["cascades"][variant]["arms"][arm]["agreement_ground_truth"]
     return None if report is None else float(report["built_agreement"])
 
 
-def _overall(city: dict[str, Any], variant: str, arm: str) -> float | None:
+def overall_agreement(city: dict[str, Any], variant: str, arm: str) -> float | None:
     report = city["cascades"][variant]["arms"][arm]["agreement_ground_truth"]
     return None if report is None else float(report["overall_agreement"])
 
@@ -415,7 +432,7 @@ def _tier1_share(city: dict[str, Any], variant: str) -> float:
     return sum(float(tiers.get(name) or 0.0) for name in TIER1)
 
 
-def _resolved_share(city: dict[str, Any], variant: str) -> float:
+def resolved_share(city: dict[str, Any], variant: str) -> float:
     tiers = city["cascades"][variant]["cleaning"]["height_tier_fractions"]
     return 1.0 - float(tiers.get(UNRESOLVED) or 0.0)
 
@@ -438,17 +455,18 @@ def summarise(record: dict[str, Any]) -> None:
     built_gain: list[float] = []
     overall_gain: list[float] = []
     for city in cities:
-        built = {v: _built(city, v, "A") for v in CASCADES}
+        built = {v: built_agreement(city, v, "A") for v in PHASE_10_VARIANTS}
         delta = (built["full"] or 0.0) - (built["none"] or 0.0)
-        coverage_gain.append(_resolved_share(city, "full") - _resolved_share(city, "none"))
+        coverage_gain.append(resolved_share(city, "full") - resolved_share(city, "none"))
         built_gain.append(delta)
         overall_gain.append(
-            (_overall(city, "full", "A") or 0.0) - (_overall(city, "none", "A") or 0.0)
+            (overall_agreement(city, "full", "A") or 0.0)
+            - (overall_agreement(city, "none", "A") or 0.0)
         )
         print(
             f"{city['fixture']:16}"
-            f"{_resolved_share(city, 'none'):>15.1%}{_resolved_share(city, 'coarse'):>9.1%}"
-            f"{_resolved_share(city, 'full'):>8.1%}   |  "
+            f"{resolved_share(city, 'none'):>15.1%}{resolved_share(city, 'coarse'):>9.1%}"
+            f"{resolved_share(city, 'full'):>8.1%}   |  "
             f"{built['none']:>12.1%}{built['coarse']:>9.1%}{built['full']:>8.1%}"
             f"{100 * delta:>+8.1f}"
         )
@@ -514,11 +532,11 @@ def summarise(record: dict[str, Any]) -> None:
 
     print("\n5. P2 — A vs B, built classes, before and after the cascade")
     print(f"\n{'city':16}{'B-A none':>10}{'B-A coarse':>12}{'B-A full':>10}")
-    gaps: dict[str, list[float]] = {v: [] for v in CASCADES}
+    gaps: dict[str, list[float]] = {v: [] for v in PHASE_10_VARIANTS}
     for city in cities:
         row = {}
-        for variant in CASCADES:
-            a, b = _built(city, variant, "A"), _built(city, variant, "B")
+        for variant in PHASE_10_VARIANTS:
+            a, b = built_agreement(city, variant, "A"), built_agreement(city, variant, "B")
             row[variant] = 100 * ((b or 0.0) - (a or 0.0))
             gaps[variant].append(row[variant])
         print(

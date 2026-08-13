@@ -109,10 +109,21 @@ dataset that won the footprint and once by the dataset that supplied the height 
 
 Three things about this phase are worth knowing before relying on it:
 
-- **Tiers 2–4 ship implemented but switched off.** None of those three products is on this
-  system, so each tier's config carries no filename and is skipped; the cascade is simply
-  shorter and buildings it cannot reach are tagged `unresolved` with a null height rather than
-  given an invented one. Point `HeightConfig.areal_tiers` at a COG to switch a tier on.
+- **The default cascade is `coarse`: WSF-3D and GHS-BUILT-H on, Open Buildings 2.5D off.**
+  `lczkit.sources.height_products` fetches and places each enabled product for a study area, and
+  `resolve_areal_tiers()` hands `build_cascade` a config with the files resolved. A tier whose
+  product does not cover the window is dropped rather than failed — the cascade is shorter, and
+  buildings it cannot reach are tagged `unresolved` with a null height rather than given an
+  invented one.
+
+  Open Buildings ships `enabled=False` on measured evidence, not on availability. It is the
+  finest tier, has the lowest per-building error of the three (MAE 5.39 m against 7.44 and 8.17)
+  and is the only one with any within-unit skill — and across nine cities it *lowered* built-class
+  agreement by 1.9 points, positive in only 4. `Hr` is a geometric mean, which dispersion
+  depresses, and this product's within-unit spread is 0.441 against reality's 0.195. **Per-building
+  accuracy is the wrong acceptance test for a height product feeding an LCZ map**; evaluate a new
+  tier on within-unit dispersion. See
+  [Phase 10](docs/experiments/phase-10-height-cascade.md). One flag switches it back on.
 - **`height_confidence` has no default and the cascade raises without one.** It is an ordinal
   ranking of measurement quality, not a calibrated probability, and no published number defines
   it — so it is set explicitly in config and recorded in the manifest rather than guessed at
@@ -321,7 +332,7 @@ labelled coverage** — So2Sat covers 52 cities and Rotterdam is not one of them
 its 359 built cells sit at 3.1%. That is the figure a built/natural split exists to stop anyone
 quoting.
 
-Four experiments in [`docs/experiments/`](docs/experiments/) record how those numbers got there.
+The write-ups in [`docs/experiments/`](docs/experiments/) record how those numbers got there.
 [Phase 6.5](docs/experiments/phase-6.5-unit-scale.md) tests the obvious explanation for the original
 17.7% — that Stewart & Oke's ranges describe an LCZ patch and a 100 m grid cell is not one — and
 rejects it, finding instead that Phase 1 cleaning was destroying 23.5% of the footprint area behind
@@ -336,13 +347,29 @@ compactness 55.2% and height 17.0% against the same reference. Switching referen
 diagnosis once, and widening the extent inverted it back. Neither axis should be treated as
 established until a second city at metropolitan scale says so.
 
-**Enclosure-based computation has not been adopted, but the case for it is not closed.** It led the
-100 m grid by 4.5 points on the 9 km² fixture (45.4% against 40.9%), entirely from LCZ 2, and at
-144 km² on the same city it led on nothing. Across fifteen cities, though, the verdict splits:
-enclosures are ahead overall in 5 of 15 (mean −1.5 points) but ahead **on the built classes in 9 of
-15** (mean +2.4). They approximate an LCZ patch in built fabric and smear the natural classes,
-which are large and heterogeneous. Overall agreement is what a user gets, so the grid stays the
-default — but "the lead lives in one class of one city" no longer holds.
+**Enclosure-based computation has not been adopted, and the reason is now regional rather than
+global.** Measured three times on the same fifteen cities, the enclosure-minus-grid gap has closed
+to nothing while the built-class lead has grown:
+
+| | overall B − A | built B − A |
+|---|---:|---:|
+| tier-1 heights only (Phase 9) | −1.5 (ahead in 5/15) | +2.4 (9/15) |
+| with the `coarse` cascade (Phase 11) | **−0.2 (8/15)** | **+3.8 (12/15)** |
+
+Enclosures gain more from filled heights than the grid does, which is what an LCZ-patch analogue
+should do once `Hr` exists. The global mean hides the real structure, though:
+
+| | overall B − A | built B − A |
+|---|---:|---:|
+| Europe + North America (7) | −2.1 | +2.8 |
+| everywhere else (9) | **+1.3** | **+4.3** |
+
+**Outside Europe and North America enclosures lead on both criteria.** They approximate an LCZ
+patch in built fabric and smear the natural classes, which are large and heterogeneous — Jakarta
+gives them +10.3 overall, Rio −11.3. The grid stays the default because overall agreement over the
+whole set is what a user gets, but a per-region or configurable unit strategy is the live option,
+and the case is no longer "the lead lives in one class of one city".
+See [Phase 11](docs/experiments/phase-11-unit-decision.md).
 
 [Phase 8](docs/experiments/phase-8-scaling.md) is what made that measurable, and is the reason the
 fixture stopped being the only evidence.
@@ -441,8 +468,20 @@ pytest
 ```
 
 Tests do not require `DATA_DIR` to be set and never touch the network — fixtures live under
-`tests/fixtures/`. Network-dependent tests are marked `@pytest.mark.network` and skipped by
-default:
+`tests/fixtures/`.
+
+**The primary fixture is a 3 km window over Kowloon, Hong Kong**, not Berlin. Berlin's labelled
+cells hold two classes and both are mid-rise, so the height confusion axis has no pair to confuse
+on and cannot be measured there at all — and Phase 6.7 ranked the axes from that fixture anyway,
+putting compactness first, a ranking that stood for three phases until fifteen cities reversed it.
+Hong Kong's window carries LCZ 1, 2, 3, 4 and 5, so both axes have complete pairs. Measured against
+the labels, its disagreement splits 18.1% height / 27.6% compactness against Berlin's 17.0% / 55.2%
+— compactness still leads, but Berlin's share was inflated by a reference that could contribute
+both members of a compactness pair and only one member of any height pair. Berlin and Rotterdam
+stay: every figure before Phase 11 is against Berlin, and Rotterdam is the industrial
+fixture for the LCZ 10 rule. See [`tests/fixtures/README.md`](tests/fixtures/README.md).
+
+Network-dependent tests are marked `@pytest.mark.network` and skipped by default:
 
 ```sh
 pytest -m network

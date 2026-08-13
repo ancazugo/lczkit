@@ -14,6 +14,16 @@ from lczkit.protocols import BBox
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "overture"
 
+#: Kowloon, added in Phase 11 and **the primary fixture from that point on**.
+#:
+#: Berlin's labelled cells hold LCZ 2 and LCZ 5 — two classes, both mid-rise — so the height
+#: confusion axis (1-2-3, 4-5-6) is untestable on it by construction. Phase 6.7 ranked compactness
+#: above height as the next lever on exactly that evidence, and the ranking stood for three phases
+#: until Phase 9 reversed it across fifteen cities. This window holds LCZ 1, 2, 3, 4 and 5, so both
+#: axes are measurable. Built by `scripts/build_overture_fixture.py`; 5448 buildings against
+#: Berlin's 6195, so it costs about what Berlin costs.
+HONGKONG_FIXTURES_DIR = Path(__file__).parent / "fixtures" / "overture_hongkong"
+
 #: Rotterdam's Waalhaven, added in Phase 6. The Berlin fixture cannot validate the LCZ 8 / LCZ 10
 #: rule — it holds 36 industrial buildings of 6195 — so a second fixture over an area with real
 #: industry is what turns that rule from a mechanism into evidence. Built by
@@ -37,6 +47,13 @@ FIXTURE_BBOX: BBox = (13.3789, 52.5057, 13.4231, 52.5327)
 #: A ~650x600 m subset of the fixture, for tests that run `neatnet`/`clean_vectors` and need
 #: to stay fast — the full extent's street network takes on the order of a minute to simplify.
 SMALL_BBOX: BBox = (13.3966, 52.5165, 13.4054, 52.5219)
+
+#: The full committed Hong Kong extract (~3x3 km of Kowloon).
+HONGKONG_BBOX: BBox = (114.1645, 22.3210, 114.1931, 22.3485)
+
+#: A ~460x390 m subset carrying the fixture's densest mix of real heights — 118 footprints, 31 of
+#: them with an Overture `height` — for the same reason `SMALL_BBOX` exists.
+HONGKONG_SMALL_BBOX: BBox = (114.1675, 22.3258, 114.1720, 22.3293)
 
 #: The full committed Rotterdam extract (~2.7x2.2 km).
 INDUSTRY_BBOX: BBox = (4.3000, 51.8850, 4.3400, 51.9050)

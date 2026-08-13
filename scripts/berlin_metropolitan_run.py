@@ -36,6 +36,7 @@ from lczkit.heights.tiers import build_cascade
 from lczkit.landcover.local import LocalRasterSource
 from lczkit.output import write_run
 from lczkit.protocols import BBox
+from lczkit.sources.height_products import resolve_areal_tiers
 from lczkit.sources.overture import OvertureSource
 from lczkit.ucp.parameters import compute_parameters
 from lczkit.units.grid import GridUnits
@@ -94,7 +95,13 @@ def main() -> None:
         )
 
     with timer.stage("heights"):
-        tiers = build_cascade(settings.heights, settings.source_dir)
+        # Places the products the configured cascade needs, and returns the config with each
+        # tier's file resolved. Without this step `build_cascade` finds every areal tier's
+        # `filename` unset and silently runs tier 1 alone — which is what every run before
+        # Phase 11 did, and why the default cascade needs a step that actually fetches.
+        heights, placed = resolve_areal_tiers(settings, bbox)
+        print(f"  height products: {placed}", flush=True)
+        tiers = build_cascade(heights, settings.source_dir)
         buildings_area, height_fill = fill_heights(cleaned.buildings_area, tiers)
         buildings_topo = inherit_heights(cleaned.buildings_topo, buildings_area)
         availability = source_availability(cleaned.buildings_area)

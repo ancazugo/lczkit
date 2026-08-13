@@ -30,7 +30,13 @@ import numpy as np
 import rasterio
 from rasterio.merge import merge as merge_rasters
 
-from lczkit.config import GhslProductConfig, OpenBuildings25dConfig, Settings, Wsf3dConfig
+from lczkit.config import (
+    GhslProductConfig,
+    HeightConfig,
+    OpenBuildings25dConfig,
+    Settings,
+    Wsf3dConfig,
+)
 from lczkit.protocols import BBox
 from lczkit.sources.overture import bbox_key
 
@@ -417,3 +423,52 @@ class OpenBuildings25dSource:
             if src.width == 0 or src.height == 0:
                 return None
         return part
+
+
+def resolve_areal_tiers(
+    settings: Settings, bbox: BBox, config: HeightConfig | None = None
+) -> tuple[HeightConfig, dict[str, str | None]]:
+    """Place every enabled areal tier's product for `bbox` and return a ready `HeightConfig`.
+
+    The missing half of `build_cascade`, which reads `filename` and never sets it. Without this
+    the only route from a configured tier to a raster on disk was a private helper in one
+    experiment script, so the package's own default cascade could not actually run — a shipped
+    default nothing exercises is a claim, not a behaviour.
+
+    Tiers run in `config.areal_tiers` order. A tier with `enabled=False` is left out, and so is
+    one whose product has no coverage here — Open Buildings stops at Europe — but for different
+    reasons that stay separable: the first shows as `enabled=False` in the serialised config, the
+    second as a `None` in the returned record. A tier configured to read a file that is not there
+    is neither, and still raises in `build_cascade`.
+
+    `confidence` is deliberately not filled in. It is an ordinal ranking of measurement quality
+    with no published value behind it, exactly like the two Overture confidences, and a default
+    cascade that invented one would write a quality claim nobody chose into every manifest. Set
+    it on the config and `build_cascade` accepts it; leave it unset and `build_cascade` says so.
+    """
+    resolved = (config or settings.heights).model_copy(deep=True)
+    fetchers: dict[str, HeightProductSource] = {
+        settings.height_products.gob25d.tier_name: OpenBuildings25dSource(settings),
+        settings.height_products.wsf3d.tier_name: Wsf3dSource(settings),
+        settings.height_products.ghsl.tier_name: GhslBuiltHSource(settings),
+    }
+
+    placed: dict[str, str | None] = {}
+    tiers = []
+    for tier in resolved.areal_tiers:
+        if not tier.enabled:
+            continue
+        fetcher = fetchers.get(tier.name)
+        if fetcher is None:
+            raise KeyError(
+                f"height tier {tier.name!r} is enabled but no fetcher owns it; place its raster "
+                f"under input/{tier.source_dir_name}/ and set `filename` by hand instead."
+            )
+        path = fetcher.ensure(bbox)
+        placed[tier.name] = str(path) if path is not None else None
+        if path is None:
+            continue
+        tier.filename = str(path.relative_to(settings.source_dir(tier.source_dir_name)))
+        tiers.append(tier)
+    resolved.areal_tiers = tiers
+    return resolved, placed

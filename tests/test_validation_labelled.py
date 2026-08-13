@@ -11,7 +11,7 @@ from __future__ import annotations
 import geopandas as gpd
 import pandas as pd
 import pytest
-from conftest import FIXTURE_BBOX, LCZ_FIXTURES_DIR
+from conftest import FIXTURE_BBOX, HONGKONG_BBOX, LCZ_FIXTURES_DIR
 from shapely.geometry import box
 
 from lczkit.classify.labels import CODES
@@ -141,3 +141,36 @@ def test_the_berlin_fixture_maps_one_patch_centre_to_one_grid_cell() -> None:
     present = set(result["reference_lcz"].dropna().astype(int))
     assert present <= set(CODES)
     assert present == {2, 5}
+
+
+def test_the_hong_kong_fixture_carries_both_confusion_axes() -> None:
+    """**Why Hong Kong replaced Berlin as the primary fixture in Phase 11.**
+
+    Berlin's labelled cells hold LCZ 2 and LCZ 5 — two classes, and both mid-rise — so the height
+    axis (1-2-3, 4-5-6) has no pair to confuse on it and cannot be measured there at all. Phase 6.7
+    ranked the axes from that fixture anyway and put compactness first; Phase 9 reversed the order
+    across fifteen cities, where height dominates by roughly three to one.
+
+    This asserts the property rather than the conclusion: the fixture must carry a height pair
+    (LCZ 1, 2 and 3 are compact high, mid and low-rise) *and* a compactness pair (1 against 4, 2
+    against 5 are compact against open at one height). A future refresh that lost either would fail
+    here instead of quietly making a diagnostic untestable again.
+    """
+    units = GridUnits().generate(HONGKONG_BBOX)
+    patches = gpd.read_parquet(LCZ_FIXTURES_DIR / "so2sat_hongkong.parquet")
+
+    result, match = labelled_lcz(units, patches)
+
+    present = set(result["reference_lcz"].dropna().astype(int))
+    assert present == {1, 2, 3, 4, 5}
+    assert {1, 2, 3} <= present, "no height pair: the axis this fixture exists for"
+    assert {1, 4} <= present and {2, 5} <= present, "no compactness pair"
+
+    # Same 1:1 centre-to-cell alignment Berlin has, and for the same reason — both grids are
+    # anchored on the local UTM origin at 100 m. It is a property of the projection rather than of
+    # Berlin, and this is what says so on a second continent and a second UTM zone.
+    assert match.n_patches == 169
+    assert match.n_centres_ambiguous == 0
+    assert match.n_units_multi_label == 0
+    assert match.n_units_labelled == match.n_centres_matched
+    assert (result["reference_majority_fraction"].dropna() == 1.0).all()

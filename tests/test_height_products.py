@@ -17,7 +17,8 @@ import pytest
 import rasterio
 from conftest import write_height_raster
 
-from lczkit.config import Settings
+from lczkit.config import ArealTierConfig, HeightConfig, Settings
+from lczkit.heights.tiers import build_cascade
 from lczkit.sources.height_products import (
     MOLLWEIDE_ORIGIN_X,
     MOLLWEIDE_ORIGIN_Y,
@@ -27,6 +28,7 @@ from lczkit.sources.height_products import (
     Wsf3dSource,
     _download,
     _verify_tile_position,
+    resolve_areal_tiers,
 )
 
 
@@ -265,3 +267,163 @@ def test_a_fetched_tile_reads_back_as_a_raster(tmp_path: Path) -> None:
     with rasterio.open(destination) as src:
         assert src.crs is not None
         assert src.read(1)[0, 0] == pytest.approx(5.0)
+
+
+# --- resolving a whole cascade ------------------------------------------------------------
+
+
+class _StubProduct:
+    """A fetcher that answers with a path, or with `None` for "no coverage here"."""
+
+    def __init__(self, name: str, path: Path | None) -> None:
+        self._name = name
+        self._path = path
+        self.calls = 0
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    def ensure(self, bbox: tuple[float, float, float, float]) -> Path | None:
+        del bbox
+        self.calls += 1
+        return self._path
+
+
+#: Tier name to the `input/` subdirectory it owns, matching the shipped config.
+_TIER_DIRS = {"gob25d": "GOB25D", "wsf3d": "WSF3D", "ghsl": "GHSL"}
+
+
+def _stub_fetchers(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch, **covered: bool
+) -> dict[str, _StubProduct]:
+    """Replace the three real fetchers with stubs, one per tier.
+
+    A covered tier gets a one-cell raster written into the directory that tier really owns,
+    because `resolve_areal_tiers` records `filename` *relative to* that directory — placing it
+    anywhere else would pass a test the real cascade could not then open.
+    """
+    stubs = {}
+    for name, source_dir_name in _TIER_DIRS.items():
+        path = None
+        if covered.get(name, True):
+            path = settings.source_dir(source_dir_name) / "h.tif"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            write_height_raster(
+                path,
+                np.array([[8.0]], dtype="float32"),
+                origin=(0.0, 100.0),
+                cell_size_m=100.0,
+                crs="EPSG:32633",
+            )
+        stubs[name] = _StubProduct(name, path)
+    for attribute, name in (
+        ("OpenBuildings25dSource", "gob25d"),
+        ("Wsf3dSource", "wsf3d"),
+        ("GhslBuiltHSource", "ghsl"),
+    ):
+        monkeypatch.setattr(
+            "lczkit.sources.height_products." + attribute,
+            lambda settings, stub=stubs[name]: stub,
+        )
+    return stubs
+
+
+def test_resolving_the_default_cascade_leaves_open_buildings_alone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The shipped default is `coarse`, so the disabled tier is never even fetched.
+
+    Worth asserting on the *fetch* rather than only on the result: Open Buildings is the one
+    product with no public bucket behind it, so a disabled tier that still called `ensure` would
+    open an Earth Engine session for a raster nothing goes on to read.
+    """
+    settings = _settings(tmp_path)
+    stubs = _stub_fetchers(settings, monkeypatch)
+
+    resolved, placed = resolve_areal_tiers(settings, (0.0, 0.0, 0.01, 0.01))
+
+    assert [tier.name for tier in resolved.areal_tiers] == ["wsf3d", "ghsl"]
+    assert set(placed) == {"wsf3d", "ghsl"}
+    assert stubs["gob25d"].calls == 0
+
+
+def test_a_product_with_no_coverage_shortens_the_cascade_rather_than_failing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Absence is a real answer, and it is recorded as one.
+
+    `None` in the record and a missing entry are different facts — "asked, nothing there" against
+    "never asked, because it is switched off" — and only the first belongs to the study area.
+    """
+    settings = _settings(tmp_path)
+    config = HeightConfig(
+        overture_height_confidence=0.9,
+        overture_num_floors_confidence=0.6,
+        areal_tiers=[
+            ArealTierConfig(name="gob25d", source_dir_name="GOB25D", confidence=0.5),
+            ArealTierConfig(name="ghsl", source_dir_name="GHSL", confidence=0.25),
+        ],
+    )
+    stubs = _stub_fetchers(settings, monkeypatch, gob25d=False)
+
+    resolved, placed = resolve_areal_tiers(settings, (0.0, 0.0, 0.01, 0.01), config)
+
+    assert [tier.name for tier in resolved.areal_tiers] == ["ghsl"]
+    assert placed == {"gob25d": None, "ghsl": str(stubs["ghsl"].ensure((0, 0, 0, 0)))}
+
+
+def test_a_resolved_tier_carries_a_filename_build_cascade_can_open(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The seam between placing a product and reading it: `filename` is relative to the tier's
+    own `input/` subdirectory, which is the only form `build_cascade` resolves."""
+    settings = _settings(tmp_path)
+    settings.heights.overture_height_confidence = 0.9
+    settings.heights.overture_num_floors_confidence = 0.6
+    for tier in settings.heights.areal_tiers:
+        tier.confidence = 0.3
+    _stub_fetchers(settings, monkeypatch, gob25d=False)
+
+    resolved, _ = resolve_areal_tiers(settings, (0.0, 0.0, 0.01, 0.01))
+
+    assert [tier.filename for tier in resolved.areal_tiers] == ["h.tif", "h.tif"]
+    tiers = build_cascade(resolved, settings.source_dir)
+    assert [tier.name for tier in tiers] == ["overture", "wsf3d", "ghsl"]
+
+
+def test_the_cascade_runs_in_configured_order_not_alphabetical(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Order is the whole content of the `full` / `full_reversed` comparison Phase 11 runs, and
+    every tier claims only what earlier ones left, so a resolver that reordered would make two
+    variants identical while still printing two rows."""
+    settings = _settings(tmp_path)
+    _stub_fetchers(settings, monkeypatch)
+    names = ["wsf3d", "ghsl", "gob25d"]
+    config = HeightConfig(
+        overture_height_confidence=0.9,
+        overture_num_floors_confidence=0.6,
+        areal_tiers=[
+            ArealTierConfig(name=name, source_dir_name=_TIER_DIRS[name], confidence=0.3)
+            for name in names
+        ],
+    )
+
+    resolved, _ = resolve_areal_tiers(settings, (0.0, 0.0, 0.01, 0.01), config)
+
+    assert [tier.name for tier in resolved.areal_tiers] == names
+
+
+def test_resolving_does_not_mutate_the_settings_it_was_handed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A resolver that edited `settings.heights` in place would leave the second city in a sweep
+    configured with the first city's rasters — which is a wrong map, not a crash."""
+    settings = _settings(tmp_path)
+    _stub_fetchers(settings, monkeypatch, gob25d=False)
+
+    resolve_areal_tiers(settings, (0.0, 0.0, 0.01, 0.01))
+
+    assert [tier.filename for tier in settings.heights.areal_tiers] == [None, None, None]
+    assert [tier.name for tier in settings.heights.areal_tiers] == ["gob25d", "wsf3d", "ghsl"]

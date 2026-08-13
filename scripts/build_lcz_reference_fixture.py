@@ -26,6 +26,7 @@ from lczkit.config import Settings
 
 BERLIN_FIXTURE_BBOX = (13.3789, 52.5057, 13.4231, 52.5327)
 ROTTERDAM_FIXTURE_BBOX = (4.3000, 51.8850, 4.3400, 51.9050)
+HONGKONG_FIXTURE_BBOX = (114.1645, 22.3210, 114.1931, 22.3485)
 
 #: Where the global map lives under `DATA_DIR/input/`, and which version it is. Recorded here
 #: rather than assumed: the file is version 3 of the map while the Tier 1 citation is the 2022
@@ -38,6 +39,7 @@ FIXTURES_DIR = Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "
 TARGETS = {
     "lcz_reference_berlin.tif": BERLIN_FIXTURE_BBOX,
     "lcz_reference_rotterdam.tif": ROTTERDAM_FIXTURE_BBOX,
+    "lcz_reference_hongkong.tif": HONGKONG_FIXTURE_BBOX,
 }
 
 

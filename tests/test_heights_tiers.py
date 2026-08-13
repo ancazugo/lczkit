@@ -248,3 +248,53 @@ def test_build_cascade_rejects_a_duplicate_tier_name() -> None:
 
     with pytest.raises(ValueError, match="duplicate"):
         build_cascade(config, lambda name: Path(name))
+
+
+def test_build_cascade_skips_a_disabled_tier_even_with_its_file_present(raster: Path) -> None:
+    """`enabled=False` means off, not "off unless the data happens to be there".
+
+    The distinction that makes this worth a test: a tier with no `filename` is skipped because
+    the product is absent, and a disabled one is skipped because Phase 10 measured it making the
+    map worse. Both produce a shorter cascade, and the serialised config is what tells them
+    apart — so the flag has to be read wherever a cascade is assembled, not only where the
+    products are placed.
+    """
+    config = HeightConfig(
+        overture_height_confidence=0.9,
+        overture_num_floors_confidence=0.6,
+        areal_tiers=[
+            ArealTierConfig(
+                name="gob25d",
+                source_dir_name="GOB25D",
+                enabled=False,
+                filename=raster.name,
+                confidence=0.5,
+            ),
+            ArealTierConfig(
+                name="ghsl", source_dir_name="GHSL", filename=raster.name, confidence=0.25
+            ),
+        ],
+    )
+
+    tiers = build_cascade(config, lambda name: raster.parent)
+
+    assert [tier.name for tier in tiers] == ["overture", "ghsl"]
+
+
+def test_the_shipped_default_cascade_is_coarse() -> None:
+    """Phase 11's decision, asserted rather than described.
+
+    Open Buildings 2.5D has the lowest per-building error of the three areal products and the
+    only within-unit skill, and Phase 10 measured it *lowering* built-class agreement in 5 of 9
+    cities — `Hr` is a geometric mean and dispersion depresses it. It stays implemented and one
+    flag from use.
+    """
+    tiers = {tier.name: tier for tier in HeightConfig().areal_tiers}
+
+    assert set(tiers) == {"gob25d", "wsf3d", "ghsl"}
+    assert tiers["gob25d"].enabled is False
+    assert tiers["wsf3d"].enabled is True
+    assert tiers["ghsl"].enabled is True
+    # No floor on any of them: the Phase 10 damage was dispersion, not a low tail, and a
+    # threshold tuned until one product stopped hurting would outlive its justification.
+    assert [tier.min_height_m for tier in tiers.values()] == [0.0, 0.0, 0.0]

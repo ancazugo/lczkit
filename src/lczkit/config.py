@@ -131,6 +131,15 @@ class ArealTierConfig(BaseModel):
     source_dir_name: str
     """Subdirectory under `input/` holding this product, resolved via `settings.source_dir()`."""
 
+    enabled: bool = True
+    """Whether this tier takes part in the default cascade.
+
+    Deliberately distinct from `filename is None`, which says the product is *not there*. This
+    says it is available and switched off, and the two must stay distinguishable in the manifest:
+    a tier that never fired because nobody placed the data is a different fact from one that never
+    fired because it was measured and rejected.
+    """
+
     filename: str | None = None
     """COG filename within `input/<source_dir_name>/`. `None` means the product is not available
     and the tier is skipped entirely — the cascade is shorter, not broken."""
@@ -147,7 +156,16 @@ class ArealTierConfig(BaseModel):
     min_height_m: float = 0.0
     """Sampled values at or below this are treated as "no building here" rather than as a
     height, so the next tier gets a chance. Zero is the neutral choice: an areal height product
-    reports 0 for cells with no built-up volume."""
+    reports 0 for cells with no built-up volume.
+
+    **It stays zero for every shipped tier, including Open Buildings 2.5D**, whose sampled heights
+    are 19% below 2 m against about 1% for the coarse products. A floor tuned until that stopped
+    hurting would be a threshold no documentation supports, and it would be copied into other
+    pipelines and outlive its justification. It also treats the wrong thing: Phase 10 measured the
+    damage as within-unit *dispersion* (CV 0.441 against reality's 0.195), and clipping one side
+    of an over-wide distribution leaves the other side where it was. The route to rescuing a
+    fine-resolution product is shrinkage toward the unit mean, which is deferred.
+    """
 
     confidence: float | None = None
     """`height_confidence` written for every building this tier resolves. No default: see
@@ -155,7 +173,7 @@ class ArealTierConfig(BaseModel):
 
 
 def _default_areal_tiers() -> list[ArealTierConfig]:
-    """CLAUDE.md's tiers 2, 3 and 4, in cascade order, all inert until a COG is placed.
+    """CLAUDE.md's tiers 2, 3 and 4, in cascade order. **The default cascade is `coarse`.**
 
     `source_dir_name` follows CLAUDE.md's `input/` diagram. `GHSL` is deliberately not the
     `input/GHS/` already on this system: that directory holds GHS-SMOD and GHS-UCDB for other
@@ -166,9 +184,24 @@ def _default_areal_tiers() -> list[ArealTierConfig]:
     see `HeightProductsConfig` — not inferred from the files. `filename` stays `None`, because a
     tier's file is resolved per study area by `lczkit.sources.height_products` and a filename
     baked in here would be a filename for one city.
+
+    **Open Buildings 2.5D ships `enabled=False`.** It is the finest tier, has the lowest
+    per-building error of the three (MAE 5.39 m against 7.44 and 8.17) and is the only one with
+    any within-unit skill (pooled Spearman +0.289 against +0.042 and +0.001) — and Phase 10
+    measured it making the map *worse*: `coarse -> full` is −1.9 points of built-class agreement,
+    positive in only 4 of 9 cities, with Mumbai falling below its own tier-1-only baseline. `Hr`
+    is a geometric mean, which dispersion depresses, and this product's within-unit spread is
+    0.441 against reality's 0.195. Per-building accuracy is the wrong acceptance test for a height
+    product feeding an LCZ map. The tier stays implemented and one flag from use.
     """
     return [
-        ArealTierConfig(name="gob25d", source_dir_name="GOB25D", scale=1.0, min_height_m=0.0),
+        ArealTierConfig(
+            name="gob25d",
+            source_dir_name="GOB25D",
+            enabled=False,
+            scale=1.0,
+            min_height_m=0.0,
+        ),
         ArealTierConfig(
             name="wsf3d", source_dir_name="WSF3D", scale=0.1, nodata=-32767.0, min_height_m=0.0
         ),
@@ -285,7 +318,7 @@ class HeightConfig(BaseModel):
     """`height_confidence` for buildings resolved from `num_floors x storey_height_m`."""
 
     areal_tiers: list[ArealTierConfig] = Field(default_factory=_default_areal_tiers)
-    """Tiers 2-4, in cascade order."""
+    """Tiers 2-4, in cascade order. The default is `coarse` — see `_default_areal_tiers`."""
 
 
 NodataPolicy = Literal["exclude", "assign"]

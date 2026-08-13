@@ -94,7 +94,25 @@ CLEANING = CleaningConfig(
     building_road_buffer_m=4.0,
     building_road_overlap_limit=0.5,
 )
-HEIGHTS = HeightConfig(overture_height_confidence=0.9, overture_num_floors_confidence=0.6)
+AREAL_CONFIDENCE = {"gob25d": 0.5, "wsf3d": 0.35, "ghsl": 0.25}
+"""`height_confidence` per areal tier, descending with coarseness below tier 1's 0.9 / 0.6.
+
+Ordinal, with no published number behind it — the same standing as the two Overture confidences
+beside them, and set here rather than defaulted in `lczkit.config` for exactly the reason
+`HeightConfig` gives: an invented default would travel into every run's manifest as if it were
+measured. Every script that shares `HEIGHTS` therefore has a cascade that can actually run, and
+the choice is recorded in the manifest where it is visible.
+"""
+
+
+def _heights() -> HeightConfig:
+    config = HeightConfig(overture_height_confidence=0.9, overture_num_floors_confidence=0.6)
+    for tier in config.areal_tiers:
+        tier.confidence = AREAL_CONFIDENCE[tier.name]
+    return config
+
+
+HEIGHTS = _heights()
 LAND_COVER = LandCoverConfig()
 UCP = UcpConfig()
 VALIDATION = ValidationConfig()
@@ -167,6 +185,19 @@ class FixtureVectors:
 
 
 FIXTURE_CITIES = (
+    Fixture(
+        # **The primary fixture from Phase 11.** Kowloon, ~3x3 km, labelled with LCZ 1, 2, 3, 4
+        # and 5 — compact high, mid and low-rise beside open high and mid-rise. Berlin's labels
+        # hold two classes and both are mid-rise, so on Berlin the height confusion axis cannot be
+        # measured at all; Phase 6.7 nevertheless ranked the axes from it, and got the order
+        # backwards for three phases. First in this tuple so the harness reports it first.
+        name="hongkong",
+        bbox=(114.1645, 22.3210, 114.1931, 22.3485),
+        vectors=partial(FixtureVectors, FIXTURES / "overture_hongkong"),
+        worldcover=FIXTURES / "landcover" / "worldcover_hongkong.tif",
+        reference=FIXTURES / "lcz" / "lcz_reference_hongkong.tif",
+        ground_truth=FIXTURES / "lcz" / "so2sat_hongkong.parquet",
+    ),
     Fixture(
         name="berlin",
         bbox=(13.3789, 52.5057, 13.4231, 52.5327),
