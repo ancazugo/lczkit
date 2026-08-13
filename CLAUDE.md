@@ -51,6 +51,18 @@ Read this section before writing any code. Violations here are expensive to unwi
 
 ---
 
+### Canonical spec
+
+`CLAUDE.md` in the repository is the single source of truth. Rulings arrive as patches to be
+applied and committed, never as a replacement file from outside the repo. An externally-maintained
+copy drifted across twelve phases and silently reverted a closed Phase 9 determinism ruling back to
+a diagnosis that phase had disproved.
+
+**If a supplied edit contradicts a committed record, flag it and stop.** The committed record wins;
+it was written with the measurement in front of it.
+
+---
+
 ## Locked architectural decisions
 
 These were decided deliberately. Do not revisit them without raising it explicitly.
@@ -878,53 +890,127 @@ coverage.
 
 ### Phase 12 — Axis reconciliation — CONCLUDED
 
-**The contradiction is resolved, and the resolution disqualifies the instrument that produced it.**
+**The medians were right. The instrument was not.** 15.5% / 2.6% reproduces exactly from the stored
+Phase 9 record and every published axis figure is against So2Sat labels, so the like-for-like
+hypothesis is refuted. Class composition is real but is not the important half.
 
-The medians were **not** computed differently — 15.5% / 2.6% reproduces exactly from the stored
-record, and every published axis figure is against So2Sat labels. What the raw axis share cannot do
-is carry a comparison, in either direction:
+**The raw axis share cannot carry a comparison in either direction** — not across cities, where the
+denominator is all disagreement and the natural-class share ranges 3.5%–54.1% across the sixteen,
+and, the part nobody had, **not between the two axes**. The height axis has six pairs to
+compactness's three and more reachable directions, so a null that never looks at the data still
+awards height most of the error:
 
-- **Not across cities.** Its denominator is all disagreement, so a city's natural-class share (3.5%
-  to 54.1% across the sixteen) dilutes it, and which pairs can fire depends on which classes the
-  reference holds.
-- **Not between the axes.** The height axis has six pairs to compactness's three and more reachable
-  directions. **A null that never looks at an axis awards height 3.9× more disagreement than
-  compactness at `none`; the observed ratio was 4.9×.** Phase 9's "height dominates roughly three to
-  one, in 11 of 15 cities" is mostly the instrument — the excess over affordance is 1.26×, and
-  normalising each city individually puts compactness ahead of the median at `none` too.
+| cascade `none` | height | compactness | ratio |
+|---|---|---|---|
+| what composition affords | 10.9% | 2.8% | 3.9× |
+| observed | 14.1% | 2.9% | 4.9× |
 
-**Cascade variant is the third confound and the consequential one.** Phase 9 measured at `none`;
-the package has shipped `coarse` since Phase 10. Same sixteen cities: `none` gives 14.1% / 2.9%,
-`coarse` gives **6.0% / 6.4%**. Filling heights halves the height axis — which is the cascade
-working. **An axis figure recorded without its cascade is half a measurement.**
+Phase 9's "height dominates roughly three to one in 11 of 15 cities" is mostly the instrument. The
+excess over affordance is 1.26×, and per-city normalisation puts compactness ahead of the median at
+`none` too.
 
-**Normalised — `lift` against a composition-preserving null — the recommendation is compactness:**
+**A third confound, and the consequential one: Phase 9 measured at `none`, and the package has
+shipped `coarse` since Phase 10.** The same sixteen cities give 6.0% / 6.4% at `coarse` against
+14.1% / 2.9% at `none`. Filling heights halves the height axis — the cascade working as designed.
+**Phase 10 was itself the intervention that invalidated the evidence ordering the levers.**
 
-| arm A, `coarse`, 16 cities | height | compactness |
-|---|---|---|
-| median lift | 0.86 | **1.16** (leads 11/16) |
+**The lever.** Normalised lift against a composition-preserving null, arm A, `coarse`: compactness
+**1.16** against height **0.86**, leading in 11 of 16. Height sits below 1.0. **Next lever is unit
+definition and footprint coverage.**
 
-Height sits *below* 1.0. On arm B compactness leads more strongly still (2.33 vs 1.64), so
-enclosures raise the compactness lift rather than lowering it — the lever is not simply "adopt
-enclosures", which Phase 11 declined on separate grounds.
+It is region-shaped: compactness lift 2.37 in Europe/N. America against 1.15 elsewhere, height flat
+at 0.85/0.87. That is the **same seven-against-nine split** where Phase 11 found enclosures losing —
+two independent measurements pointing the same way, not yet a mechanism. **The lever is not "adopt
+enclosures": arm B raises the compactness lift to 2.33, against 1.64 for height.**
 
-**Next accuracy lever: unit definition and footprint coverage.** And it is region-shaped: median
-compactness lift is **2.37 in Europe + N. America against 1.15 elsewhere**, while height is flat
-(0.85 / 0.87) — the same seven-against-nine split where Phase 11 found enclosures losing. Two
-independent measurements now point the same way. Not yet a mechanism.
+E1 partial — compactness leads at `coarse` as predicted, but the ordering does not reverse at `none`
+once normalised (1.34 against 1.22, leading 9/16). The lever never flipped; the raw share was never
+measuring what it was read as measuring, at either setting. E2 confirmed, spread 15.6× → 6.9×,
+max/median 3.5.
 
-**E1 partial, and the half that failed is the informative one.** Compactness leads at `coarse` as
-predicted, but the ordering does **not** reverse at `none` once normalised (1.34 vs 1.22, leading
-9/16). The lever did not flip when the default cascade changed; the raw share was never measuring
-what it was read as measuring, at either setting. **E2 confirmed** — compactness spread falls 15.6×
-→ 6.9× on lift, max/median 3.5.
+Cost: a re-analysis of stored records, not a re-run. 2 592 stored axis pairs reproduced with 0
+mismatches — sixteen cities in seconds against Phase 11's 8.9 hours.
 
-**Never quote a raw axis share across cities or between axes again.** Report `lift`, with the
-cascade and reference named.
+**Three near-assertions caught before shipping**, all by the existing anti-patterns:
+- The footprint union looked like a cheap scalar and is superlinear — 711 s at Berlin's 891 km²
+  against a 9.8-minute whole run. Replaced with a component-wise union: sublinear, 8.6 s, exact to
+  0.0000 m².
+- The row-order fix was expected to move the pooled threshold and invalidate the tile cache. The
+  threshold is bit-identical, and the cache would have served pre-fix tiles silently — **the same
+  "cache that changes results" failure the Phase 8 entry was opened for, nearly reintroduced by its
+  own fix.** `TILE_RESULT_VERSION` bumped.
+- A test attributed tiled order-sensitivity to `neatnet`. On the fixture it was `subset`'s own;
+  untiled, that network simplifies identically under a shuffle. The property is real — the
+  6 159-street Berlin fixture does differ — but the test recorded the wrong cause.
 
-Method note worth keeping: this was a **re-analysis of stored records**, not a re-run. Every run
-persists its confusion matrix and `axis_summary` reads that and nothing else, verified by 2 592
-stored axis pairs reproducing with 0 mismatches. Sixteen cities in seconds against Phase 11's 8.9 h.
+**Rulings:**
+
+1. **The raw axis share is retired.** Not "use with care" — removed from reporting. Every figure
+   derived from it since Phase 9 is void. Only pair-normalised lift against a composition-preserving
+   null appears in output, docs or the paper.
+2. **Re-baseline the manifest at `coarse`.** Any stored diagnostic measured at `none` is superseded,
+   not only the axis figures. **Tag every stored record with its cascade setting** so this cannot
+   recur.
+
+---
+
+### Phase 13 — BSF against published ranges — NEXT, AND THE LAST DIAGNOSTIC
+
+Same cheap shape as Phase 12: re-analysis of stored records, seconds not hours.
+
+For cells of known reference class, across sixteen cities, by region, at `coarse` and arm A: **is
+BSF inside the Stewart & Oke published interval?** This was last run on Berlin and Rotterdam before
+the cleaning fix, the union fix and the height cascade — all three change BSF.
+
+**Why it is decisive.** The compactness lift is *higher* in Europe, which has the **best** footprint
+coverage. That is backwards for a coverage explanation and points elsewhere — most plausibly that
+BSF is systematically depressed by street area within the 100 m cell, and Europe's compact
+perimeter-block fabric is where that bites hardest. If so this is the Phase 6.5 scale hypothesis
+returning, but with a mechanism and an instrument capable of seeing it.
+
+Three outcomes, each of which **ends the diagnostic sequence**:
+
+- **BSF now inside published ranges** → the issue is the classifier's boundary placement, not the
+  parameter. Bounded and fixable.
+- **BSF depressed, worse in Europe** → unit definition is the cause. Document as a structural limit
+  of grid-based LCZ mapping. This is a paper result, not a bug.
+- **BSF depressed uniformly across regions** → the published ranges do not transfer to 100 m cells.
+  Report the published-range result and an empirically recalibrated one **side by side** and let
+  readers choose. **Do not silently recalibrate** — the comparability argument still holds.
+
+*Acceptance:* a per-region, per-class BSF-versus-published table across sixteen cities at `coarse`;
+a stated outcome among the three above; and, whichever it is, a written statement that the
+diagnostic sequence is closed.
+
+---
+
+### STOP RULE — applies after Phase 13
+
+**No further diagnostic phases.** Twelve phases in, the finding rate remains high but the returns
+are now scientific rather than engineering: each phase yields a better-understood limit rather than
+a better map. That is the paper's material, not the package's.
+
+Remaining work, in order:
+
+1. **Phase 7 — the static map site.** The only outstanding deliverable. A city runs in ~10 minutes;
+   `height_completeness` as a visible layer is the clearest illustration of the founding result.
+2. **The paper.**
+3. **Cleanup** — docs, release.
+
+**The argument is already complete and does not depend on the next lever landing:**
+
+1. Height data availability is the binding constraint on morphology-based LCZ classification outside
+   Europe — measured *within* cities, r = +0.68.
+2. Per-building accuracy is the wrong acceptance test for a height product feeding an LCZ map — the
+   most accurate product degrades the result, because `Hr` is a geometric mean and punishes
+   dispersion.
+3. Validating against another map is not validation — ceilings range 22.8% to 83.2%, one city
+   exceeds its own, and a 432-cell sample understated Berlin's by 22 points.
+4. Confusion-axis shares are not comparable without pair normalisation — a null awards height 3.9×
+   on affordance alone.
+
+None required lczkit to score well. They required provenance tracking and sixteen cities, which
+nothing else in this space has done.
 
 ---
 
@@ -1128,14 +1214,20 @@ reconcile silently.** That flagging behaviour is working; keep it.
 | Open Buildings 2.5D | **Retired from the cascade.** Hurts first, claims 0.3–6.4% last. Code and tier interface kept, documented as measured-harmful. | 10, 11 |
 | Retention measured against summed raw footprint area | **Spec bug, corrected and implemented.** Sources self-overlap (Kowloon 7.52%, Berlin 0.61%), making ≥99%-of-sum and trim-not-merge jointly unsatisfiable. Measured against the **union**, one-sided; `FootprintCoverage` reports `raw_self_overlap_fraction` and a residual, since `union_retention` above 1.0 means the BSF numerator still double-counts. | 1, 11, 12 |
 | Whole-footprint `union_all` for the union denominator | **Rejected on measurement, exactly as the anti-pattern requires.** Superlinear (exponent 1.26→1.80), **711 s at Berlin's 891 km²** against a 9.8-minute whole run. Replaced by a component-wise union over genuinely overlapping footprints: sublinear (max 0.84), **8.6 s at 891 km², 83×**, and exact — agrees with the global union to **0.0000 m²** at 64/144/256 km². | 12 |
-| Confusion-axis shares across cities | **Resolved. The raw share cannot carry a comparison in either direction.** Not across cities (denominator is all disagreement; natural share ranges 3.5%–54.1%) and **not between the axes** (height has six pairs to compactness's three, so a null awards it 3.9× more). Report `lift` against a composition-preserving null, with the cascade and reference named. | 9, 10, 12 |
-| Phase 9's "height dominates 15.5% vs 2.6%, three to one" | **Close to what the instrument returns when nothing is happening** — the null affords 3.9×, observed 4.9×. Normalised, compactness leads at *both* cascades. Both readings this project took from the raw share, Phase 6.7's and Phase 9's, were taken through a broken instrument. | 6.7, 9, 12 |
-| Axis figures recorded without their cascade | **Half a measurement.** `none` gives 14.1% / 2.9%, `coarse` gives 6.0% / 6.4% on the same sixteen cities — filling heights halves the height axis, which is the cascade working. Phase 9's medians describe a configuration the package stopped shipping in Phase 10. | 9, 10, 12 |
-| Next accuracy lever | **Unit definition and footprint coverage** — normalised compactness lift 1.16 against height 0.86, leading 11/16 at `coarse`. Not "adopt enclosures": arm B *raises* the compactness lift (2.33 vs 1.64). | 12 |
+| Confusion-axis shares across cities | **Retired — the raw share cannot carry a comparison in either direction.** Not across cities (denominator is all disagreement; natural share ranges 3.5%–54.1%) and **not between the axes** (height has six pairs to compactness's three, so a null awards it 3.9× more). Only pair-normalised `lift` against a composition-preserving null is reported, with the cascade and reference named. **All raw-share figures since Phase 9 are void.** | 9, 10, 12 |
+| Phase 9's "height dominates 15.5% vs 2.6%, three to one" | **Mostly instrument — close to what it returns when nothing is happening.** Affordance alone gives 3.9×, observed 4.9×, excess only 1.26×. Normalised, height sits at 0.86 and compactness at 1.16, and compactness leads at *both* cascades. Both readings this project took from the raw share, Phase 6.7's and Phase 9's, were taken through a broken instrument. | 6.7, 9, 12 |
+| Axis figures recorded without their cascade | **Half a measurement, and the lever ordering is superseded by it.** `none` gives 14.1% / 2.9%, `coarse` gives 6.0% / 6.4% on the same sixteen cities — filling heights halves the height axis, which is the cascade working. The package has shipped `coarse` since Phase 10, so Phase 9's medians describe a configuration it stopped shipping — **Phase 10 was itself the intervention invalidating the evidence.** Tag every stored diagnostic with its cascade setting. | 9, 10, 12 |
+| Next accuracy lever | **Unit definition and footprint coverage** — normalised compactness lift 1.16 against height 0.86, leading 11 of 16 at `coarse`. Not "adopt enclosures": arm B *raises* the compactness lift (2.33 vs 1.64). | 12 |
 | `_axis` count-weighted while the module docstring said everything was area-weighted | Both now reported; the count-based field keeps its definition so no stored arm-B figure moves silently. Identical on a grid, which is how it survived to Phase 11. | 6, 12 |
 | `unit_scale_experiment.show()` printed `lcz_v3` axes under an unlabelled heading | Fixed. It sat four lines below a table whose columns *are* labelled. Did not contaminate published figures, but the two references disagree by more than the quantity measured — Cairo 7.2% vs 24.7% compactness. | 12 |
 | `tiles.subset()` discarded the canonical row order | `sindex.query` is documented as unordered, and its result went straight to `neatnet` and to the pooled threshold that keys the tile cache. Sorted. **On the fixture the order-sensitivity that `test_simplification_depends_on_input_row_order` attributed to `neatnet` was `subset`'s own** — untiled, that network simplifies identically under a shuffle. | 8, 9, 12 |
 | Pooled-threshold thread environment asymmetric | The serial branch ran unpinned while the parallel branch ran pinned, and `n_workers` follows `os.sched_getaffinity` — so the same extent on a differently-sized node could land on a different cache key. Both branches now pinned. | 8, 12 |
+| Regional split, second independent sighting | Compactness lift 2.37 Europe/N. America vs 1.15 elsewhere; same seven-against-nine split as Phase 11's A/B. Finding in its own right; mechanism still unknown. | 11, 12 |
+| `unary_union` over city footprints | Superlinear, 711 s at 891 km². Component-wise union: 8.6 s, exact to 0.0000 m². | 12 |
+| Row-order fix vs tile cache | Threshold bit-identical, but the cache would have served pre-fix tiles silently. `TILE_RESULT_VERSION` bumped. | 8, 12 |
+| Tiled order-sensitivity attributed to `neatnet` | Wrong cause — it was `subset`'s own on the fixture. The property is real (6 159-street Berlin fixture differs); the test recorded the wrong reason. | 12 |
+| Determinism / "stitch ordering" | **Closed in Phase 9 at `040be15`.** An external CLAUDE.md copy reverted this record to the disproved diagnosis; committed text restored. Residuals closed with deviation measured: ~1.2% of linework at different split points, total length unchanged to four decimal places. | 8, 9, 12 |
+| Externally-maintained CLAUDE.md copy | **Retired.** The committed file is canonical; rulings arrive as patches. If a supplied edit contradicts a committed record, flag and stop. | — |
 
 ---
 
@@ -1211,3 +1303,15 @@ the only realistic route to the distinction Overture discards)
   this package has.
 - Don't let `getInfo()` payloads or `reduceRegions` element counts go unbounded.
 - Don't silently coerce or drop features during cleaning without recording it in the report.
+- **Don't compare two error axes by raw share when they afford different numbers of confusable
+  pairs.** Normalise against a composition-preserving null. A null that never looks at the data
+  awards the height axis 3.9× on affordance alone.
+- **Don't carry a diagnostic forward across a configuration change without re-measuring it.** Phase
+  9's lever ordering was measured at cascade `none`; Phase 10 shipped `coarse` and halved the height
+  axis. Tag every stored diagnostic with the configuration it was measured under.
+- **Don't assume a geometric set operation is cheap because its result is a scalar.** `unary_union`
+  over a city's footprints is superlinear — 711 s at 891 km² against a 9.8-minute whole run.
+  Component-wise union is sublinear and exact.
+- **Don't ship a correctness fix without bumping the cache version it invalidates.** The row-order
+  fix would have served pre-fix tiles silently, reintroducing the exact failure the Phase 8 entry
+  was opened for.
