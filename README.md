@@ -347,6 +347,24 @@ labelled coverage** — So2Sat covers 52 cities and Rotterdam is not one of them
 its 359 built cells sit at 3.1%. That is the figure a built/natural split exists to stop anyone
 quoting.
 
+**Where the parameters sit against Stewart & Oke.** `parameter_ranges` asks, for cells whose class is
+*known*, whether a computed parameter reaches the interval published for that class — which is the
+question no agreement figure answers. Group by the reference class, never the assigned one: the
+classifier put those units near that prototype, so grouping by its own output is circular. And
+`RangeReport` records `reference_file`, because "the reference" names a role that two different
+files can fill: on the sixteen cities, grouping by `lcz_v3` rather than by the labels moves
+class-level figures by up to 18 points.
+
+Measured across sixteen cities at `coarse`
+([Phase 13](docs/experiments/phase-13-bsf-published-ranges.md)): **building surface fraction does not
+transfer to a 100 m cell, and the failure is dispersion rather than bias.** Six of ten built classes
+have a median within 0.13 interval-widths of their published band and two sit inside it, but only one
+class has more than half its area inside — the empirical p10–p90 runs 0.19–0.69 against a published
+0.40–0.60 for LCZ 1, and 0.05–0.61 against 0.30–0.50 for LCZ 8. Stewart & Oke's ranges describe an
+LCZ *patch*, which is homogeneous by construction; a grid cell is a sample that cuts across fabric.
+Both intervals are reported side by side and **the published values are not recalibrated** —
+`prototypes.py` transcribes `docs/references/tables/` and nothing writes back into it.
+
 The write-ups in [`docs/experiments/`](docs/experiments/) record how those numbers got there.
 [Phase 6.5](docs/experiments/phase-6.5-unit-scale.md) tests the obvious explanation for the original
 17.7% — that Stewart & Oke's ranges describe an LCZ patch and a 100 m grid cell is not one — and

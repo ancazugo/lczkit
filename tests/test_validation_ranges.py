@@ -141,3 +141,62 @@ def test_an_unknown_column_is_refused_rather_than_silently_unbounded() -> None:
 def test_weighted_quantile_on_empty_and_zero_weight_input() -> None:
     assert weighted_quantile(np.array([]), np.array([]), 0.5) is None
     assert weighted_quantile(np.array([1.0, 3.0]), np.zeros(2), 0.5) == pytest.approx(2.0)
+
+
+def test_the_reference_file_travels_with_the_numbers() -> None:
+    """Phase 13: a `RangeReport` that does not name its reference cannot be compared with another
+    one, and the caller grouped by `lcz_v3` undetected for four phases because of it."""
+    values, labels, areas = frame([0.45, 0.55], [2, 2])
+
+    report = parameter_ranges(
+        values,
+        labels,
+        areas,
+        column="building_surface_fraction",
+        grouped_by="ground_truth",
+        reference_file="so2sat_berlin.parquet",
+    )
+
+    assert report.grouped_by == "ground_truth"
+    assert report.reference_file == "so2sat_berlin.parquet"
+    # Absent by default, so a caller that names nothing is visibly nameless rather than
+    # silently inheriting whatever the previous one used.
+    assert parameter_ranges(values, labels, areas, column="aspect_ratio").reference_file is None
+
+
+def test_two_references_over_the_same_units_give_two_different_reports() -> None:
+    """The failure Phase 13 found, in miniature: identical parameter values, two references
+    disagreeing about which class each unit belongs to, and therefore two different answers to
+    "does BSF reach its published range". Both are labelled `reference`-shaped groupings, so
+    nothing but `reference_file` distinguishes them."""
+    index = pd.Index([f"grid_{i}" for i in range(4)], name="unit_id")
+    values = pd.Series([0.45, 0.45, 0.10, 0.10], index=index, dtype="float64")
+    areas = pd.Series([10_000.0] * 4, index=index, dtype="float64")
+    # The labels call the high-BSF pair compact midrise; the comparator calls the low-BSF pair so.
+    truth = pd.Series([2, 2, 6, 6], index=index, dtype="Int8")
+    comparator = pd.Series([6, 6, 2, 2], index=index, dtype="Int8")
+
+    by_truth = parameter_ranges(
+        values,
+        truth,
+        areas,
+        column="building_surface_fraction",
+        grouped_by="ground_truth",
+        reference_file="so2sat.parquet",
+    )
+    by_comparator = parameter_ranges(
+        values,
+        comparator,
+        areas,
+        column="building_surface_fraction",
+        grouped_by="reference",
+        reference_file="lcz_v3.tif",
+    )
+
+    lcz2_truth = next(e for e in by_truth.per_class if e.code == 2)
+    lcz2_comparator = next(e for e in by_comparator.per_class if e.code == 2)
+
+    # Same values, same units, same class, opposite verdicts on whether the range is reached.
+    assert lcz2_truth.share_in_range == pytest.approx(1.0)
+    assert lcz2_comparator.share_in_range == pytest.approx(0.0)
+    assert by_truth.reference_file != by_comparator.reference_file

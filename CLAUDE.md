@@ -954,33 +954,53 @@ mismatches — sixteen cities in seconds against Phase 11's 8.9 hours.
 
 ---
 
-### Phase 13 — BSF against published ranges — NEXT, AND THE LAST DIAGNOSTIC
+### Phase 13 — BSF against published ranges — CONCLUDED
 
-Same cheap shape as Phase 12: re-analysis of stored records, seconds not hours.
+**Outcome 3: the published ranges do not transfer to 100 m cells — and the failure is dispersion,
+not bias.** Sixteen cities, `coarse`, arm A, 5.09 h, none skipped.
 
-For cells of known reference class, across sixteen cities, by region, at `coarse` and arm A: **is
-BSF inside the Stewart & Oke published interval?** This was last run on Berlin and Rotterdam before
-the cleaning fix, the union fix and the height cascade — all three change BSF.
+**It was not a re-analysis, because the stored instrument was grouped by the wrong reference.**
+`bsf_by_reference_class` was built from `fixture.reference` — whose own docstring reads "A comparator,
+never the primary reference" — while `fixture.ground_truth` went unused. On Berlin that is 91 158
+cells of `lcz_v3` where 9 627 carry a hand label. The second reference mix-up, in the instrument this
+phase turns on. `RangeReport` now carries `reference_file`, so it cannot recur silently.
 
-**Why it is decisive.** The compactness lift is *higher* in Europe, which has the **best** footprint
-coverage. That is backwards for a coverage explanation and points elsewhere — most plausibly that
-BSF is systematically depressed by street area within the 100 m cell, and Europe's compact
-perimeter-block fabric is where that bites hardest. If so this is the Phase 6.5 scale hypothesis
-returning, but with a mechanism and an instrument capable of seeing it.
+| grouped by So2Sat labels | published | median | in range |
+|---|---|---:|---:|
+| 1 Compact high-rise | 0.40–0.60 | 0.431 | 34.2% |
+| 2 Compact midrise | 0.40–0.70 | 0.376 | 42.3% |
+| 5 Open midrise | 0.20–0.40 | 0.227 | **53.5%** |
+| 8 Large low-rise | 0.30–0.50 | 0.293 | 27.6% |
+| 10 Heavy industry | 0.20–0.30 | 0.138 | 15.0% |
 
-Three outcomes, each of which **ends the diagnostic sequence**:
+**One class of ten reaches its range**, holding 11.9% of built cells; under `lcz_v3` none does.
 
-- **BSF now inside published ranges** → the issue is the classifier's boundary placement, not the
-  parameter. Bounded and fixable.
-- **BSF depressed, worse in Europe** → unit definition is the cause. Document as a structural limit
-  of grid-based LCZ mapping. This is a paper result, not a bug.
-- **BSF depressed uniformly across regions** → the published ranges do not transfer to 100 m cells.
-  Report the published-range result and an empirically recalibrated one **side by side** and let
-  readers choose. **Do not silently recalibrate** — the comparability argument still holds.
+**The medians are close — six of ten within 0.13 interval-widths, LCZ 1 and 5 inside.** What fails is
+spread: empirical p10–p90 runs 0.19–0.69 against a published 0.40–0.60 on LCZ 1, and 0.05–0.61
+against 0.30–0.50 on LCZ 8. LCZ 1, 4, 8, 9 and 10 leak out *both* sides — too varied, not too empty;
+LCZ 2, 3 and 7 sit genuinely low. **This is Phase 6.5's patch-versus-cell hypothesis returning,
+reached from the opposite direction** — 6.5 rejected it over a numerator losing 23.5% of its
+footprints.
 
-*Acceptance:* a per-region, per-class BSF-versus-published table across sixteen cities at `coarse`;
-a stated outcome among the three above; and, whichever it is, a written statement that the
-diagnostic sequence is closed.
+**P2 confirmed, and the brief's mechanism refuted.** Europe trails on 2 of 9 shared classes, not a
+majority, and *leads* by +35.4 points on LCZ 2. Depressed BSF in Europe cannot explain Europe's higher
+compactness lift, because Europe's BSF is the healthiest in the sample.
+
+**P3 partial, stated the smaller way.** The groupings differ by a mean 6.7 points and up to 18.2
+(LCZ 9), and disagree on the one class that reaches — **but give the same outcome.** The fix was
+worth making; it did not change the answer.
+
+**Nothing is recalibrated.** Empirical intervals are tagged `lczkit_empirical` and confined to the run
+JSON; `prototypes.py` still transcribes the table. Fitting to a spread this wide would encode one
+sample's heterogeneity as a definition.
+
+Also measured: every city's `lcz_v3` table reproduces Phase 11 **bit-identically** (max |Δ| 0.0%)
+though Phase 12's `TILE_RESULT_VERSION` bump regenerated every tile cold — the determinism fix
+confirmed over sixteen extents. And **LCZ 7 sits at 8.2% in range** (0.417 against 0.60–0.90), low on
+both tails across five non-European cities: an Overture coverage limit on informal settlements, not a
+range finding.
+
+**The diagnostic sequence is closed.**
 
 ---
 
@@ -1008,6 +1028,9 @@ Remaining work, in order:
    exceeds its own, and a 432-cell sample understated Berlin's by 22 points.
 4. Confusion-axis shares are not comparable without pair normalisation — a null awards height 3.9×
    on affordance alone.
+5. Stewart & Oke's parameter ranges describe an LCZ patch and do not transfer to a 100 m cell — not
+   because the central tendency is wrong, which it largely is not, but because the within-class
+   spread on a grid is wider than the published bands can hold.
 
 None required lczkit to score well. They required provenance tracking and sixteen cities, which
 nothing else in this space has done.
@@ -1228,6 +1251,13 @@ reconcile silently.** That flagging behaviour is working; keep it.
 | Tiled order-sensitivity attributed to `neatnet` | Wrong cause — it was `subset`'s own on the fixture. The property is real (6 159-street Berlin fixture differs); the test recorded the wrong reason. | 12 |
 | Determinism / "stitch ordering" | **Closed in Phase 9 at `040be15`.** An external CLAUDE.md copy reverted this record to the disproved diagnosis; committed text restored. Residuals closed with deviation measured: ~1.2% of linework at different split points, total length unchanged to four decimal places. | 8, 9, 12 |
 | Externally-maintained CLAUDE.md copy | **Retired.** The committed file is canonical; rulings arrive as patches. If a supplied edit contradicts a committed record, flag and stop. | — |
+| `bsf_by_reference_class` grouped by `lcz_v3`, not by labels | **The second reference mix-up, in the instrument Phase 13 turns on.** `evaluate` built it from `fixture.reference`, whose own docstring says "a comparator, never the primary reference", while `fixture.ground_truth` went unused — 91 158 Berlin cells against 9 627 labelled. `RangeReport` now carries `reference_file`; `bsf_by_ground_truth_class` added, on the arm's own units. Class figures move up to 18.2 points; **the phase outcome does not.** | 6.5, 11, 13 |
+| Phase 13 as "a re-analysis of stored records, seconds not hours" | **Not satisfiable.** Per-unit BSF is not persisted and the stored aggregate was against the wrong reference, so the sixteen cities were re-run at `coarse` — 5.09 h. The brief also said the test last ran on Berlin and Rotterdam pre-fixes; it ran on all sixteen in Phase 11, post-cleaning-fix and post-cascade. | 13 |
+| BSF against the published ranges | **Outcome 3 — the ranges do not transfer to 100 m cells.** One class of ten reaches, holding 11.9% of built cells. Medians are close (six of ten within 0.13 widths, LCZ 1 and 5 inside); **spread is what fails.** Published and empirical intervals reported side by side, empirical tagged `lczkit_empirical`. **Not recalibrated.** | 6.5, 13 |
+| "BSF depressed, worse in Europe" as the expected mechanism | **Refuted.** Europe trails on 2 of 9 classes and leads LCZ 2 by +35.4 points. Europe's BSF is the healthiest in the sample, so it cannot explain Europe's higher compactness lift. | 12, 13 |
+| Phase 6.5's patch-versus-cell hypothesis | **Returns, and is now supported** — from the opposite direction. 6.5 rejected it over a numerator losing 23.5% of footprints; with those restored the medians are right and the within-class variance is what the published bands cannot hold. | 6.5, 13 |
+| LCZ 7 at 8.2% in range | 0.417 against a published 0.60–0.90, low on both tails, five non-European cities. An **Overture coverage limit on informal settlements**, not evidence about the 100 m cell. Not opened — the stop rule applies. | 13 |
+| Pooling a partial sweep against a complete stored record | Reported the difference between two city lists as a pipeline deviation (6.6%). Stability comparisons now intersect the city sets; restricted, the deviation is 0.0%. | 13 |
 
 ---
 
@@ -1315,3 +1345,11 @@ the only realistic route to the distinction Overture discards)
 - **Don't ship a correctness fix without bumping the cache version it invalidates.** The row-order
   fix would have served pre-fix tiles silently, reintroducing the exact failure the Phase 8 entry
   was opened for.
+- **Don't let "the reference" name a role instead of a file.** `lcz_v3` and the So2Sat labels can
+  both fill it, they disagree by up to 18 points, and a table that does not record which one it
+  used is indistinguishable from one that used the other. Both reference mix-ups this project
+  found were invisible for exactly this reason.
+- **Don't compare two records pooled over different populations.** A partial sixteen-city sweep
+  compared against a complete one reports the difference between two city lists as a deviation —
+  6.6% of it, until the comparison was restricted to the cities both records hold, where it is
+  0.0%. Intersect the populations before differencing them.

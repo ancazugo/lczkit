@@ -608,6 +608,21 @@ def evaluate(
             else reference_lcz(arm.units, fixture.reference, VALIDATION.reference)
         )
         covered = native_reference["reference_coverage"] >= VALIDATION.min_reference_coverage
+        # The same test against the *labels*, which is the reference CLAUDE.md makes primary.
+        # Until Phase 13 only the `lcz_v3` grouping above existed, so the question "does BSF reach
+        # the published range for cells of known class" was being answered by another model's
+        # estimate of the class - on Berlin, 91 158 cells of it where 9 627 carry a real label.
+        native_truth = (
+            None
+            if truth is None or fixture.ground_truth is None
+            else (
+                truth[0]
+                if arm.units.index.equals(grid.index)
+                # Arm B computes in enclosures, so its labels are matched natively rather than
+                # through the grid projection, for the reason stated above `native_reference`.
+                else labelled_lcz(arm.units, gpd.read_parquet(fixture.ground_truth))[0]
+            )
+        )
         results["arms"][arm.name] = {
             "description": arm.description,
             "n_units": int(len(arm.units)),
@@ -631,7 +646,22 @@ def evaluate(
                 arm.area,
                 column=TESTED_PARAMETER,
                 grouped_by="reference",
+                reference_file=fixture.reference.name,
             ).model_dump(),
+            "bsf_by_ground_truth_class": (
+                None
+                if native_truth is None
+                else parameter_ranges(
+                    arm.parameters[TESTED_PARAMETER],
+                    native_truth["reference_lcz"].where(
+                        native_truth["reference_coverage"] >= VALIDATION.min_reference_coverage
+                    ),
+                    arm.area,
+                    column=TESTED_PARAMETER,
+                    grouped_by="ground_truth",
+                    reference_file=str(fixture.ground_truth and fixture.ground_truth.name),
+                ).model_dump()
+            ),
             "bsf_by_assigned_class": parameter_ranges(
                 arm.parameters[TESTED_PARAMETER],
                 arm.labels,

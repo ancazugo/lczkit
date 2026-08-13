@@ -13,6 +13,15 @@ which is the question. The two are easy to confuse and give opposite answers: on
 fixture, building surface fraction grouped by assigned class sits inside LCZ 2's published 40-70%,
 while grouped by reference class it sits at 0.31.
 
+**"Reference" names a role, not a file, so the file has to travel with the numbers.** Two different
+references can fill that role - `lcz_v3`, which is another model's estimate, and hand-labelled
+So2Sat patches, which are the primary reference wherever they exist - and they do not agree. Phase
+6.7 measured the substitution inverting a diagnosis outright (compactness 25.8% against 55.2% on
+the same cells), and Phase 13 found this module's own caller silently grouping by `lcz_v3` across
+91 158 Berlin cells when 9 627 carried labels. `reference_file` is therefore required to mean
+anything by a `RangeReport`: a table that does not name what it grouped by cannot be compared with
+another one, and the failure is invisible because both look like "the reference class".
+
 Everything is area-weighted, for the reason `agreement` is: on enclosures, weighting by count lets
 a thousand street-margin slivers outvote a district.
 """
@@ -65,7 +74,13 @@ class RangeReport(BaseModel):
     measurement, so the provenance travels with the numbers."""
 
     grouped_by: str
-    """`"reference"` or `"assigned"`. See the module docstring: these answer different questions."""
+    """`"reference"`, `"ground_truth"` or `"assigned"`. See the module docstring: these answer
+    different questions. `"reference"` and `"ground_truth"` are both "the class this unit really
+    is" - they differ in who says so, which is why `reference_file` is not optional in practice."""
+
+    reference_file: str | None = None
+    """The file the grouping labels came from. `None` only where the caller genuinely has no file
+    to name, as for `"assigned"`, whose labels this package produced itself."""
 
     n_units: int
     per_class: list[ClassRange] = Field(default_factory=list)
@@ -78,6 +93,7 @@ def parameter_ranges(
     *,
     column: str,
     grouped_by: str = "reference",
+    reference_file: str | None = None,
 ) -> RangeReport:
     """Compare `values` against the published range of `column`, grouped by `labels`.
 
@@ -85,6 +101,10 @@ def parameter_ranges(
     excluded - a unit the reference map does not reach cannot tell us anything about whether the
     parameter reaches a range - and classes absent from `labels` are omitted rather than reported
     as empty, since a class no unit belongs to has nothing to say about the parameter.
+
+    Pass `reference_file` wherever the labels came from one: two reports that do not name their
+    reference cannot be told apart, and this module's caller grouped by the wrong one undetected
+    for four phases.
     """
     spec = property_of(column)
     frame = pd.DataFrame(
@@ -100,6 +120,7 @@ def parameter_ranges(
         property_name=spec.name,
         source=spec.source,
         grouped_by=grouped_by,
+        reference_file=reference_file,
         n_units=int(len(frame)),
     )
     for code in sorted(frame["label"].unique()):
