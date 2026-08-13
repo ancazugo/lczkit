@@ -32,13 +32,19 @@ Two differences from `overture/`, both recorded in `TARGETS` in the build script
   Nineteen unclipped sea polygons carried 237k vertices and 3.7 MB — 62% of the fixture — for
   ground that is almost entirely outside it. Which layers are clipped is a property of each
   fixture, so rebuilding Berlin still reproduces Berlin.
-- **`buildings_area` retains 98.40% of raw footprint area here, against Berlin's 99.49%**, and
-  that is not attrition: no feature is dropped (5449 → 5449) and the whole difference is
-  `trim_overlaps`. Hong Kong's raw Overture footprints **double-count 7.52% of their own summed
-  area** against Berlin's 0.61% — podium-and-tower stacks and conflated duplicates — and building
-  surface fraction sums overlay pieces, so leaving that in would inflate the numerator. Note that
-  CLAUDE.md's Phase 1 acceptance asks for ≥99% retention, which a city whose sources overlap
-  themselves by more than 1% cannot meet without keeping double-counted area.
+- **`buildings_area` retains 98.40% of the *summed* raw footprint area here, against Berlin's
+  99.49%**, and that is not attrition: no feature is dropped (5449 → 5449) and the whole difference
+  is `trim_overlaps`. Hong Kong's raw Overture footprints **double-count 7.52% of their own summed
+  area** (2 113 744 m² summed against 1 954 770 m² of ground) versus Berlin's 0.61% —
+  podium-and-tower stacks and conflated duplicates — and building surface fraction sums overlay
+  pieces, so leaving that in would inflate the numerator.
+
+  This fixture is why Phase 12 restated the criterion against the **union** of raw footprints: a
+  city whose sources overlap themselves by more than 1% cannot meet a ≥99%-of-sum bar without
+  keeping double-counted area, so the sum-based criterion and "trim overlaps but do not merge" were
+  jointly unsatisfiable here. `raw_self_overlap_fraction` is now reported in its own right — it is a
+  source-quality signal, not just a denominator correction. Berlin cannot exercise any of this,
+  which is why the union tests live against synthetic geometry in `test_cleaning_buildings.py`.
 
 The window carries no natural class, so it gets WorldCover but no ETH canopy clip, for the same
 reason Rotterdam does not have one.

@@ -31,6 +31,7 @@ import math
 from dataclasses import dataclass
 
 import geopandas as gpd
+import numpy as np
 import shapely
 from shapely.geometry import Polygon, box
 from shapely.geometry.base import BaseGeometry
@@ -141,7 +142,17 @@ def subset(layer: gpd.GeoDataFrame, window: Polygon) -> gpd.GeoDataFrame:
     Uses the spatial index rather than `.clip()`: geometry must reach a tile *whole*, because
     neatnet decides a street's fate from its full shape and a truncated one would be simplified
     against a shape that does not exist.
+
+    **The positions are sorted, and that is load-bearing.** geopandas documents `sindex.query` as
+    returning results in no guaranteed order ("often sorted, but there is no guarantee"), and
+    `neatnet` simplifies a network as a function of the row order it receives — pinned by
+    `test_simplification_depends_on_input_row_order`. Phase 9 gave every layer one canonical order
+    at the front door (`overture._canonical_order`, sorted by GERS id) so that two runs of a city
+    agree; taking the query result unsorted here silently undid that on the tiled path, leaving the
+    order a property of the installed GEOS build rather than of the data. It also fed
+    `pooled_artifact_threshold`, so a change in STRtree traversal would have moved the threshold and
+    with it the tile cache key.
     """
     assert_projected_crs(layer, "layer")
-    positions = layer.sindex.query(window, predicate="intersects")
+    positions = np.sort(layer.sindex.query(window, predicate="intersects"))
     return layer.iloc[positions].reset_index(drop=True).copy()

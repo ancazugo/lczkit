@@ -371,6 +371,22 @@ def build_arms(
         "building_area_raw_m2": float(raw_buildings.geometry.area.sum()),
         "building_area_cleaned_m2": float(cleaned_buildings.geometry.area.sum()),
         "buildings_area_retention": cleaned.report.area_retention("buildings_area"),
+        # Union-based, which is the criterion. The summed figure above is kept beside it because
+        # every historical record in docs/experiments/ quotes it, and the two answer different
+        # questions wherever a city's sources overlap themselves.
+        "buildings_area_union_retention": (
+            cleaned.report.footprints.union_retention if cleaned.report.footprints else None
+        ),
+        "raw_self_overlap_fraction": (
+            cleaned.report.footprints.raw_self_overlap_fraction
+            if cleaned.report.footprints
+            else None
+        ),
+        "residual_self_overlap_fraction": (
+            cleaned.report.footprints.residual_self_overlap_fraction
+            if cleaned.report.footprints
+            else None
+        ),
         "is_planar_enforced": next(
             (
                 step.detail["is_planar_enforced"]
@@ -636,10 +652,19 @@ def show(results: dict[str, Any]) -> None:
     print(
         f"  buildings {clean['buildings_raw']} raw -> {clean['buildings_area']} area layer "
         f"({clean['buildings_topo']} topo); {clean['building_area_raw_m2'] / 1e6:.3f} -> "
-        f"{clean['building_area_cleaned_m2'] / 1e6:.3f} km2 ({lost:.1%} of area removed, "
-        f"retention {clean['buildings_area_retention']:.2%}); "
+        f"{clean['building_area_cleaned_m2'] / 1e6:.3f} km2 ({lost:.1%} of summed area removed, "
+        f"retention {clean['buildings_area_retention']:.2%} of sum); "
         f"planar={clean['is_planar_enforced']}"
     )
+    union_retention = clean.get("buildings_area_union_retention")
+    if union_retention is not None:
+        # The figure the criterion is actually stated against. Printed with the self-overlap
+        # beside it, because "98.40% of the sum" and "100.00% of the ground" are the same run.
+        print(
+            f"  against the UNION of raw footprints: retention {union_retention:.2%}; "
+            f"raw self-overlap {clean['raw_self_overlap_fraction']:.2%}, "
+            f"residual {clean['residual_self_overlap_fraction']:.2%}"
+        )
 
     truth = results["ground_truth"]
     if truth is None:
@@ -675,16 +700,42 @@ def show(results: dict[str, Any]) -> None:
             f"{report['natural_share']:>10.1%}   {arm['description']}"
         )
 
-    print("\n  confusion axes, as a share of all disagreement:")
+    # Naming the reference on every axis line is not decoration. Phase 12 opened because this
+    # block printed lcz_v3 axes under the bare heading "confusion axes" four lines below a table
+    # whose columns *are* labelled, and the two references give opposite answers: on Berlin,
+    # lcz_v3 said height 31.8% / compactness 25.8% where the labels said 17.0% / 55.2%. Lift is
+    # printed beside the raw share because raw shares are not comparable across references either.
+    print("\n  confusion axes, as a share of all disagreement (lift in brackets):")
     for name, arm in results["arms"].items():
-        report = arm["agreement"]
-        height = sum(entry["share_of_disagreement"] for entry in report["height_axis"])
-        compact = sum(entry["share_of_disagreement"] for entry in report["compactness_axis"])
-        print(
-            f"    {name}: height (1-2-3, 4-5-6) {height:>6.1%}    "
-            f"compactness (1-4, 2-5, 3-6) {compact:>6.1%}    "
-            f"n_disagree={report['n_disagree']}"
-        )
+        for source, report in (
+            ("vs truth", arm.get("agreement_ground_truth")),
+            ("vs lcz_v3", arm["agreement"]),
+        ):
+            if not report:
+                print(f"    {name} {source:<10} —")
+                continue
+            height = report.get("height_axis_summary")
+            compact = report.get("compactness_axis_summary")
+            if height is None or compact is None:
+                height = {
+                    "share_of_disagreement": sum(
+                        e["share_of_disagreement"] for e in report["height_axis"]
+                    ),
+                    "lift": float("nan"),
+                }
+                compact = {
+                    "share_of_disagreement": sum(
+                        e["share_of_disagreement"] for e in report["compactness_axis"]
+                    ),
+                    "lift": float("nan"),
+                }
+            print(
+                f"    {name} {source:<10} height (1-2-3, 4-5-6) "
+                f"{height['share_of_disagreement']:>6.1%} [{height['lift']:>4.2f}]    "
+                f"compactness (1-4, 2-5, 3-6) "
+                f"{compact['share_of_disagreement']:>6.1%} [{compact['lift']:>4.2f}]    "
+                f"n_disagree={report['n_disagree']}"
+            )
 
     print(f"\n  {TESTED_PARAMETER} on units of KNOWN reference class")
     print("  (area-weighted median, and the area share inside the published range)")

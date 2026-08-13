@@ -262,13 +262,20 @@ Cross-layer topology: apply water-based dropping to `buildings_topo`; drop water
 through buildings.
 
 Emit a **cleaning report** recording, per operation, both feature counts **and total footprint
-area** in and out. Area is the load-bearing number — the 23.5% loss above survived to Phase 6.5
-precisely because only counts were tracked. Include it in the output manifest, and assert total
-area retention on `buildings_area` in tests.
+area** in and out. Area is the load-bearing number — a 23.5% loss survived to Phase 6.5 precisely
+because only counts were tracked. Include it in the output manifest.
 
-*Acceptance:* fixture city produces both layers and a simplified network; `buildings_area`
-retains ≥99% of input footprint area after validity fixes; cleaning report is populated with
-counts and areas; before/after values asserted in tests.
+**Measure retention against the UNION of raw footprints, not their sum.** Sources self-overlap:
+Kowloon's raw Overture footprints double-count 7.52% of summed area against Berlin's 0.61%, so
+`trim_overlaps` takes summed retention to 98.40% without dropping a single feature. The original
+"≥99% of summed area" criterion and "trim overlaps but do not merge" are jointly unsatisfiable
+wherever self-overlap exceeds 1%. The union is the ground actually covered by buildings, which is
+what BSF measures. Also report **`raw_self_overlap_fraction`** per city — it is a real
+source-quality signal.
+
+*Acceptance:* fixture city produces both layers and a simplified network; `buildings_area` retains
+≥99% of the **union** of input footprint area after validity fixes; cleaning report is populated
+with counts, areas and self-overlap; before/after values asserted in tests.
 
 ---
 
@@ -751,12 +758,12 @@ threshold trims different footprints and every building-area parameter — inclu
 `industrial_fraction` — moves with it. **Check this first if those transitions ever matter.**
 
 **Cached and cold runs differ by 75 of ~198 800 features — CLOSED in Phase 9 at `040be15`.** Both
-halves of the diagnosis above were inference from adjacency and both were wrong. The cache was
+halves of the original diagnosis were inference from adjacency and both were wrong. The cache was
 transparent (the two runs shared none: `phase8_threshold_labels.py` passes `cache_dir=None`), and
 stitch ordering was innocent (`pool.map` preserves job order). The real unsorted iteration was at
 the front door: `OvertureSource._fetch` runs a DuckDB scan over many remote parquet files with no
-`ORDER BY`, so row order was whatever the parallel readers finished in — and `neatnet` re-nodes a
-network in the order it receives it. Every layer now arrives sorted by GERS id.
+`ORDER BY`, so row order was whatever the parallel readers finished in. Every layer now arrives
+sorted by GERS id. Phase 12 closed two residuals in the same claim — see its write-up.
 ### Phase 9 — Multi-city validation — CONCLUDED
 
 **The founding premise is confirmed, and it is the binding constraint.**
@@ -829,67 +836,95 @@ antidote to the two-mid-rise-class fixture that distorted Phase 6.7. Use it as a
 This supersedes the 40.9%/53.2% figures the MVP-complete framing rested on. The gap is 40 points,
 not 12. It does not change priorities, but the honest framing is "here is what constrains this
 class of method," not "here is a good map."
+### Phase 11 — Unit decision and cascade ordering — CONCLUDED
+
+**E1 — split verdict, enclosures not adopted (third time, same reason).** Fifteen cities at
+`coarse`: built +3.8 (12/15), overall −0.2 (8/15). The pre-registered rule required both.
+
+The comparability check is the valuable part: Phase 9 and Phase 11 at `none` agree to the decimal
+(−1.5 overall / +2.4 built, 5/15 and 9/15), confirming the harness is stable across phases.
+
+**The split is regional, not by class:**
+
+| | overall | built |
+|---|---|---|
+| Europe + N. America (7) | −2.1 | +2.8 |
+| Everywhere else (9) | +1.3 | +4.3 |
+
+Outside Europe and N. America enclosures lead on **both** criteria. The global −0.2 is seven cities
+pulling against nine. Jakarta +10.3, Rio −11.3 — a 21-point swing driven by natural-class share,
+since enclosures approximate a patch in built fabric and smear large heterogeneous natural classes.
+
+**Ruling: expose `unit_strategy` as config, default `grid`, no auto-selection.** Do not switch on
+region — region is not the mechanism, natural-class share and patch heterogeneity are, and a rule
+keyed on continent is wrong at every boundary and indefensible in a paper. Record the choice in the
+manifest and document the trade-off so users choose knowingly.
+
+**E2 — refuted, and the question was ill-posed.** `full_reversed` is not between `coarse` and
+`full`; it **is** `coarse`, bit-identical in six of eight cities. A cascade is winner-takes-all per
+building, and WSF-3D plus GHS-BUILT-H answer for 92–99% of building area, leaving Open Buildings
+0.3–6.4% to claim instead of 50–93%. **Cascade order is a selection switch, not a blending knob —
+no intermediate configuration is reachable by reordering.**
+
+**Open Buildings 2.5D is retired from the cascade.** It hurts running first and claims nothing
+running last. Keep the code and the tier interface; document it as measured-harmful. Shrinkage
+toward the unit mean remains the only route back, on the deferred list.
+
+The cascade improves **all sixteen cities**, +3.7 overall / +4.8 built, including the seven
+Europe/N. America cities Phase 10 never ran — Milan +6.6 built from an already-69% starting
+coverage.
 
 ---
 
-### Phase 11 — Unit decision and cascade ordering — CONCLUDED
+### Phase 12 — Axis reconciliation — CONCLUDED
 
-Sixteen cities, 8.9 h, none skipped. **The aggregate A/B statistic at `none` reproduces Phase 9
-exactly** — −1.5 overall (5/15), +2.4 built (9/15) — so every delta below is the variable it names.
+**The contradiction is resolved, and the resolution disqualifies the instrument that produced it.**
 
-**E1 confirmed on both halves, and the verdict is still split.** Over the fifteen at `coarse`:
-built **+3.8 (12/15)** against a predicted +2 to +4 and ahead in more than half; overall **−0.2
-(8/15)** against a predicted "below +1.0, plausibly at or below zero". B does not lead overall, so
-by the pre-registered rule **enclosures are not adopted** — the third time, and each time for the
-same reason.
+The medians were **not** computed differently — 15.5% / 2.6% reproduces exactly from the stored
+record, and every published axis figure is against So2Sat labels. What the raw axis share cannot do
+is carry a comparison, in either direction:
 
-**But the split is regional, not by class, and that is the finding to keep:**
+- **Not across cities.** Its denominator is all disagreement, so a city's natural-class share (3.5%
+  to 54.1% across the sixteen) dilutes it, and which pairs can fire depends on which classes the
+  reference holds.
+- **Not between the axes.** The height axis has six pairs to compactness's three and more reachable
+  directions. **A null that never looks at an axis awards height 3.9× more disagreement than
+  compactness at `none`; the observed ratio was 4.9×.** Phase 9's "height dominates roughly three to
+  one, in 11 of 15 cities" is mostly the instrument — the excess over affordance is 1.26×, and
+  normalising each city individually puts compactness ahead of the median at `none` too.
 
-| group | n | overall B − A | built B − A |
-|---|---:|---:|---:|
-| Europe + N. America | 7 | −2.1 | +2.8 |
-| **everywhere else** | 9 | **+1.3** | **+4.3** |
+**Cascade variant is the third confound and the consequential one.** Phase 9 measured at `none`;
+the package has shipped `coarse` since Phase 10. Same sixteen cities: `none` gives 14.1% / 2.9%,
+`coarse` gives **6.0% / 6.4%**. Filling heights halves the height axis — which is the cascade
+working. **An axis figure recorded without its cascade is half a measurement.**
 
-Outside Europe and North America **B leads on both criteria**. The global −0.2 is seven cities
-pulling against nine. Jakarta gives B +10.3 overall, Rio −11.3: enclosures approximate an LCZ patch
-in built fabric and smear the large heterogeneous natural classes, so where a city's labelled cells
-are mostly built they win outright. The deficit has also closed monotonically as heights filled
-(−1.5 → −0.2 overall, +2.4 → +3.8 built). **A configurable or per-region unit strategy is the live
-option; a global default is the wrong shape for this evidence.** Gated on the output-schema
-question — what `units_viz.parquet` and Phase 7 carry when parameters live on enclosures.
+**Normalised — `lift` against a composition-preserving null — the recommendation is compactness:**
 
-**E2 refuted, degenerately — and the question was ill-posed.** `full_reversed` does not land
-between `coarse` and `full`; it is **bit-identical to `coarse` in 6 of 8 cities**. A cascade is
-winner-takes-all per building, and WSF-3D plus GHS-BUILT-H answer for 92–99% of building area, so
-running them first leaves Open Buildings **0.3–6.4%** to claim instead of 50–93%.
+| arm A, `coarse`, 16 cities | height | compactness |
+|---|---|---|
+| median lift | 0.86 | **1.16** (leads 11/16) |
 
-> **Cascade order is a selection switch, not a blending knob.** Whichever tier runs first claims
-> essentially the entire unresolved set. No intermediate configuration is reachable by reordering;
-> keeping a fine product's resolution *where it helps* needs per-unit selection or shrinkage.
+Height sits *below* 1.0. On arm B compactness leads more strongly still (2.33 vs 1.64), so
+enclosures raise the compactness lift rather than lowering it — the lever is not simply "adopt
+enclosures", which Phase 11 declined on separate grounds.
 
-`coarse→full` replicates Phase 10: −2.1 pts on eight cities against −1.9 on nine, positive in 4 of
-8, Mumbai again furthest down and again below its own tier-1 baseline. **Open Buildings is now dead
-weight in every configuration** — it hurts running first and claims nothing running last.
+**Next accuracy lever: unit definition and footprint coverage.** And it is region-shaped: median
+compactness lift is **2.37 in Europe + N. America against 1.15 elsewhere**, while height is flat
+(0.85 / 0.87) — the same seven-against-nine split where Phase 11 found enclosures losing. Two
+independent measurements now point the same way. Not yet a mechanism.
 
-**The cascade improves all sixteen cities, including the seven Europe/N. America ones Phase 10
-never ran**: arm A +3.7 overall and +4.8 built, 16 of 16, coverage reaching 91.6–99.8%. European
-gains are larger than expected from cities already at 45–80% tier-1 — Milan +6.6 built, Rome +3.3.
+**E1 partial, and the half that failed is the informative one.** Compactness leads at `coarse` as
+predicted, but the ordering does **not** reverse at `none` once normalised (1.34 vs 1.22, leading
+9/16). The lever did not flip when the default cascade changed; the raw share was never measuring
+what it was read as measuring, at either setting. **E2 confirmed** — compactness spread falls 15.6×
+→ 6.9× on lift, max/median 3.5.
 
-**Primary fixture switched to Kowloon, Hong Kong** (~3 km, 2.4 MB). Its labels hold LCZ 1, 2, 3, 4
-and 5, so both confusion axes have pairs; Berlin's hold two classes, both mid-rise, which made the
-height axis **unmeasurable there, not small** — and Phase 6.7 ranked the axes from it anyway. Against
-the labels its axes read height 18.1% / compactness 27.6%, against Berlin's 17.0% / 55.2% — **not a
-reversal**: Berlin's compactness share was inflated because a two-class reference supplies both
-members of the 2-5 pair and only one member of any height pair. Five classes put both axes on equal
-footing. Hong Kong's thirteen classes are a property of the 30 km validation window; no 3 km window
-in the city holds more than six.
+**Never quote a raw axis share across cities or between axes again.** Report `lift`, with the
+cascade and reference named.
 
-**Flagged, not reconciled:** Kowloon's raw Overture footprints **double-count 7.52% of their own
-summed area** (Berlin 0.61%), so `trim_overlaps` takes `buildings_area` retention to 98.40% without
-dropping a single feature. Phase 1's "≥99% retention" acceptance and "trim overlaps but do not
-merge" cannot both hold where sources overlap themselves by more than 1%. Retention measured
-against the *union* of raw footprints rather than their sum is the likely correction — a spec
-decision, not taken here.
+Method note worth keeping: this was a **re-analysis of stored records**, not a re-run. Every run
+persists its confusion matrix and `axis_summary` reads that and nothing else, verified by 2 592
+stored axis pairs reproducing with 0 mismatches. Sixteen cities in seconds against Phase 11's 8.9 h.
 
 ---
 
@@ -1074,7 +1109,7 @@ reconcile silently.** That flagging behaviour is working; keep it.
 | Pooled threshold at 891 km² | **Adoption confirmed.** 10 of 172 181 cells (0.0058%), four-fold below the 256 km² rate. Whole-network cost measured at 10h39m against ~70 s. | 8 |
 | `clean_vectors` at 4 469 s | **Outlier, not regression.** Two cold runs over the same extent gave 456 s and 551 s, bracketing the 585.6 s benchmark. Overlapped a 10-hour single-core job on a shared node — plausible cause, recorded as coincidence in time rather than measurement. | 8 |
 | Feature-count gap of 1.7% | **Wrong baseline.** 195 508 predates this phase's road-rule and threshold fixes. Post-fix runs give 198 698 / 198 804 / 198 879 — a 0.04% gap. | 8 |
-| Cached and cold runs differ by 75 features | **Closed at `040be15`.** Not the cache (those runs shared none) and not stitch ordering (`pool.map` preserves job order) — both were inference from adjacency. `OvertureSource._fetch` scanned remote parquet with no `ORDER BY`, and `neatnet` re-nodes in receipt order. Layers now arrive sorted by GERS id. | 8, 9 |
+| Cached and cold runs differ by 75 features | **Closed at `040be15`.** Not the cache (those runs shared none) and not stitch ordering (`pool.map` preserves job order) — both were inference from adjacency. `OvertureSource._fetch` scanned remote parquet with no `ORDER BY`, and `neatnet` re-nodes in receipt order. Layers now arrive sorted by GERS id. **A working-tree edit later reverted this record to "Open"; flagged in Phase 12 and restored.** | 8, 9, 12 |
 | Power-law extrapolation of runtime | Ran 24% optimistic (8.6 h projected, 10h39m measured). Treat such fits as lower bounds when deciding feasibility. | 8 |
 | Berlin's 53.2% ceiling | **Small-sample artefact of 432 cells. Real ceiling is 75.2% on 9 627.** The MVP-complete framing rested on it. Re-measure both lczkit and ceiling at full sample. | 6.7, 9 |
 | "% of ceiling" as a metric | **Broken.** Vancouver: 41.8% against a 36.7% ceiling = 114%. The comparator is another estimator, not a bound. Report raw agreement and ceiling side by side. | 9 |
@@ -1082,16 +1117,25 @@ reconcile silently.** That flagging behaviour is working; keep it.
 | SVF as the next accuracy lever | **Dropped.** Weight 4 added to a metric that cannot fill its weight-6 `Hr` dimension across most of the world. Height tiers first. | 9, 10 |
 | Height cascade tiers 2–4 | **Specified in Phase 3, never built.** Phase 9 shows this is the binding constraint outside Europe. Now Phase 10. | 3, 10 |
 | A vs B | Split verdict: B ahead 9/15 on built classes (+2.4 pts) but 5/15 overall (−1.5). Enclosures smear large heterogeneous natural units. Not adopted; the one-class-one-city objection no longer applies. Revisit after height. | 9 |
-| A vs B, re-measured at `coarse` | **Still not adopted, but the split is regional.** Overall −0.2 (8/15), built +3.8 (12/15) — and outside Europe/N. America B leads on **both** (+1.3, +4.3). The deficit closed monotonically as heights filled. A global default is the wrong shape; a configurable or per-region strategy is the live option, gated on the output schema. | 11 |
 | Height tier acceptance tested on per-building error | **Wrong test.** Open Buildings has the lowest per-building error and the only within-unit skill, and still degrades the map: `Hr` is a geometric mean and GOB's within-unit spread is 0.441 against reality's 0.195. Evaluate new height tiers on **within-unit dispersion**, not MAE. | 10 |
 | `full` cascade (with GOB 2.5D) as default | **Refuted.** `coarse→full` is −1.9 points, positive in only 4 of 9 cities. Default is `coarse`; GOB stays implemented and off. | 10 |
 | `min_height_m` floor for Open Buildings | **Rejected.** Undocumented threshold tuned to stop one product hurting; would be copied and outlive its justification. Also treats the wrong thing — the problem is dispersion, not a low tail. | 10 |
 | P2: coarse products favour the grid over enclosures | **Refuted in the opposite direction.** B's built-class lead widens with heights filled (+1.7 → +4.1). Phase 9 handicapped enclosures by measuring them with `Hr` mostly null. | 10 |
 | Berlin baseline 40.9% / 53.2% ceiling | **Superseded.** Full-sample: 35.3% against 75.2% on 9 627 cells, independently reproduced. The gap is 40 points, not 12. | 6.7, 9, 10 |
 | Berlin as primary fixture | **Hong Kong is better** — 13 classes, the richest on disk, and the antidote to the two-mid-rise-class fixture that distorted Phase 6.7. | 10 |
-| Switched: primary fixture is Kowloon, ~3 km | Done. LCZ 1, 2, 3, 4, 5, so both axes have complete pairs. Against labels: height 18.1% / compactness 27.6%, against Berlin's 17.0% / 55.2% — not a reversal, but Berlin's compactness share was inflated by a reference holding both members of one compactness pair and one member of every height pair. **The 13 classes belong to the 30 km window**; no 3 km window in Hong Kong holds more than six. Berlin and Rotterdam retained. | 11 |
-| Reversed cascade order as a middle ground | **Refuted, degenerately.** `full_reversed` is bit-identical to `coarse` in 6 of 8 cities: a cascade is winner-takes-all per building and the coarse tiers answer for 92-99% of area, so GOB claims 0.3-6.4% instead of 50-93%. **Order is a selection switch, not a blending knob** — no intermediate config is reachable by reordering. | 11 |
-| `buildings_area` ≥99% retention acceptance | **Flagged, not reconciled.** Unmeetable where sources overlap themselves by >1%: Kowloon's raw footprints double-count 7.52% of their summed area (Berlin 0.61%), so `trim_overlaps` gives 98.40% while dropping no feature. Retention against the *union* of raw footprints is the likely correction. Spec decision outstanding. | 1, 11 |
+| A vs B, third measurement | Not adopted — built +3.8 (12/15) but overall −0.2 (8/15); the pre-registered rule required both. **Split is regional**: enclosures lead on both criteria outside Europe/N. America. Ruling: `unit_strategy` as config, default `grid`, **no auto-selection by region** — region is not the mechanism. | 11 |
+| Cascade order as a blending knob | **Ill-posed.** Winner-takes-all per building; `full_reversed` is bit-identical to `coarse` in 6 of 8 cities. Order is a selection switch and no intermediate configuration is reachable by reordering. | 11 |
+| Open Buildings 2.5D | **Retired from the cascade.** Hurts first, claims 0.3–6.4% last. Code and tier interface kept, documented as measured-harmful. | 10, 11 |
+| Retention measured against summed raw footprint area | **Spec bug, corrected and implemented.** Sources self-overlap (Kowloon 7.52%, Berlin 0.61%), making ≥99%-of-sum and trim-not-merge jointly unsatisfiable. Measured against the **union**, one-sided; `FootprintCoverage` reports `raw_self_overlap_fraction` and a residual, since `union_retention` above 1.0 means the BSF numerator still double-counts. | 1, 11, 12 |
+| Whole-footprint `union_all` for the union denominator | **Rejected on measurement, exactly as the anti-pattern requires.** Superlinear (exponent 1.26→1.80), **711 s at Berlin's 891 km²** against a 9.8-minute whole run. Replaced by a component-wise union over genuinely overlapping footprints: sublinear (max 0.84), **8.6 s at 891 km², 83×**, and exact — agrees with the global union to **0.0000 m²** at 64/144/256 km². | 12 |
+| Confusion-axis shares across cities | **Resolved. The raw share cannot carry a comparison in either direction.** Not across cities (denominator is all disagreement; natural share ranges 3.5%–54.1%) and **not between the axes** (height has six pairs to compactness's three, so a null awards it 3.9× more). Report `lift` against a composition-preserving null, with the cascade and reference named. | 9, 10, 12 |
+| Phase 9's "height dominates 15.5% vs 2.6%, three to one" | **Close to what the instrument returns when nothing is happening** — the null affords 3.9×, observed 4.9×. Normalised, compactness leads at *both* cascades. Both readings this project took from the raw share, Phase 6.7's and Phase 9's, were taken through a broken instrument. | 6.7, 9, 12 |
+| Axis figures recorded without their cascade | **Half a measurement.** `none` gives 14.1% / 2.9%, `coarse` gives 6.0% / 6.4% on the same sixteen cities — filling heights halves the height axis, which is the cascade working. Phase 9's medians describe a configuration the package stopped shipping in Phase 10. | 9, 10, 12 |
+| Next accuracy lever | **Unit definition and footprint coverage** — normalised compactness lift 1.16 against height 0.86, leading 11/16 at `coarse`. Not "adopt enclosures": arm B *raises* the compactness lift (2.33 vs 1.64). | 12 |
+| `_axis` count-weighted while the module docstring said everything was area-weighted | Both now reported; the count-based field keeps its definition so no stored arm-B figure moves silently. Identical on a grid, which is how it survived to Phase 11. | 6, 12 |
+| `unit_scale_experiment.show()` printed `lcz_v3` axes under an unlabelled heading | Fixed. It sat four lines below a table whose columns *are* labelled. Did not contaminate published figures, but the two references disagree by more than the quantity measured — Cairo 7.2% vs 24.7% compactness. | 12 |
+| `tiles.subset()` discarded the canonical row order | `sindex.query` is documented as unordered, and its result went straight to `neatnet` and to the pooled threshold that keys the tile cache. Sorted. **On the fixture the order-sensitivity that `test_simplification_depends_on_input_row_order` attributed to `neatnet` was `subset`'s own** — untiled, that network simplifies identically under a shuffle. | 8, 9, 12 |
+| Pooled-threshold thread environment asymmetric | The serial branch ran unpinned while the parallel branch ran pinned, and `n_workers` follows `os.sched_getaffinity` — so the same extent on a differently-sized node could land on a different cache key. Both branches now pinned. | 8, 12 |
 
 ---
 
@@ -1125,7 +1169,14 @@ the only realistic route to the distinction Overture discards)
 - **Don't introduce a whole-extent operation without measuring its scaling exponent at three or
   more extents.** `neatify` was profiled that way and tiling worked; the threshold-pinning step
   was not, and cost 15 hours. This applies to any operation over the full network, the full
-  building set, or the full unit set — including ones added to guarantee correctness.
+  building set, or the full unit set — including ones added to guarantee correctness. It has now
+  paid twice: Phase 12's footprint union looked like a cheap scalar and was superlinear at 711 s
+  over Berlin, caught before it shipped rather than after.
+- **When a fix changes what a cached artefact contains, bump the cache version — do not assume the
+  key notices.** Phase 12's row-order fix left the pooled threshold bit-identical, so the key would
+  not have moved while tile contents did, serving pre-fix tiles to a post-fix run. That is the same
+  "cache that changes results" failure the Phase 8 entry was opened for, nearly reintroduced by its
+  own fix.
 - Don't assert that a local operation is equivalent to the global one it replaces. Measure the
   deviation at an extent where the global version is still tractable, and record it.
 - **Don't attribute cost by adjacency in the call graph.** Reading the source shows the shape of

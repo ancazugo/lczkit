@@ -73,7 +73,7 @@ Restated here because the tiled path resolves the threshold itself and must fall
 as `neatify` would, so that a one-tile run and a whole-extent run agree.
 """
 
-TILE_RESULT_VERSION = 2
+TILE_RESULT_VERSION = 3
 """Bumped whenever `_simplify_window` changes what it writes for a given input.
 
 Part of the per-tile cache key. Config and the `neatnet` version cover everything *outside* this
@@ -82,6 +82,13 @@ key would detect.
 
 Version 2 adds `_tile_key` and `_failure`, so a cached tile replays the *report* as well as the
 geometry.
+
+Version 3: `subset` now preserves the layer's row order rather than returning spatial-index order,
+which changes the linework `neatnet` produces for an unchanged input. **The rest of the key does not
+notice.** Measured at 64 and 144 km2 of Berlin, the pooled threshold is *identical* under both
+orderings, so `_threshold_tag` moves not at all while tile contents differ by ~1.2% of linework —
+exactly the case this field exists for, and one that would otherwise have served pre-fix tiles to a
+post-fix run with nothing reporting it.
 """
 
 SIMPLIFIED_COLUMN = "_simplified"
@@ -442,11 +449,17 @@ def pooled_artifact_threshold(
     assert_projected_crs(streets, "streets")
     jobs = [(tile, subset(streets, tile.window)) for tile in tiles]
     n_workers = max(1, min(workers, len(jobs)))
-    if n_workers == 1:
-        indexed = [_tile_face_index(*job) for job in jobs]
-    else:
-        with _single_threaded_children(), _worker_pool(n_workers) as pool:
-            indexed = list(pool.map(_tile_face_index, *zip(*jobs, strict=True)))
+    # The thread pinning wraps *both* branches. `n_workers` follows `os.sched_getaffinity`, so
+    # whether this runs serially is a property of the machine, and the threshold it produces is
+    # the tile cache key at full float precision. Pinning only the parallel branch would let the
+    # same extent on a differently-sized node land on a different key and silently rebuild every
+    # tile - a cache that misses for reasons the report cannot show.
+    with _single_threaded_children():
+        if n_workers == 1:
+            indexed = [_tile_face_index(*job) for job in jobs]
+        else:
+            with _worker_pool(n_workers) as pool:
+                indexed = list(pool.map(_tile_face_index, *zip(*jobs, strict=True)))
 
     populated = [tile_index for tile_index in indexed if tile_index.values.size]
     values = (

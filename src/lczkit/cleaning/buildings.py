@@ -29,9 +29,12 @@ import geopandas as gpd
 import geoplanar
 import numpy as np
 import pandas as pd
+import shapely
+from scipy.sparse import csr_matrix
+from scipy.sparse.csgraph import connected_components
 
 from lczkit.cleaning.geometry import largest_part
-from lczkit.cleaning.report import CleaningStep, Stage
+from lczkit.cleaning.report import CleaningStep, FootprintCoverage, Stage
 from lczkit.crs import assert_projected_crs
 
 BUILDING_ID = "building_id"
@@ -45,6 +48,69 @@ inheritance (`lczkit.heights.inherit`), not by this join.
 
 def _area(buildings: gpd.GeoDataFrame) -> float:
     return float(buildings.geometry.area.sum())
+
+
+def union_area(buildings: gpd.GeoDataFrame) -> float:
+    """Ground actually covered by `buildings`, counting overlapping footprints once.
+
+    The denominator Phase 1's retention criterion is stated against, and the quantity building
+    surface fraction is trying to measure — BSF sums overlay pieces, so a self-overlapping layer
+    inflates it. See `FootprintCoverage` for why the sum cannot serve.
+
+    **Component-wise, because the obvious implementation is superlinear.** A single
+    `shapely.union_all` over every footprint was measured at five Berlin extents before being
+    rejected: exponent 1.26 -> 1.80 in feature count, reaching **711 s for 892k footprints at
+    891 km2** — roughly doubling a metropolitan `clean_vectors` run, which is 9.8 minutes in total.
+    CLAUDE.md's rule that a whole-extent operation gets its exponent measured at three or more
+    extents is what caught it.
+
+    Footprints are very nearly disjoint — Berlin's raw set overlaps itself by 0.19% of summed area
+    at metropolitan extent — so almost every footprint is its own component and the global union is
+    doing enormous work to discover that. Unioning only within groups that genuinely overlap is
+    exact, not an approximation: area is additive over disjoint sets, and two footprints in
+    different components share no area by construction.
+
+    Sharing only a boundary is not sharing area, so pairs are filtered on positive intersection
+    area rather than on `intersects` alone. Otherwise a terrace row becomes one component and the
+    saving goes with it.
+    """
+    if buildings.empty:
+        return 0.0
+    assert_projected_crs(buildings, "buildings")
+    geometry = np.asarray(buildings.geometry.values)
+    areas = shapely.area(geometry)
+
+    candidates = np.asarray(buildings.sindex.query(buildings.geometry, predicate="intersects"))
+    left, right = candidates[0], candidates[1]
+    keep = left < right
+    left, right = left[keep], right[keep]
+    if left.size:
+        shared = shapely.area(shapely.intersection(geometry[left], geometry[right]))
+        overlapping = shared > 0.0
+        left, right = left[overlapping], right[overlapping]
+
+    if not left.size:
+        return float(areas.sum())
+
+    n = len(geometry)
+    graph = csr_matrix(
+        (np.ones(left.size, dtype=np.int8), (left, right)),
+        shape=(n, n),
+    )
+    _, labels = connected_components(graph, directed=False)
+
+    order = np.argsort(labels, kind="stable")
+    grouped = labels[order]
+    boundaries = np.flatnonzero(np.r_[True, grouped[1:] != grouped[:-1], True])
+
+    total = 0.0
+    for start, stop in zip(boundaries[:-1], boundaries[1:], strict=True):
+        members = order[start:stop]
+        if members.size == 1:
+            total += float(areas[members[0]])
+        else:
+            total += float(shapely.union_all(geometry[members]).area)
+    return total
 
 
 def _step(
@@ -351,6 +417,13 @@ class BuildingLayers:
     topo: gpd.GeoDataFrame
     """Planar and non-overlapping. Topology and the street profile read this."""
 
+    coverage: FootprintCoverage
+    """Union-based footprint accounting for the area layer, against the raw input.
+
+    Carried here rather than returned as a third tuple element so adding it does not change the
+    signature every caller unpacks.
+    """
+
 
 def clean_buildings(
     buildings: gpd.GeoDataFrame,
@@ -382,6 +455,17 @@ def clean_buildings(
     area, step = trim_overlaps(base)
     steps.append(step)
 
+    # Measured on `base`, i.e. after the validity fixes and before the fork, which is where
+    # CLAUDE.md states the criterion ("retains >=99% of the union of input footprint area after
+    # validity fixes"). Taking it on the raw input instead would fold make_valid's repairs into
+    # the denominator and make the criterion depend on how broken the source geometry was.
+    coverage = FootprintCoverage(
+        raw_summed_area_m2=_area(base),
+        raw_union_area_m2=union_area(base),
+        area_summed_m2=_area(area),
+        area_union_m2=union_area(area),
+    )
+
     topo, step = resolve_overlaps(base, merge_limit_m2, overlap_limit)
     steps.append(step)
     topo, step = absorb_small_buildings(topo, min_area_m2)
@@ -407,4 +491,4 @@ def clean_buildings(
             detail={"is_planar_enforced": planar},
         )
     )
-    return BuildingLayers(area=area, topo=topo), steps
+    return BuildingLayers(area=area, topo=topo, coverage=coverage), steps

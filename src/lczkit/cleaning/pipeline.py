@@ -275,6 +275,6 @@ def clean_vectors(
         waterlines=waterlines,
         waterbodies=waterbodies,
         land_use=land_use,
-        report=CleaningReport(steps=steps),
+        report=CleaningReport(steps=steps, footprints=layers_out.coverage),
         crs=crs,
     )

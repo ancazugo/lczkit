@@ -33,7 +33,12 @@ removal:
 
 - **`buildings_area`** adds overlap *trimming* only, and feeds every area statistic — building
   surface fraction, `Hr`, building count, mean building area, `industrial_fraction` — plus the
-  height cascade. It retains 99.5% of raw footprint area on the Berlin fixture.
+  height cascade. Retention is measured against the **union** of raw footprints, not their sum,
+  because Overture's sources overlap themselves: Kowloon's raw footprints double-count 7.52% of
+  their summed area against Berlin's 0.61%, so trimming that away reads as attrition against the sum
+  and is not. The cleaning report carries `raw_self_overlap_fraction` beside the retention figure,
+  and a residual overlap left in the layer is reported rather than assumed away — building surface
+  fraction sums overlay pieces, so it would inflate the numerator.
 - **`buildings_topo`** adds overlap merging, small-building dissolution, a road-buffer rule and a
   final planarity pass, and feeds the `neatnet` exclusion mask and `momepy.street_profile`.
   Destructive by design, and **verifiably planar** — `momepy.enclosures()` requires that, and the
@@ -308,6 +313,16 @@ single accuracy figure — plus built-class agreement separately from overall wi
 share stated beside it, agreement stratified by `height_completeness` band, and **both** confusion
 axes, apart because they are different instruments: the height axis (1↔2↔3, 4↔5↔6) diagnoses the
 height estimate, the compactness axis (1↔4, 2↔5, 3↔6) diagnoses footprint coverage and unit size.
+
+**Compare axes on `lift`, never on the raw share.** An axis's raw share of disagreement is not
+comparable across cities — its denominator is all disagreement, so a city's natural-class share
+dilutes it — and it is not comparable *between the axes* either: the height axis has six pairs to
+compactness's three, so a null model that never looks at an axis still awards height most of the
+error. `AxisSummary` therefore reports the raw share, a share restricted to references that could
+reach an axis at all (LCZ 1–6), and `lift` against a null that keeps each unit's reference class and
+the run's own distribution of wrong labels but breaks the association. `lift = 1.0` means the axis
+holds exactly the share its reference affords it. Record the cascade alongside: filling heights
+halves the height axis, so an axis figure without its cascade is half a measurement.
 
 Measured on metropolitan Berlin, over the **9 627 cells** carrying both references:
 

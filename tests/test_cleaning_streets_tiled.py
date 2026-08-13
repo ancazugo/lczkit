@@ -39,7 +39,7 @@ from lczkit.cleaning.streets import (
     simplify_streets,
     simplify_streets_tiled,
 )
-from lczkit.cleaning.tiles import build_tiles, layer_extent
+from lczkit.cleaning.tiles import build_tiles, layer_extent, subset
 from lczkit.crs import assert_projected_crs
 
 CRS = "EPSG:32633"
@@ -324,35 +324,41 @@ def test_two_cold_runs_produce_the_same_network(tmp_path: object) -> None:
     assert _linework(first) == _linework(second)
 
 
-def test_simplification_depends_on_input_row_order() -> None:
-    """Pinning the known limitation, not asserting it away.
+def test_tiling_adds_no_order_sensitivity_of_its_own() -> None:
+    """The corrected version of a test that measured the wrong thing.
 
-    `neatnet` re-nodes and re-merges a network in the order it receives it, so a shuffled input
-    gives the same feature count and the same total length with the edges split at different
-    points. That is a property of the library, not a bug this package can fix, and a test
-    claiming order-invariance here would be asserting something false.
+    It used to run the *tiled* path over an ordered and a shuffled copy of this grid and assert the
+    linework differed, attributing the difference to `neatnet` re-noding in receipt order. Phase 12
+    measured that attribution and it was wrong at this size: untiled, this network simplifies
+    **identically** under a shuffle, and the whole difference came from `subset` re-permuting rows
+    into spatial-index order — differently for each input, because the index is built per frame.
+    The test was pinning a defect and calling it a property of the library.
 
-    What follows from it is a requirement one level up: the row order reaching cleaning has to be
-    canonical already, or two runs over the same city disagree. `OvertureSource` is where that is
-    established and where it is tested — see `test_overture_source.py`. This test exists so that
-    if `neatnet` ever does become order-invariant, the constraint is revisited deliberately
-    rather than left in place forever.
+    `neatnet`'s order-sensitivity is real, just not visible here: the 6159-street Berlin fixture
+    does differ untiled under a shuffle (same 3735 features, different splits), which is why the
+    canonical-order requirement on `VectorSource` stands and is tested in `test_overture_source.py`.
+
+    What this pins now is the invariant the fix establishes, and it holds whichever way `neatnet`
+    behaves: **tiling contributes no order-sensitivity beyond what the simplifier itself has.** If
+    `subset` ever stops preserving row order, the two sides diverge and this fails.
     """
     streets = _grid_network()
     shuffled = streets.sample(frac=1.0, random_state=7).reset_index(drop=True)
 
-    ordered, _ = simplify_streets_tiled(
+    untiled_a, _ = simplify_streets(streets, _no_buildings())
+    untiled_b, _ = simplify_streets(shuffled, _no_buildings())
+    tiled_a, _ = simplify_streets_tiled(
         streets, _no_buildings(), tile_size_m=1000.0, buffer_m=300.0, workers=1
     )
-    reordered, _ = simplify_streets_tiled(
+    tiled_b, _ = simplify_streets_tiled(
         shuffled, _no_buildings(), tile_size_m=1000.0, buffer_m=300.0, workers=1
     )
-    assert len(ordered) == len(reordered)
-    assert ordered.geometry.length.sum() == pytest.approx(reordered.geometry.length.sum())
-    assert _linework(ordered) != _linework(reordered), (
-        "neatnet has become order-invariant; the canonical-order requirement on VectorSource "
-        "can be revisited"
-    )
+
+    assert len(tiled_a) == len(tiled_b)
+    assert tiled_a.geometry.length.sum() == pytest.approx(tiled_b.geometry.length.sum())
+    assert (_linework(tiled_a) == _linework(tiled_b)) == (
+        _linework(untiled_a) == _linework(untiled_b)
+    ), "tiling has become more (or less) order-sensitive than the simplifier it wraps"
 
 
 def test_the_cache_key_separates_thresholds_finer_than_six_decimals(tmp_path: object) -> None:
@@ -605,3 +611,31 @@ def test_a_configured_threshold_overrides_the_pooled_one() -> None:
     )
     assert step.detail["artifact_threshold"] == 9.25
     assert step.detail["threshold_source"] == "configured"
+
+
+def test_subset_preserves_the_layer_row_order_the_front_door_established() -> None:
+    """The tiled path must hand `neatnet` the same canonical order the whole-extent path does.
+
+    Phase 9 sorted every ingested layer by GERS id (`overture._canonical_order`) so that two runs
+    of a city agree, because `neatnet` simplifies as a function of received row order - which
+    `test_simplification_depends_on_input_row_order` pins as a fact. `subset` then re-permuted the
+    rows into whatever order the spatial index returned, which geopandas explicitly does not
+    guarantee: "results are often sorted but there is no guarantee". That made the tiled path's
+    output a property of the installed GEOS build rather than of the data, and it fed
+    `pooled_artifact_threshold`, whose value is the tile cache key.
+
+    Asserted on the *order*, not on a simplification result, so it stays meaningful if neatnet's
+    behaviour ever changes.
+    """
+    lines = [LineString([(x, 0.0), (x, 10.0)]) for x in range(12)]
+    names = [f"s{index}" for index in range(12)]
+    layer = gpd.GeoDataFrame({"name": names}, geometry=lines, crs="EPSG:32633")
+    window = shapely.box(-1.0, -1.0, 12.0, 11.0)
+
+    taken = subset(layer, window)
+
+    assert list(taken["name"]) == list(layer["name"])
+
+    # And a window catching a subset keeps that subset in the layer's own order too.
+    partial = subset(layer, shapely.box(3.5, -1.0, 8.5, 11.0))
+    assert list(partial["name"]) == ["s4", "s5", "s6", "s7", "s8"]

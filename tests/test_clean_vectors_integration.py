@@ -1,9 +1,14 @@
 """End-to-end integration test: `clean_vectors()` against a small real subset of the committed
 Berlin fixture. Asserts shape/schema/CRS/planarity, not exact values, per CLAUDE.md's test
 strategy — with one exception. Phase 1's acceptance criterion is a *number*, `buildings_area`
-retaining at least 99% of the raw footprint area, and it is asserted here against the report's own
-fields rather than against a recomputation, so that what is being trusted is the report a reader
-would see.
+retaining at least 99% of the **union** of raw footprint area, and it is asserted here against the
+report's own fields rather than against a recomputation, so that what is being trusted is the report
+a reader would see.
+
+The union, not the sum: Overture's sources overlap themselves, so summed area double-counts ground
+and a criterion stated against it cannot be met by a city where that exceeds the tolerance. Berlin
+overlaps itself by 0.61% and Kowloon by 7.52%, which is why the Hong Kong case lives in
+`test_cleaning_buildings.py` — this fixture cannot exercise it.
 """
 
 from __future__ import annotations
@@ -71,17 +76,42 @@ def test_clean_vectors_end_to_end(result: CleanedVectors) -> None:
 def test_the_area_layer_retains_the_footprint_area_the_metric_needs(result: CleanedVectors) -> None:
     """Phase 1's acceptance criterion, and the regression guard for the whole of Phase 6.6.
 
-    Read off the report rather than recomputed: a report that says 99% while the layer holds 76%
-    is exactly the failure this phase exists to close, and only reading the report catches it.
+    **Measured against the union of raw footprints, not their sum.** Sources self-overlap, so the
+    sum counts some ground twice and `trim_overlaps` removing that double count reads as attrition
+    against it - see `FootprintCoverage`. Read off the report rather than recomputed: a report that
+    says 99% while the layer holds 76% is exactly the failure this phase exists to close, and only
+    reading the report catches it.
     """
-    retention = result.report.area_retention("buildings_area")
+    footprints = result.report.footprints
+    assert footprints is not None
 
+    retention = footprints.union_retention
     assert retention is not None
     assert retention >= 0.99
 
     # ...and the report is not lying about the layer it describes.
+    assert footprints.area_summed_m2 == pytest.approx(result.buildings_area.geometry.area.sum())
     steps = result.report.stage_steps("buildings_area")
     assert steps[-1].area_out_m2 == pytest.approx(result.buildings_area.geometry.area.sum())
+
+
+def test_self_overlap_is_reported_as_a_source_quality_signal(result: CleanedVectors) -> None:
+    """`raw_self_overlap_fraction` exists so a city cannot fail the criterion invisibly.
+
+    Berlin's sources barely overlap themselves (0.61% at fixture scale), which is exactly why this
+    could not be seen until Kowloon arrived at 7.52%. The assertion is on the measure being present
+    and coherent, not on Berlin's value, so it is the Hong Kong test below that carries the case
+    the criterion was rewritten for.
+    """
+    footprints = result.report.footprints
+    assert footprints is not None
+
+    overlap = footprints.raw_self_overlap_fraction
+    assert overlap is not None
+    assert 0.0 <= overlap < 1.0
+    # The union can never exceed the sum, and equals it only for a fully disjoint source.
+    assert footprints.raw_union_area_m2 <= footprints.raw_summed_area_m2
+    assert footprints.area_union_m2 <= footprints.area_summed_m2
 
 
 def test_the_two_layers_are_joinable_and_the_area_one_is_the_larger(result: CleanedVectors) -> None:

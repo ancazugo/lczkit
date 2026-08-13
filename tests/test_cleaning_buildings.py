@@ -347,3 +347,70 @@ def test_clean_buildings_never_drops_a_building_for_a_null_height() -> None:
     assert len(layers.area) == 2
     assert len(layers.topo) == 2
     assert layers.area["height"].isna().all()
+
+
+def test_a_self_overlapping_source_reports_the_double_count_it_removed() -> None:
+    """The Kowloon case, in three rectangles. This is what the sum-based criterion could not state.
+
+    Two footprints overlap over 10 m2, so the source sums to 210 m2 while covering 200 m2 of
+    ground. Against the sum, `trim_overlaps` looks like it lost 4.8%; against the union it kept
+    everything. Both are true statements about the same operation, and only the second is what
+    building surface fraction cares about, because BSF sums overlay pieces and would count the
+    overlapping strip twice.
+    """
+    gdf = _gdf([box(0, 0, 10, 10), box(9, 0, 20, 10)])
+
+    layers, _ = clean_buildings(
+        gdf, max_area_m2=10_000, min_area_m2=1, merge_limit_m2=1, overlap_limit=0.9
+    )
+    coverage = layers.coverage
+
+    assert coverage.raw_summed_area_m2 == pytest.approx(210.0)
+    assert coverage.raw_union_area_m2 == pytest.approx(200.0)
+    assert coverage.raw_self_overlap_fraction == pytest.approx(10 / 210)
+
+    # Against the sum this reads as attrition; against the union it is a clean pass.
+    assert coverage.area_summed_m2 / coverage.raw_summed_area_m2 == pytest.approx(200 / 210)
+    assert coverage.union_retention == pytest.approx(1.0)
+    assert coverage.ground_retention == pytest.approx(1.0)
+    assert coverage.residual_self_overlap_fraction == pytest.approx(0.0)
+
+
+def test_a_disjoint_source_reports_no_self_overlap_and_the_two_denominators_agree() -> None:
+    """Berlin's situation, near enough: where nothing overlaps, sum and union are the same number
+    and the change of denominator is a no-op. That is the property that lets the criterion be
+    restated without moving any city that already met it."""
+    gdf = _gdf([box(0, 0, 10, 10), box(20, 0, 30, 10)])
+
+    layers, _ = clean_buildings(
+        gdf, max_area_m2=10_000, min_area_m2=1, merge_limit_m2=1, overlap_limit=0.9
+    )
+    coverage = layers.coverage
+
+    assert coverage.raw_self_overlap_fraction == pytest.approx(0.0)
+    assert coverage.raw_union_area_m2 == pytest.approx(coverage.raw_summed_area_m2)
+    assert coverage.union_retention == pytest.approx(1.0)
+
+
+def test_residual_double_counting_is_reported_rather_than_asserted_away() -> None:
+    """`union_retention` above 1.0 means the BSF numerator still double-counts.
+
+    `trim_overlaps` resolves overlapping *pairs*; it does not claim to resolve every stack. The
+    report therefore has to be able to say "this layer holds more area than the ground it covers"
+    rather than folding both failures into one number that cannot tell losing ground from
+    double-counting it. Here the two properties are asserted as a consistent pair, whichever way
+    the fixture happens to fall.
+    """
+    gdf = _gdf([box(0, 0, 10, 10), box(5, 0, 15, 10), box(8, 0, 18, 10)])
+
+    layers, _ = clean_buildings(
+        gdf, max_area_m2=10_000, min_area_m2=1, merge_limit_m2=1, overlap_limit=0.9
+    )
+    coverage = layers.coverage
+    residual = coverage.residual_self_overlap_fraction
+    retention = coverage.union_retention
+    assert residual is not None and retention is not None
+
+    # union_retention counts double-counted area; ground_retention cannot. They differ by exactly
+    # the residual overlap, which is what makes the pair diagnostic rather than a single opinion.
+    assert retention * (1.0 - residual) == pytest.approx(coverage.ground_retention)

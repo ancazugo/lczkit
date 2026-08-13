@@ -24,11 +24,24 @@ The two are different instruments and are reported separately. An earlier revisi
 named the second set the height axis, which inverted what a reader would conclude from it: a
 disagreement between LCZ 2 and LCZ 5 says nothing about heights, both being midrise.
 
-Everything is area-weighted. On a regular grid that is the same as counting units; on enclosures
-it is not, and weighting by count there would let a thousand courtyards outvote a district.
+Agreement is area-weighted throughout. On a regular grid that is the same as counting units; on
+enclosures it is not, and weighting by count there would let a thousand courtyards outvote a
+district. **The axes are the exception, and deliberately carry both weightings**: every axis figure
+published between Phases 6.7 and 11 is count-based, so `share_of_disagreement` keeps that definition
+and `share_of_disagreement_area` is reported beside it. Redefining the field in place would have
+silently moved every stored arm-B number while leaving arm A untouched, which is the hardest kind of
+change to notice.
+
+Raw axis shares are **not comparable across cities**, and Phase 12 exists because they were compared
+anyway. Their denominator is all disagreement, so a city whose reference carries a large natural
+share dilutes both axes, while an all-built fixture dilutes neither; and which pairs can fire at all
+depends on which classes the reference happens to contain. `axis_summary()` below reports the raw
+share alongside two corrections for exactly this - see its docstring.
 """
 
 from __future__ import annotations
+
+from collections.abc import Sequence
 
 import numpy as np
 import pandas as pd
@@ -41,6 +54,16 @@ from lczkit.classify.labels import (
     lcz,
 )
 from lczkit.config import ValidationConfig
+
+AXIS_ELIGIBLE_CODES: frozenset[int] = frozenset(
+    code for pair in HEIGHT_AXIS_PAIRS + COMPACTNESS_AXIS_PAIRS for code in pair
+)
+"""LCZ 1-6. The only reference classes that can place a unit on either axis.
+
+Both axis definitions are built from the compact (1-3) and open (4-6) types, so a unit whose
+reference is LCZ 7-10 or a natural class contributes to the denominator of a raw axis share while
+being unable to contribute to its numerator.
+"""
 
 
 class ClassAgreement(BaseModel):
@@ -96,6 +119,46 @@ class AxisConfusion(BaseModel):
     hold a disproportionate share of the errors - which is the whole reason for reporting the two
     axes apart rather than pooled."""
 
+    area_m2: float = 0.0
+    share_of_disagreement_area: float = 0.0
+    """The same share, area-weighted. Identical to `share_of_disagreement` on a regular grid, where
+    every unit is one cell; different on enclosures, where units vary in size by orders of
+    magnitude."""
+
+
+class AxisSummary(BaseModel):
+    """One axis pooled over its pairs, with the denominators that make cities comparable.
+
+    Three shares of the same numerator, in increasing order of correction:
+
+    - `share_of_disagreement` is the raw figure Phases 6.7-11 published. Its denominator is *all*
+      disagreement, so it is deflated by whatever built<->natural confusion a city happens to carry
+      and cannot be compared across cities with different class composition;
+    - `share_of_axis_eligible` restricts the denominator to units whose reference is LCZ 1-6, the
+      only classes that can land on either axis. Transparent, and enough to remove the natural-share
+      dilution;
+    - `lift` divides by `expected_share`, what the axis would hold if misclassification ignored the
+      axes entirely. This is the one that removes *class composition*: a reference carrying only
+      LCZ 2 and 5 affords the compactness pair both its directions while giving each height pair
+      only one, so the two axes are not on equal footing before it is applied.
+
+    `lift` is the figure to compare across cities. 1.0 means the axis holds exactly the share its
+    reference affords it; above 1.0 means error concentrates there beyond what composition explains.
+    """
+
+    axis: str
+    n_total: int
+    share_of_disagreement: float
+    share_of_disagreement_area: float
+    n_axis_eligible: int
+    share_of_axis_eligible: float
+    expected_share: float
+    """Share the axis would hold under a null that keeps each unit's reference class and the
+    observed distribution of *wrong* labels, but breaks the association between them."""
+
+    lift: float
+    """`share_of_disagreement / expected_share`, or 0.0 where the null affords the axis nothing."""
+
 
 class AgreementReport(BaseModel):
     """The full comparison against one reference map."""
@@ -150,7 +213,15 @@ class AgreementReport(BaseModel):
     compactness_axis: list[AxisConfusion] = Field(default_factory=list)
     """1<->4, 2<->5, 3<->6: height fixed, building surface fraction varies."""
 
+    height_axis_summary: AxisSummary | None = None
+    compactness_axis_summary: AxisSummary | None = None
+    """The two axes pooled, with the normalised denominators. Compare cities on `lift`, never on
+    `share_of_disagreement` - Phase 12 exists because the raw shares were compared across cities
+    whose references carried different classes."""
+
     n_disagree: int = 0
+    n_disagree_axis_eligible: int = 0
+    """Disagreeing units whose reference is LCZ 1-6. The denominator of `share_of_axis_eligible`."""
 
 
 def agreement(
@@ -219,8 +290,13 @@ def agreement(
 
     report.per_class = _per_class(compared)
     report.confusion = _confusion(compared)
-    report.height_axis = _axis(compared, HEIGHT_AXIS_PAIRS)
-    report.compactness_axis = _axis(compared, COMPACTNESS_AXIS_PAIRS)
+    report.height_axis = axis_pairs(report.confusion, HEIGHT_AXIS_PAIRS)
+    report.compactness_axis = axis_pairs(report.confusion, COMPACTNESS_AXIS_PAIRS)
+    report.height_axis_summary = axis_summary(report.confusion, HEIGHT_AXIS_PAIRS, axis="height")
+    report.compactness_axis_summary = axis_summary(
+        report.confusion, COMPACTNESS_AXIS_PAIRS, axis="compactness"
+    )
+    report.n_disagree_axis_eligible = report.height_axis_summary.n_axis_eligible
     if height_completeness is not None:
         report.by_height_completeness = _strata(
             compared,
@@ -282,24 +358,107 @@ def _confusion(compared: pd.DataFrame) -> list[ConfusionCell]:
     ]
 
 
-def _axis(compared: pd.DataFrame, pairs: tuple[tuple[int, int], ...]) -> list[AxisConfusion]:
-    """One axis' pairs and their share of all disagreement, counted in both directions."""
-    disagreeing = int((~compared["agree"]).sum())
+def _partners(pairs: tuple[tuple[int, int], ...]) -> dict[int, frozenset[int]]:
+    """For each class on the axis, the classes it can be confused with along it."""
+    grouped: dict[int, set[int]] = {}
+    for a, b in pairs:
+        grouped.setdefault(a, set()).add(b)
+        grouped.setdefault(b, set()).add(a)
+    return {code: frozenset(others) for code, others in grouped.items()}
+
+
+def axis_pairs(
+    confusion: Sequence[ConfusionCell], pairs: tuple[tuple[int, int], ...]
+) -> list[AxisConfusion]:
+    """One axis' pairs and their share of all disagreement, counted in both directions.
+
+    Derived from the confusion matrix rather than from the compared units, so that re-analysing a
+    stored run cannot drift from what the run itself reported: the confusion list is what a run
+    persists, and it holds exactly the counts and areas this needs.
+    """
+    disagreeing = [cell for cell in confusion if cell.reference != cell.predicted]
+    n_disagree = float(sum(cell.n for cell in disagreeing))
+    area_disagree = float(sum(cell.area_m2 for cell in disagreeing))
+    counts = {(cell.reference, cell.predicted): cell for cell in disagreeing}
+
     rows: list[AxisConfusion] = []
     for a, b in pairs:
-        forward = int(((compared["reference"] == a) & (compared["predicted"] == b)).sum())
-        backward = int(((compared["reference"] == b) & (compared["predicted"] == a)).sum())
+        forward, backward = counts.get((a, b)), counts.get((b, a))
+        n_forward = forward.n if forward else 0
+        n_backward = backward.n if backward else 0
+        area = (forward.area_m2 if forward else 0.0) + (backward.area_m2 if backward else 0.0)
         rows.append(
             AxisConfusion(
                 a=a,
                 b=b,
-                n_a_as_b=forward,
-                n_b_as_a=backward,
-                n_total=forward + backward,
-                share_of_disagreement=_share(float(forward + backward), float(disagreeing)),
+                n_a_as_b=n_forward,
+                n_b_as_a=n_backward,
+                n_total=n_forward + n_backward,
+                share_of_disagreement=_share(float(n_forward + n_backward), n_disagree),
+                area_m2=area,
+                share_of_disagreement_area=_share(area, area_disagree),
             )
         )
     return rows
+
+
+def axis_summary(
+    confusion: Sequence[ConfusionCell],
+    pairs: tuple[tuple[int, int], ...],
+    *,
+    axis: str,
+) -> AxisSummary:
+    """Pool one axis over its pairs and normalise it for the reference's class composition.
+
+    The null behind `expected_share` keeps each disagreeing unit's *reference* class and the
+    observed distribution of wrong labels, but breaks the association between them: a unit whose
+    reference is `r` takes a wrong label drawn from the run's own error distribution, conditioned on
+    not being `r`. Formally, for axis X with partner sets `P`,
+
+        E[X] = sum_r (n_r / N) * (sum_{p in P(r)} q_p) / (1 - q_r)
+
+    with `n_r` the disagreeing units the reference calls `r`, `N` the disagreeing units in total,
+    and `q` the distribution of predicted labels across them.
+
+    Keeping `q` from the run rather than assuming it uniform matters: a classifier that
+    over-predicts LCZ 5 raises the chance of landing on 2<->5 for reasons that have nothing to do
+    with compactness being the limiting axis, and the null has to be able to absorb that or `lift`
+    would just rediscover the prediction histogram.
+    """
+    rows = axis_pairs(confusion, pairs)
+    disagreeing = [cell for cell in confusion if cell.reference != cell.predicted]
+    n_disagree = float(sum(cell.n for cell in disagreeing))
+    n_eligible = sum(cell.n for cell in disagreeing if cell.reference in AXIS_ELIGIBLE_CODES)
+    n_total = sum(row.n_total for row in rows)
+
+    partners = _partners(pairs)
+    predicted_marginal: dict[int, float] = {}
+    reference_counts: dict[int, int] = {}
+    for cell in disagreeing:
+        predicted_marginal[cell.predicted] = predicted_marginal.get(cell.predicted, 0.0) + cell.n
+        reference_counts[cell.reference] = reference_counts.get(cell.reference, 0) + cell.n
+    if n_disagree > 0:
+        predicted_marginal = {code: n / n_disagree for code, n in predicted_marginal.items()}
+
+    expected = 0.0
+    for code, count in reference_counts.items():
+        remaining = 1.0 - predicted_marginal.get(code, 0.0)
+        if remaining <= 0.0:
+            continue
+        reachable = sum(predicted_marginal.get(other, 0.0) for other in partners.get(code, ()))
+        expected += (count / n_disagree) * (reachable / remaining)
+
+    observed = _share(float(n_total), n_disagree)
+    return AxisSummary(
+        axis=axis,
+        n_total=n_total,
+        share_of_disagreement=observed,
+        share_of_disagreement_area=sum(row.share_of_disagreement_area for row in rows),
+        n_axis_eligible=int(n_eligible),
+        share_of_axis_eligible=_share(float(n_total), float(n_eligible)),
+        expected_share=expected,
+        lift=_share(observed, expected),
+    )
 
 
 def _strata(compared: pd.DataFrame, values: pd.Series, n_bins: int) -> list[Stratum]:

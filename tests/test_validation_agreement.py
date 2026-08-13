@@ -12,8 +12,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from lczkit.classify.labels import HEIGHT_AXIS_PAIRS
 from lczkit.config import ValidationConfig
 from lczkit.validation import agreement
+from lczkit.validation.agreement import axis_summary
 
 
 def build(
@@ -209,3 +211,99 @@ def test_the_report_round_trips_through_json() -> None:
     report = agreement(predicted, reference, area)
 
     assert type(report).model_validate_json(report.model_dump_json()) == report
+
+
+def test_the_axis_share_denominator_is_narrowed_to_references_that_could_reach_the_axis() -> None:
+    """Only LCZ 1-6 can land on either axis, so a reference outside that band inflates the raw
+    denominator while being unable to contribute to any numerator.
+
+    Two of these four disagreements sit on an axis, but only three of the four have a reference
+    that could have: the LCZ 9 unit is deadweight in the raw share and excluded from the narrowed
+    one. This is half of why Phase 9's cross-city medians were not comparable - a city carrying a
+    lot of water or scattered-build reference dilutes both axes without saying anything about
+    either.
+    """
+    predicted, reference, area = build([3, 5, 1, 2], [2, 2, 4, 9])
+
+    report = agreement(predicted, reference, area)
+    height = report.height_axis_summary
+    assert height is not None
+
+    assert report.n_disagree == 4
+    assert report.n_disagree_axis_eligible == 3
+    # 2 -> 3 is a height error; 4 -> 1 is a compactness error; 9 -> 2 is on neither axis.
+    assert height.n_total == 1
+    assert height.share_of_disagreement == pytest.approx(0.25)
+    assert height.share_of_axis_eligible == pytest.approx(1 / 3)
+
+
+def test_lift_is_one_when_error_falls_exactly_where_class_composition_affords_it() -> None:
+    """`lift` is what makes two cities comparable, and this pins its calibration.
+
+    Every reference here is LCZ 2, whose height partners are 1 and 3 and whose compactness partner
+    is 5. The run's wrong labels are one each of 1, 3 and 5, so two thirds of the error lands on
+    the height axis and one third on compactness - which is exactly the proportion the reference
+    affords, three partners split two to one. Both axes must therefore read 1.0 despite the height
+    axis holding twice the raw share.
+    """
+    predicted, reference, area = build([1, 3, 5], [2, 2, 2])
+
+    report = agreement(predicted, reference, area)
+    height, compactness = report.height_axis_summary, report.compactness_axis_summary
+    assert height is not None and compactness is not None
+
+    assert height.share_of_disagreement == pytest.approx(2 / 3)
+    assert compactness.share_of_disagreement == pytest.approx(1 / 3)
+    assert height.lift == pytest.approx(1.0)
+    assert compactness.lift == pytest.approx(1.0)
+
+
+def test_a_two_class_reference_flatters_the_compactness_axis_until_lift_corrects_it() -> None:
+    """The Berlin fixture's distortion, reduced to four units, and the reason for Phase 12.
+
+    With only LCZ 2 and 5 in the reference the compactness pair has *both* members available to
+    confuse, while each height pair can contribute only one direction. Here every disagreement
+    lands on the compactness axis, which reads as a total footprint failure on the raw share; lift
+    reports it as barely above what a two-class reference hands out for free.
+    """
+    predicted, reference, area = build([5, 5, 2, 2], [2, 2, 5, 5])
+
+    report = agreement(predicted, reference, area)
+    compactness = report.compactness_axis_summary
+    assert compactness is not None
+
+    assert compactness.share_of_disagreement == pytest.approx(1.0)
+    assert compactness.expected_share == pytest.approx(1.0)
+    assert compactness.lift == pytest.approx(1.0)
+
+
+def test_axis_shares_carry_both_weightings_because_the_grid_hides_the_difference() -> None:
+    """Every published axis figure is count-based, so that definition is kept and the
+    area-weighted one is reported beside it rather than replacing it.
+
+    On a regular grid the two coincide and the distinction is invisible - which is how it survived
+    to Phase 11. On enclosures, where one unit can be a thousand times another, they do not.
+    """
+    predicted, reference, area = build([5, 3], [2, 2], area=[100.0, 9900.0])
+
+    report = agreement(predicted, reference, area)
+
+    pairs = {(entry.a, entry.b): entry for entry in report.compactness_axis}
+    assert pairs[(2, 5)].share_of_disagreement == pytest.approx(0.5)
+    assert pairs[(2, 5)].share_of_disagreement_area == pytest.approx(0.01)
+    assert pairs[(2, 5)].area_m2 == pytest.approx(100.0)
+
+
+def test_the_axis_summary_reads_the_same_confusion_matrix_a_run_persists() -> None:
+    """What makes re-analysing a stored run legitimate rather than a second implementation.
+
+    `axis_summary` takes the confusion list and nothing else, so a figure recomputed from an old
+    manifest is the same computation the run performed, not a lookalike. Phase 12 rests on this:
+    it re-reads sixteen cities from disk rather than spending 8.9 h re-running them.
+    """
+    predicted, reference, area = build([5, 3, 6, 2], [2, 2, 2, 5])
+
+    report = agreement(predicted, reference, area)
+    recomputed = axis_summary(report.confusion, HEIGHT_AXIS_PAIRS, axis="height")
+
+    assert recomputed == report.height_axis_summary
