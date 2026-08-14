@@ -45,7 +45,7 @@ from lczkit.viz import build_site
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from berlin_metropolitan import BERLIN, CLEANING, RELEASE, _shrink  # noqa: E402 - sibling script
-from berlin_wide_validation import WORLDCOVER_URL, clip_raster  # noqa: E402 - sibling script
+from multi_city_validation import clip_worldcover  # noqa: E402 - sibling script
 from unit_scale_experiment import HEIGHTS, LAND_COVER, UCP  # noqa: E402 - sibling script
 
 
@@ -69,20 +69,31 @@ class Timer:
         print(f"  {self._name:26s} {elapsed:8.1f}s", flush=True)
 
 
-def main() -> None:
-    extent_km = None
-    if "--extent" in sys.argv:
-        extent_km = float(sys.argv[sys.argv.index("--extent") + 1])
-    bbox: BBox = BERLIN if extent_km is None else _shrink(BERLIN, extent_km)
+def configure(settings: Settings, *, buildings: bool = False) -> Settings:
+    """The configuration every published run shares, applied in place.
 
-    settings = Settings.load()
+    One function rather than a copy per driver: the sites are meant to be read side by side, so a
+    difference between two cities must come from the cities and not from a setting that drifted
+    between two scripts.
+    """
     settings.overture.release = RELEASE
     settings.cleaning = CLEANING.model_copy()
     settings.heights = HEIGHTS.model_copy()
     settings.land_cover = LAND_COVER.model_copy()
     settings.ucp = UCP.model_copy()
-    settings.viz.include_buildings = "--buildings" in sys.argv
+    settings.viz.include_buildings = buildings
+    return settings
 
+
+def run_and_publish(settings: Settings, bbox: BBox, *, build_site_after: bool = True) -> Path:
+    """Clean, classify, write a run directory and turn it into a map site.
+
+    Returns the run directory.
+
+    Split out of `main` so `publish_sites.py` can run this chain over another city without
+    copying it. A second copy of these stages would be a second thing to keep in step, and the
+    comparison the site exists to support only holds if every city went through one pipeline.
+    """
     print(f"run {settings.run_id} over {bbox}", flush=True)
     timer = Timer()
 
@@ -110,7 +121,10 @@ def main() -> None:
         units = GridUnits().generate(bbox)
 
     with timer.stage("land_cover"):
-        worldcover = clip_raster(WORLDCOVER_URL, settings.run_dir / "worldcover.tif", bbox)
+        # `clip_worldcover` resolves the tiles the bbox actually spans and mosaics them. The
+        # Berlin-only `WORLDCOVER_URL` this used to pass is a single hardcoded tile: correct for
+        # Berlin, and a 0x0 window — `RasterioIOError` — for any city outside it.
+        worldcover = clip_worldcover(bbox, settings.run_dir / "worldcover.tif")
         fractions = LocalRasterSource(
             settings.land_cover.dataset(settings.ucp.land_cover_dataset), worldcover
         ).fractions(units)
@@ -159,7 +173,7 @@ def main() -> None:
         )
     print(f"  wrote {outputs.run_dir}", flush=True)
 
-    if "--no-site" not in sys.argv:
+    if build_site_after:
         with timer.stage("build_site"):
             report = build_site(outputs.run_dir, config=settings.viz)
         for tileset in report.tilesets:
@@ -176,6 +190,17 @@ def main() -> None:
         print(f"  serve it: python {report.site_dir / 'serve.py'}", flush=True)
 
     print(f"\ntotal {sum(timer.stages.values()) / 60:.1f} min", flush=True)
+    return outputs.run_dir
+
+
+def main() -> None:
+    extent_km = None
+    if "--extent" in sys.argv:
+        extent_km = float(sys.argv[sys.argv.index("--extent") + 1])
+    bbox: BBox = BERLIN if extent_km is None else _shrink(BERLIN, extent_km)
+
+    settings = configure(Settings.load(), buildings="--buildings" in sys.argv)
+    run_and_publish(settings, bbox, build_site_after="--no-site" not in sys.argv)
 
 
 if __name__ == "__main__":

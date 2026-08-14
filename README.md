@@ -448,7 +448,26 @@ Four things about it are worth knowing before relying on it:
   attributable, and show the reader the same linework the classification was computed from. Land use
   is available and off by default: at 9 km² it was 94% of the basemap's bytes, for a wash drawn
   under a translucent fill.
+- **Height provenance is the second layer in the selector, above the urban canopy parameters.**
+  `height_completeness` and the `height_frac_*` tier fractions are first-class layers rather than
+  diagnostics — they are the visible form of the package's central result. The tier fractions reach
+  the render set through `viz.render_column_prefixes`, because their column names depend on which
+  cascade a run chose; carrying them at every zoom costs about 0.71 MB per column at metropolitan
+  scale, which is what a layer that must paint from already-loaded tiles is worth.
 - **Buildings are off by default, and the default is measured.** See the table below.
+
+Three cities are published, chosen on measured tier-1 coverage. Over cells containing buildings:
+
+| city | built cells | tier-1 | WSF-3D | GHS-BUILT-H | unresolved | site |
+|---|---:|---:|---:|---:|---:|---:|
+| Berlin | 59 152 | **0.797** | 0.191 | 0.008 | 0.003 | 36.12 MB |
+| Hong Kong | 25 233 | 0.308 | 0.547 | 0.120 | 0.026 | 20.43 MB |
+| Cairo | 56 456 | **0.010** | 0.835 | 0.122 | 0.032 | 27.20 MB |
+
+**83.5% of Cairo's building area takes its height from a 90 m TanDEM-X raster, against 79.7% of
+Berlin's coming from real per-building heights.** That contrast is the founding premise, and on the
+site it is a layer you can select rather than a number in a table. `scripts/publish_sites.py` builds
+all three.
 
 Site size at Berlin's full 891 km² — 172 181 units, 892 014 buildings — which is the scale that
 makes this a decision. The whole site builds in **67 seconds**:

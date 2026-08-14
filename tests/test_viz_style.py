@@ -258,3 +258,77 @@ def test_a_two_boundary_variable_still_produces_a_usable_ramp(boundaries: list[f
 
     assert expression[0] == "case"
     assert expression[2][0] == "step"
+
+
+ORDERED_BREAKS = [
+    # Deliberately in the order `writer.py` would emit them — every numeric column in DataFrame
+    # order, which is what put height provenance last in the built Berlin site.
+    {"column": "building_surface_fraction", "breaks": [0.0, 0.3, 0.9], "method": "quantile"},
+    {"column": "aspect_ratio", "breaks": [0.1, 0.4, 1.9], "method": "quantile"},
+    {"column": "uniqueness", "breaks": [0.0, 0.5, 1.0], "method": "quantile"},
+    {"column": "height_frac_wsf3d", "breaks": [0.0, 0.4, 1.0], "method": "quantile"},
+    {"column": "height_completeness", "breaks": [0.0, 0.2, 1.0], "method": "quantile"},
+    {"column": "height_frac_ghsl", "breaks": [0.0, 0.1, 1.0], "method": "quantile"},
+]
+
+ORDERED_COLUMNS = ["unit_id", "lcz_primary", *[entry["column"] for entry in ORDERED_BREAKS]]
+
+
+def view_ids(breaks: list[dict[str, Any]], columns: list[str]) -> list[str]:
+    return [view["id"] for view in build_views(breaks, columns, [])]
+
+
+def test_height_provenance_is_the_second_layer_in_the_selector() -> None:
+    """CLAUDE.md names one position in the selector and this is it: `height_completeness` and the
+    tier fractions sit second, above the UCP choropleths, because they are the visible form of the
+    project's central result rather than a diagnostic. The built Berlin site had them last."""
+    ids = view_ids(ORDERED_BREAKS, ORDERED_COLUMNS)
+
+    assert ids[0] == "lcz"
+    assert ids[1] == "height_completeness"
+    assert set(ids[2:4]) == {"height_frac_wsf3d", "height_frac_ghsl"}
+    assert ids.index("height_frac_ghsl") < ids.index("building_surface_fraction"), (
+        "a tier fraction must not sit below a UCP choropleth"
+    )
+
+
+def test_uniqueness_sorts_after_the_urban_canopy_parameters() -> None:
+    """It describes the classification rather than the surface, so it reads as a coda."""
+    ids = view_ids(ORDERED_BREAKS, ORDERED_COLUMNS)
+
+    assert ids[-1] == "uniqueness"
+    assert ids.index("aspect_ratio") < ids.index("uniqueness")
+
+
+def test_a_tier_fraction_earns_a_view_and_not_only_a_sidebar_field() -> None:
+    """`height_tier_fractions` is specified as a first-class layer. Before this it reached the
+    sidebar through `height_prefixes` and had no menu entry at all, because the columns never
+    entered the render set."""
+    ids = view_ids(ORDERED_BREAKS, ORDERED_COLUMNS)
+
+    assert "height_frac_wsf3d" in ids
+    assert "height_frac_ghsl" in ids
+
+
+def test_the_selector_order_does_not_depend_on_the_order_the_breaks_arrive_in() -> None:
+    """The defect being fixed is that the order was inherited from the manifest, so reversing the
+    breaks must not move a view between groups.
+
+    Within a group the manifest's order is kept deliberately, so the two tier fractions may swap;
+    what must not change is that both stay above every UCP.
+    """
+    forward = view_ids(ORDERED_BREAKS, ORDERED_COLUMNS)
+    backward = view_ids(list(reversed(ORDERED_BREAKS)), ORDERED_COLUMNS)
+
+    for ids in (forward, backward):
+        assert ids[0] == "lcz"
+        assert ids[1] == "height_completeness"
+        assert set(ids[2:4]) == {"height_frac_wsf3d", "height_frac_ghsl"}
+        assert ids[-1] == "uniqueness"
+
+
+def test_columns_of_equal_rank_keep_the_manifests_order() -> None:
+    """So that adding a parameter lands it among the UCPs without an edit to the rank function."""
+    ids = view_ids(ORDERED_BREAKS, ORDERED_COLUMNS)
+
+    assert ids.index("building_surface_fraction") < ids.index("aspect_ratio")

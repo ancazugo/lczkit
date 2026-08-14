@@ -969,7 +969,7 @@ a better map. That is the paper's material, not the package's.
 
 Remaining work, in order:
 
-1. **Phase 7 — the static map site.** The only outstanding deliverable.
+1. ~~**Phase 7 — the static map site.**~~ **Concluded** — three cities published.
 2. **The paper.**
 3. **Cleanup** — docs, release.
 
@@ -1012,66 +1012,67 @@ validation burden, and the argument does not need it.
 
 ---
 
-### Phase 7 — Static map site — NEXT, AND THE LAST DELIVERABLE
+### Phase 7 — Static map site — CONCLUDED
 
-The deliverable is a self-contained, archivable directory that opens with no server and no network
-access — it is a paper supplement, not a dev tool.
+`lczkit.viz.build_site(run_dir)` writes `output/lczkit/<run_id>/site/` — MapLibre GL over the
+PMTiles protocol, a vendored front end, `tippecanoe` as the pinned `lczkit[viz]` extra invoked as a
+subprocess, GeoParquet → FlatGeobuf → tippecanoe → PMTiles. Selector order: LCZ, **height
+provenance**, the UCP choropleths, `uniqueness`, and buildings as `fill-extrusion`. Per-unit sidebar,
+permalink in the URL hash.
 
-**Do not build a Python web app.** No Streamlit, no Dash, no Panel, no marimo, no kepler.gl
-embed. No live kernel, no callbacks, no CDN links, no basemap API keys. If the design starts
-requiring a running Python process to view a map, it has gone wrong.
+**Three spec details did not survive contact and were ruled on:**
 
-`lczkit.viz.build_site(run_dir)` writes:
+- **`file://` is not satisfiable.** PMTiles reads byte ranges through `fetch`, and the Fetch standard
+  leaves `file:` URLs unhandled, so Chrome and Firefox both return a network error. Amended to *"opens
+  with no network and no software the user must install"*: `site/serve.py` is standard library only
+  and implements `Range` itself, because `SimpleHTTPRequestHandler` has none and would re-send a
+  whole tileset per tile.
+- **The basemap is the run's own Overture layers, not a Protomaps extract.** An extract needs a Go
+  CLI or a ~120 GB download. The run's water and streets are already cached for the bbox, are ODbL-
+  attributable, and show the reader the linework the classification was computed from.
+- **tippecanoe fails at 256 cores** — `Internal error: 745 shards not a power of 2`, from its radix
+  sort. Capped at `min(cpus, 32)`; tiles built at 8 and 128 threads are byte-identical but for the
+  filename in the metadata. Third defect in this project invisible on a laptop and fatal on the
+  machine the package runs on.
 
-```
-output/lczkit/<run_id>/site/
-├── index.html
-├── assets/               # maplibre-gl + pmtiles protocol, VENDORED not CDN
-├── tiles/
-│   ├── units.pmtiles
-│   ├── basemap.pmtiles   # Protomaps extract clipped to city bbox
-│   └── buildings.pmtiles # optional, config flag, default OFF
-└── manifest.json         # copied from the run
-```
+**Attributes, not geometry, are what a unit tileset costs.** MVT repeats a feature's whole attribute
+table in every tile at every zoom, so at 172 181 units a 38-column table costs more to tile than
+892 000 building footprints — 115 MB against 61 MB. Hence the render/detail split: render attributes
+at every zoom, the rest once at maximum zoom where only a click reads them. Buildings are 58% of a
+full site on their own, which is why they stay off by default.
 
-**Tile generation.** `tippecanoe` as an optional extra (`lczkit[viz]`), pinned, invoked as a
-subprocess — never linked or vendored. Chain: GeoParquet → **FlatGeobuf** via `pyogrio` →
-tippecanoe → PMTiles. Do not route through GeoJSON; at buildings scale it is dramatically
-slower. Choose zoom ranges and `--drop-densest-as-needed` deliberately and record the exact
-tippecanoe invocation in the manifest.
+**The phase shipped in `6ebaca2` during Phase 8 and was not recorded**, so this spec called it "the
+only outstanding deliverable" for fourteen commits and the three rulings above lived only in
+`docs/experiments/phase-7-map-site.md`. Completing it fixed two gaps and published three cities.
 
-**Rendering.** MapLibre GL with the PMTiles protocol, over HTTP range requests. Layer
-switching is a client-side style expression over already-loaded tiles — never a refetch and
-never a re-render of the source.
+**Selector order was inherited, not chosen.** `build_views` emitted views in the manifest's `breaks`
+order — every numeric column in DataFrame order — putting `height_completeness` twelfth of thirteen
+and giving the tier fractions no entry at all. Now ranked deliberately; ties keep the manifest's
+order. `height_tier_fractions` reaches the render set through `VizConfig.render_column_prefixes`,
+because its columns are named after whichever cascade fired and a static list cannot name them
+without naming a cascade. Carrying them at every zoom costs **+2.12 MB, +7.5%, ~0.71 MB per column**
+at 172 181 units — measured, and the price of a layer that must paint from tiles already in memory.
 
-Layers, in selector order:
-- **LCZ primary class** (default view, Demuzere colour table)
-- **`height_completeness` and `height_tier_fractions` — first-class layers, not diagnostics.**
-  They are the visible form of the project's central result: Cairo at 1% tier-1 coverage against
-  Berlin at 80% should be legible at a glance. These sit **second in the selector, above the UCP
-  choropleths.**
-- any single UCP as a choropleth, using the precomputed breaks from the manifest
-- `uniqueness`
-- buildings as MapLibre native `fill-extrusion` driven by the `height` attribute, optionally
-  coloured by `height_source`. **Use `fill-extrusion`, not deck.gl** — no extra bundle is
-  justified unless a requirement appears that MapLibre genuinely cannot meet.
+**Three cities published**, ~91 000 grid cells each over their So2Sat windows, buildings off:
 
-**Ship one site per city for a subset of the sixteen, not Berlin alone.** At minimum one
-high-coverage city and one low-coverage city outside Europe, side by side — that comparison is the
-paper's central figure and the site is the natural place for it. Hong Kong is the better
-morphological fixture (13 classes); pair it with a low-tier-1 city — Cairo, Nairobi or Mumbai.
+| city | built cells | tier-1 | WSF-3D | GHS-BUILT-H | unresolved | site |
+|---|---:|---:|---:|---:|---:|---:|
+| Berlin | 59 152 | **0.797** | 0.191 | 0.008 | 0.003 | 36.12 MB |
+| Hong Kong | 25 233 | 0.308 | 0.547 | 0.120 | 0.026 | 20.43 MB |
+| Cairo | 56 456 | **0.010** | 0.835 | 0.122 | 0.032 | 27.20 MB |
 
-**Per-unit inspection.** Click a unit → sidebar showing `lcz_primary`, `lcz_secondary`,
-`uniqueness`, a small bar chart of the 17-way distance vector, every UCP with its unit of
-measurement, and the height-provenance breakdown for that unit.
+Berlin's 0.797 reproduces Phase 10's ~80% and Cairo's 0.010 its 1%. **83.5% of Cairo's building area
+takes its height from a 90 m TanDEM-X raster**, and that is now a selectable layer rather than a
+number in a table.
 
-**Permalink.** Encode map centre, zoom, active layer and selected `unit_id` in the URL hash, so
-a specific unit can be cited directly.
-
-*Acceptance:* the site directory opens correctly from `file://` with networking disabled, and
-serves correctly from `python -m http.server` behind an SSH tunnel; layer switching does not
-refetch tiles; the whole directory is portable to static hosting unchanged; height provenance is
-present as a first-class layer; **at least two cities published.**
+**Publishing a second city found a real defect.** The driver clipped ESA WorldCover from one
+hardcoded tile (`N51E012`, Berlin's). Hong Kong and Cairo each span two, so both raised
+`RasterioIOError: Attempt to create 0x0 dataset`. `clip_worldcover` already resolved and mosaicked
+correctly; the driver was not calling it. Its docstring had predicted the failure mode — *"a
+single-tile guess would fail as a band of nodata down one side of the map rather than as an error"* —
+and only Berlin's tile missing both cities entirely made it loud. **A city one tile-width away would
+have published a map with a quarter of its land cover silently missing.** Berlin's site is unaffected;
+its window resolves to the same tile.
 
 ---
 
@@ -1239,6 +1240,12 @@ reconcile silently.** That flagging behaviour is working; keep it.
 | Phase 6.5's patch-versus-cell hypothesis | **Returns, and is now supported** — from the opposite direction. 6.5 rejected it over a numerator losing 23.5% of footprints; with those restored the medians are right and the within-class variance is what the published bands cannot hold. | 6.5, 13 |
 | LCZ 7 at 8.2% in range | 0.417 against a published 0.60–0.90, low on both tails, five non-European cities. An **Overture coverage limit on informal settlements**, not evidence about the 100 m cell. **Opened as a bounded exception, paper scope only** — measured from existing records, no new phase. It is the class the founding premise is about. | 13 |
 | Per-cell heterogeneity measure | Future work, discussion section only. Do not build. | 13 |
+| Phase 7 built during Phase 8 and never recorded as concluded | The site shipped in `6ebaca2` (2026-08-09) while this spec went on calling it "the only outstanding deliverable" for fourteen commits, and three user rulings lived only in the experiment write-up. **A phase is not concluded until CLAUDE.md says so** — a deliverable built out of order is the easiest to leave half-finished, because the code exists and looks done. | 7, 8 |
+| Phase 7 `file://` acceptance criterion | **Not satisfiable, amended.** PMTiles reads byte ranges through `fetch`; the Fetch standard leaves `file:` URLs unhandled, so Chrome and Firefox both error. Criterion is now "opens with no network and no software the user must install". `site/serve.py` is standard library only and implements `Range`, which `SimpleHTTPRequestHandler` does not. | 7 |
+| Phase 7 basemap as a Protomaps extract | **Not reachable here, replaced.** An extract needs a Go CLI or a ~120 GB download. Built from the run's own cleaned water and streets: already cached for the bbox, ODbL-attributable, and the same linework the classification used. | 7 |
+| tippecanoe at 256 cores | Fails with `745 shards not a power of 2` from its radix sort. Capped at `min(cpus, 32)`; output byte-identical across thread counts. Third defect invisible on a laptop and fatal on the deployment machine, after Phase 8's `fork` deadlock and thread oversubscription. | 7, 8 |
+| Selector order inherited from the manifest's `breaks` | Break order is DataFrame column order — incidental. It put `height_completeness` twelfth of thirteen and gave `height_tier_fractions` no entry at all, in the one place the spec names a position. Ordered deliberately; tier fractions reach the render set by prefix, since their columns are named after whichever cascade fired. **+2.12 MB, +7.5%** at 172 181 units, measured. | 7 |
+| WorldCover clipped from one hardcoded tile | Berlin's `N51E012`, inherited by the publish driver. Hong Kong and Cairo span two tiles each and both failed with `RasterioIOError: 0x0 dataset`. `clip_worldcover` already resolved and mosaicked correctly. **Found only by publishing a second city** — a city one tile-width away would have lost a quarter of its land cover silently. | 7 |
 | Pooling a partial sweep against a complete stored record | Reported the difference between two city lists as a pipeline deviation (6.6%). Stability comparisons now intersect the city sets; restricted, the deviation is 0.0%. | 13 |
 | Superseded text left in concluded phase blocks | Phase 8's block opened with a nine-minute runtime and later asserted the package could not process a city; Phase 3 still carried the corrected-away axis pairing; deferred still listed SVF first. **Concluded phases keep measurements and rulings and drop imperatives.** | 3, 6, 8, 13 |
 
@@ -1339,3 +1346,10 @@ deferred OSM source; the only realistic route to the distinction Overture discar
   rulings; delete the imperatives and acceptance criteria the phase was working from. Phase 8's
   block ended up asserting both that Berlin runs in 9.8 minutes and that the package cannot process
   a city.
+- **A phase is not concluded until this file says so.** Phase 7 shipped during Phase 8 and went
+  unrecorded for fourteen commits, with three of its user rulings living only in its experiment
+  write-up. Code that exists and looks done is the easiest kind to leave half-finished.
+- **Don't run a generalised driver over one input and call it general.** The publish driver clipped
+  land cover from a single hardcoded tile: correct for Berlin, a hard error for the next two cities,
+  and — for a city one tile-width away — a quarter of the map silently missing. The second input is
+  the one that tests the abstraction, which is why the spec asks for two cities and not one.

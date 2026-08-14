@@ -62,6 +62,34 @@ UNITS_FILL_LAYER = "units-fill"
 """The single layer every view paints. One layer rather than one per variable so that switching a
 view is a paint change over tiles already in memory, which is what CLAUDE.md asks for."""
 
+HEIGHT_COMPLETENESS_COLUMN = "height_completeness"
+UNIQUENESS_COLUMN = "uniqueness"
+
+
+def selector_rank(column: str) -> tuple[int, int]:
+    """Where `column` sits in the layer selector.
+
+    **The order is chosen here, not inherited.** `build_views` used to emit views in whatever order
+    the manifest's `breaks` arrived in, which is `writer.py`'s `continuous` — every numeric column
+    in DataFrame order. That is incidental, and it put height provenance *last*, below ten urban
+    canopy parameters, in the one place where CLAUDE.md names a position: `height_completeness` and
+    `height_tier_fractions` are first-class layers and sit second in the selector, above the UCP
+    choropleths. They are the visible form of the project's central result — Cairo at 0.4% tier-1
+    coverage against Berlin at 68.9% is the comparison the site exists to make legible.
+
+    Ties keep the manifest's order, so a parameter added later lands among the UCPs without needing
+    an edit here.
+    """
+    if column == HEIGHT_COMPLETENESS_COLUMN:
+        return (0, 0)
+    if column.startswith(FRACTION_PREFIX):
+        return (0, 1)
+    if column == UNIQUENESS_COLUMN:
+        # Not a parameter but a property of the classification, so it reads as a coda to the
+        # parameters rather than one of them.
+        return (2, 0)
+    return (1, 0)
+
 
 def ramp_colours(n: int) -> list[str]:
     """`n` colours sampled evenly from `SEQUENTIAL_RAMP`, endpoints included."""
@@ -107,10 +135,13 @@ def choropleth_expression(column: str, breaks: list[float]) -> list[Any]:
 def build_views(
     breaks: list[dict[str, Any]], columns: list[str], parameters: list[dict[str, str]]
 ) -> list[dict[str, Any]]:
-    """One view per renderable variable, LCZ first.
+    """One view per renderable variable, LCZ first and height provenance second.
 
     A variable earns a view only if it is *both* in the tiles (`columns`) and has breaks in the
     manifest. Anything else would be a menu entry that paints nothing.
+
+    The continuous views are ordered by `selector_rank` rather than by the order the breaks arrive
+    in — see that function for why the inherited order was wrong.
     """
     units = {entry["name"]: entry.get("unit", "") for entry in parameters}
     descriptions = {entry["name"]: entry.get("description", "") for entry in parameters}
@@ -131,6 +162,7 @@ def build_views(
     ]
 
     available = set(columns)
+    continuous: list[dict[str, Any]] = []
     for entry in breaks:
         column = entry["column"]
         if column not in available or not entry.get("breaks"):
@@ -141,7 +173,7 @@ def build_views(
         interior = boundaries[1:-1]
         colours = ramp_colours(len(interior) + 1)
         edges = [boundaries[0], *interior, boundaries[-1]]
-        views.append(
+        continuous.append(
             {
                 "id": column,
                 "column": column,
@@ -157,6 +189,9 @@ def build_views(
                 ],
             }
         )
+    # Stable, so columns of equal rank keep the manifest's order.
+    continuous.sort(key=lambda view: selector_rank(str(view["column"])))
+    views.extend(continuous)
     return views
 
 

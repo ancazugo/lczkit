@@ -22,12 +22,14 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pytest
+from pydantic import ValidationError
 from shapely.geometry import LineString, box
 
 from lczkit.classify import PrototypeClassifier
 from lczkit.config import Settings, VizConfig
 from lczkit.output import write_run
 from lczkit.viz import build_site
+from lczkit.viz.site import _render_columns
 from lczkit.viz.tiles import TIPPECANOE_EXTRA, TippecanoeMissingError, tippecanoe_available
 
 pytestmark = pytest.mark.skipif(
@@ -333,3 +335,50 @@ def test_the_missing_tippecanoe_message_names_the_extra(monkeypatch: pytest.Monk
 
     with pytest.raises(TippecanoeMissingError, match=re.escape(TIPPECANOE_EXTRA)):
         tippecanoe_binary()
+
+
+def test_a_tier_fraction_column_rides_at_every_zoom_rather_than_in_the_detail_tileset() -> None:
+    """A selectable layer has to paint while the map is zoomed out, and it has to paint from tiles
+    already in memory — a view change that refetched would break the one performance property
+    Phase 7 is held to. The tier fractions are named after whichever cascade fired, so they reach
+    the render set by prefix rather than by name."""
+    columns = ["lcz_primary", "height_completeness", "height_frac_wsf3d", "height_frac_unresolved"]
+
+    chosen = _render_columns(columns, VizConfig())
+
+    assert chosen == columns, "the whole height-provenance family must be in the render set"
+
+
+def test_the_prefix_half_only_admits_columns_matching_a_configured_prefix() -> None:
+    """It is not a licence to sweep in whatever the run happened to produce."""
+    columns = ["lcz_primary", "height_completeness", "height_frac_wsf3d"]
+
+    chosen = _render_columns(columns, VizConfig(render_columns=["lcz_primary"]))
+
+    assert chosen == ["lcz_primary", "height_frac_wsf3d"]
+
+
+def test_the_prefix_half_adds_nothing_when_a_run_produced_no_matching_column() -> None:
+    """A run at cascade `none` still has tier fractions; a table without them must not gain a
+    phantom column that would tile as nulls."""
+    chosen = _render_columns(["lcz_primary", "aspect_ratio"], VizConfig())
+
+    assert chosen == ["lcz_primary", "aspect_ratio"]
+
+
+def test_a_column_named_both_literally_and_by_prefix_is_carried_once() -> None:
+    """The two halves of the config are allowed to overlap; a duplicate would be tiled twice."""
+    config = VizConfig(
+        render_columns=["height_frac_wsf3d"], render_column_prefixes=["height_frac_"]
+    )
+
+    chosen = _render_columns(["height_frac_wsf3d", "height_frac_ghsl"], config)
+
+    assert chosen == ["height_frac_wsf3d", "height_frac_ghsl"]
+
+
+def test_an_empty_prefix_is_refused_rather_than_matching_every_column() -> None:
+    """It would put the whole attribute table at every zoom — the cost the render/detail split was
+    measured to avoid."""
+    with pytest.raises(ValidationError, match="must not contain an empty string"):
+        VizConfig(render_column_prefixes=[""])

@@ -916,6 +916,17 @@ class VizConfig(BaseModel):
     Columns named here that a run did not produce are skipped rather than raising — a run over a
     small extent can legitimately lack a parameter."""
 
+    render_column_prefixes: list[str] = Field(default_factory=lambda: ["height_frac_"])
+    """Column *families* carried at every zoom, named by prefix because their members are not known
+    until a run has chosen a cascade.
+
+    The height tier fractions are `height_frac_<source>` for whichever sources fired — `wsf3d`,
+    `ghsl`, `unresolved`, and the two Overture tiers — so `render_columns` cannot name them without
+    naming a cascade. They belong at every zoom rather than in the click-detail tileset because
+    CLAUDE.md makes them first-class *layers* and not diagnostics: a selectable layer must paint
+    while the map is zoomed out, and it must paint from tiles already in memory, since a view change
+    that refetched would break the one performance property Phase 7 is held to."""
+
     detail_max_features: int = 200_000
     """Above this many units the click-detail tileset is skipped and the sidebar falls back to the
     render attributes. A guard on the one part of the site whose size is unbounded in extent."""
@@ -939,6 +950,10 @@ class VizConfig(BaseModel):
             raise ValueError(
                 f"basemap_simplification must not be negative, got {self.basemap_simplification}"
             )
+        if any(not prefix for prefix in self.render_column_prefixes):
+            # An empty prefix matches every column, which would put the whole attribute table at
+            # every zoom — the exact cost the render/detail split was measured to avoid.
+            raise ValueError("render_column_prefixes must not contain an empty string")
         allowed = {"land_use", "water", "streets"}
         unknown = sorted(set(self.basemap_layers) - allowed)
         if unknown:

@@ -229,3 +229,112 @@ Nothing from the deferred list, and no run-comparison views. The `--drop-densest
 is deliberate and recorded per tileset, except on the click-detail tileset, where a dropped feature
 is a unit whose sidebar silently comes up empty — there the right failure is a large tile, and the
 flags are the opposite ones.
+
+*(§5's cached-versus-cold residual was closed in Phase 9 at `040be15`. Both halves of the diagnosis
+above are wrong: the two runs shared no cache, and `pool.map` preserves job order. The real cause was
+`OvertureSource._fetch` scanning remote parquet with no `ORDER BY`.)*
+
+---
+
+## 7. Completion — the site was built here, and finished four days later
+
+Everything above shipped in `6ebaca2` on 2026-08-09, **during Phase 8**. The phase was never
+recorded as concluded, so CLAUDE.md went on calling Phase 7 "the only outstanding deliverable" for
+fourteen commits, and the three user rulings in §1 lived only in this file. That is the process
+finding: **a phase is not concluded until the spec says so**, and a deliverable built out of order is
+the easiest kind to leave half-finished, because the code exists and looks done.
+
+Three things were genuinely missing.
+
+### 7.1 The selector order was inherited, not chosen
+
+`build_views` emitted views in whatever order the manifest's `breaks` arrived in, which is
+`writer.py`'s `continuous` — every numeric column in DataFrame order. Only `lcz` was placed
+deliberately. On the built Berlin site that produced:
+
+```
+0 lcz · 1–10 the UCP choropleths · 11 uniqueness · 12 height_completeness
+```
+
+CLAUDE.md names exactly one position in the selector, and this is the one it names: height
+provenance is a first-class layer and sits **second**, above the UCP choropleths. It was last of
+thirteen.
+
+Now ranked by `style.selector_rank`: LCZ, height provenance, the UCPs, `uniqueness`. Ties keep the
+manifest's order, so a parameter added later lands among the UCPs without an edit. Five tests cover
+it, including one asserting the order does not move when the breaks are reversed — the defect was
+precisely that it did.
+
+### 7.2 The tier fractions were not layers at all
+
+`height_tier_fractions` reached the sidebar through `height_prefixes` and had **no menu entry**,
+because a selectable layer has to be in the render set and `render_columns` is a static list while
+the columns are named after whichever cascade fired — `height_frac_wsf3d`, `height_frac_ghsl`,
+`height_frac_unresolved`, and the two Overture tiers. Naming them would have meant naming a cascade.
+
+`VizConfig.render_column_prefixes` carries the family instead. They belong at every zoom rather than
+in the click-detail tileset because a view change must paint from tiles already in memory; putting
+them in the detail tileset would have made switching to one a refetch.
+
+**Measured, because attributes at every zoom are the site's dominant cost.** On the 172 181-unit
+Berlin extent, three tier-fraction columns took `units.pmtiles` from **28.09 MB to 30.20 MB —
++2.12 MB, +7.5%, about 0.71 MB per column.** Worth paying for a layer the spec makes first-class,
+and small next to the 22% the render/detail split saves.
+
+A tier fraction that is constant across a run still earns no view: `build_views` skips a column with
+fewer than two break boundaries, so a layer that could only paint one colour does not appear.
+
+### 7.3 Three cities published, and the third one found a bug
+
+CLAUDE.md asks for at least two sites, one high-coverage and one low tier-1. Three were published,
+chosen on measured coverage rather than reputation:
+
+| city | run | built cells | site | wall |
+|---|---|---:|---:|---:|
+| Berlin | `20260814T094116Z-berlin` | 59 152 | 36.12 MB | 12.8 min |
+| Hong Kong | `20260814T101702Z-hong_kong` | 25 233 | 20.43 MB | 12.7 min |
+| Cairo | `20260814T101702Z-cairo` | 56 456 | 27.20 MB | 9.9 min |
+
+Buildings off, per the measured default. Each is ~91 000 grid cells over its So2Sat window — the
+same extent every validation sweep since Phase 9 has used, so a site is comparable with the
+agreement figures already recorded for that city.
+
+**Height provenance across the three, over cells containing buildings:**
+
+| city | tier-1 | WSF-3D | GHS-BUILT-H | unresolved |
+|---|---:|---:|---:|---:|
+| Berlin | **0.797** | 0.191 | 0.008 | 0.003 |
+| Hong Kong | 0.308 | 0.547 | 0.120 | 0.026 |
+| Cairo | **0.010** | 0.835 | 0.122 | 0.032 |
+
+Berlin's 0.797 reproduces Phase 10's ~80% and Cairo's 0.010 its 1%. **83.5% of Cairo's building area
+takes its height from a 90 m TanDEM-X raster**, and that is now a layer a reader can select rather
+than a number in a table. This is the comparison the site exists to carry.
+
+**Publishing a second city found a real defect.** `run_and_publish` clipped ESA WorldCover from a
+single hardcoded tile inherited from `berlin_wide_validation` — `N51E012`. Berlin's window needs
+exactly that one tile; Hong Kong's spans two and Cairo's spans two, so both raised
+`RasterioIOError: Attempt to create 0x0 dataset`. `clip_worldcover` already existed and resolves and
+mosaics whichever tiles a bbox spans; the driver simply was not using it.
+
+Its docstring had predicted the failure — *"a single-tile guess would fail as a band of nodata down
+one side of the map rather than as an error"* — and the outcome here was the better one, an error
+rather than a silent band, only because Berlin's tile does not touch either city at all. A city one
+tile-width away would have published a map with a quarter of its land cover missing and no
+complaint. **The bug was reachable the moment the driver left Berlin, and nothing but publishing a
+second city would have found it.**
+
+Berlin's site is unaffected: `worldcover_tiles` resolves its window to `N51E012`, the same raster the
+hardcoded URL named.
+
+### 7.4 What the acceptance criteria now read against
+
+| criterion | result |
+|---|---|
+| opens with no network, no install | `serve.py`, standard library only; verified 206 + byte-exact `Content-Range` against a real 28 MB tileset |
+| layer switching does not refetch | every view paints `units-fill` via `setPaintProperty`; all 19 render columns ride in `units.pmtiles` |
+| portable to static hosting unchanged | relative sources only; asserted by test |
+| height provenance first-class | positions 1–6 of 18 in all three published sites |
+| at least two cities | three |
+
+`file://` is not among them, and cannot be — see §1.2.

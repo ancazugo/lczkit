@@ -110,7 +110,7 @@ def build_site(run_dir: Path | str, *, config: VizConfig | None = None) -> SiteR
     skipped: dict[str, str] = {}
     tilesets: list[TilesetReport] = []
 
-    render_columns = [column for column in config.render_columns if column in table.columns]
+    render_columns = _render_columns(list(table.columns), config)
     missing = sorted(set(config.render_columns) - set(render_columns))
     if missing:
         skipped["render_columns"] = f"not produced by this run: {', '.join(missing)}"
@@ -219,6 +219,27 @@ def build_site(run_dir: Path | str, *, config: VizConfig | None = None) -> SiteR
         json.dumps(report.as_dict(), indent=2) + "\n", encoding="utf-8"
     )
     return report
+
+
+def _render_columns(columns: list[str], config: VizConfig) -> list[str]:
+    """The attributes to carry at every zoom: those `config` names, plus those it names by prefix.
+
+    The prefix half exists for the height tier fractions, whose column names depend on which cascade
+    the run chose — see `VizConfig.render_column_prefixes`. Prefix matches follow the literal names
+    and keep the table's own column order, so the set is stable for a given run rather than
+    depending on how the config happened to be written.
+
+    A column matched both ways appears once: the two halves of the config are allowed to overlap,
+    and a duplicated column would be tiled twice.
+    """
+    named = [column for column in config.render_columns if column in columns]
+    chosen = dict.fromkeys(named)
+    for column in columns:
+        if column in chosen:
+            continue
+        if any(column.startswith(prefix) for prefix in config.render_column_prefixes):
+            chosen[column] = None
+    return list(chosen)
 
 
 def _read_layers(run_dir: Path, names: tuple[str, ...]) -> dict[str, gpd.GeoDataFrame]:
