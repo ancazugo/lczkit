@@ -37,6 +37,14 @@ from lczkit.cleaning.geometry import largest_part
 from lczkit.cleaning.report import CleaningStep, FootprintCoverage, Stage
 from lczkit.crs import assert_projected_crs
 
+FEATURE_ID = "feature_id"
+"""Identifier of the *source feature* a footprint came from, stamped before the multipolygon split.
+
+Several rows share it wherever one Overture feature arrived as a MultiPolygon. That is what makes
+"one building, one vote" expressible downstream: `lczkit.ucp.buildings` groups on it so a multi-wing
+complex contributes one term to `Hr` and counts once, rather than once per wing.
+"""
+
 BUILDING_ID = "building_id"
 """Stable per-footprint identifier, assigned once on the shared base and carried by both layers.
 
@@ -166,6 +174,25 @@ def drop_oversized(
     assert_projected_crs(buildings, "buildings")
     filtered = buildings.loc[buildings.geometry.area <= max_area_m2].reset_index(drop=True)
     return filtered, _step("drop_oversized", buildings, filtered, max_area_m2=max_area_m2)
+
+
+def assign_feature_id(buildings: gpd.GeoDataFrame) -> tuple[gpd.GeoDataFrame, CleaningStep]:
+    """Stamp `FEATURE_ID` onto the raw input, *before* the shared prefix explodes multipolygons.
+
+    This is the only point at which one source feature is still one row. After
+    `explode_multipolygons` a courtyard block or a multi-wing complex is N rows, and every
+    per-building statistic that treats a row as a building then counts it N times: `building_count`
+    rises, `mean_building_area_m2` falls, and - the one that reaches classification - `Hr` receives
+    N equal terms in an unweighted geometric mean instead of one.
+
+    Not taken from Overture's GERS `id`, though that would usually work: it is nullable, this
+    package must not assume a particular `VectorSource` supplies it, and a positional stamp is
+    stable for a given input either way.
+    """
+    assert_projected_crs(buildings, "buildings")
+    stamped = buildings.copy()
+    stamped[FEATURE_ID] = [f"feat_{i}" for i in range(len(stamped))]
+    return stamped, _step("assign_feature_id", buildings, stamped)
 
 
 def assign_building_id(buildings: gpd.GeoDataFrame) -> tuple[gpd.GeoDataFrame, CleaningStep]:
@@ -353,10 +380,16 @@ def enforce_planarity(
     passes = 0
     n_pairs = 0
     eps = eps_m
+    eps_used = eps_m
     pairs = _overlapping_pairs(working)
     while pairs and passes < max_passes:
         passes += 1
         n_pairs = max(n_pairs, len(pairs))
+        # Record the width this pass actually subtracts, before the escalation at the foot of the
+        # loop. Deriving it afterwards by dividing back is wrong once `eps` saturates at the
+        # ceiling, because the last two passes then share a width and the division reports one
+        # that was never used.
+        eps_used = eps
 
         touched: set[int] = set()
         for first, second in pairs:
@@ -399,7 +432,7 @@ def enforce_planarity(
         working,
         stage="buildings_topo",
         eps_m=eps_m,
-        eps_final_m=eps / PLANARITY_EPS_ESCALATION if passes else eps_m,
+        eps_final_m=eps_used,
         n_passes=passes,
         n_residual_pairs=n_pairs,
         n_dropped_unresolvable=len(unresolvable),
@@ -439,7 +472,8 @@ def clean_buildings(
     *simplified* street network, which `pipeline.clean_vectors()` produces after this point.
     """
     steps: list[CleaningStep] = []
-    base = buildings
+    base, step = assign_feature_id(buildings)
+    steps.append(step)
     for operation in (
         fix_invalid_geometries,
         explode_multipolygons,

@@ -113,6 +113,20 @@ PARAMETERS: tuple[ParameterSpec, ...] = (
         reference=BERNARD_2024,
     ),
     ParameterSpec(
+        name="h_geometric_area_weighted",
+        unit="m",
+        description=(
+            "SECONDARY, not for classification. The same geometric mean as Hr, but weighted by "
+            "footprint area, so a 5 m2 shed no longer counts as much as a tower block. Hr itself "
+            "stays unweighted because Bernard et al. (2024) Table 1 specifies that form and the "
+            "Stewart & Oke ranges were defined for it — weighting it would change the definition "
+            "silently. Emitted so the size of the difference is measurable: Phase 10 established "
+            "that Hr's sensitivity to dispersion is what made the most accurate height product "
+            "degrade the map, and the same mechanism acts on the unweighted mean itself."
+        ),
+        reference=COMPUTED_HERE,
+    ),
+    ParameterSpec(
         name="h_mean_area_weighted",
         unit="m",
         description=(
@@ -184,12 +198,35 @@ PARAMETERS: tuple[ParameterSpec, ...] = (
         reference=COMPUTED_HERE,
     ),
     ParameterSpec(
+        name="industrial_fraction_of_building_area",
+        unit="fraction",
+        description=(
+            "Share of the unit's BUILDING area that is industrial — footprint falling inside the "
+            "dissolved industrial evidence, over all footprint. Bernard et al. (2024)'s FIND/B, so "
+            "their published 0.33 threshold transfers to this column and not to the unit-area one. "
+            "Null where the unit holds no buildings: a share of nothing is undefined, not zero. "
+            "Functional, not morphological — Phase 6 applies it after the prototype distance."
+        ),
+        reference=BERNARD_2024,
+    ),
+    ParameterSpec(
+        name="industrial_fraction_of_unit_area",
+        unit="fraction",
+        description=(
+            "Share of the unit's GROUND that is industrial: industrial building footprints or "
+            "industrial land-use parcels, the two dissolved into one geometry so overlapping "
+            "evidence counts once. Sensitive to how much of the cell is built at all, which is "
+            "why Bernard's threshold does not transfer to it."
+        ),
+        reference=COMPUTED_HERE,
+    ),
+    ParameterSpec(
         name="industrial_fraction",
         unit="fraction",
         description=(
-            "Unit area share covered by industrial building footprints or industrial land-use "
-            "parcels, the two dissolved into one geometry so overlapping evidence counts once. "
-            "Functional, not morphological — Phase 6 applies it after the prototype distance."
+            "DEPRECATED alias for `industrial_fraction_of_unit_area`, kept for one release. The "
+            "bare name is the one whose denominator this repository contradicted itself about in "
+            "three places at once; read one of the two named columns instead."
         ),
         reference=COMPUTED_HERE,
     ),

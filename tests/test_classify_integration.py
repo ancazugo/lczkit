@@ -128,8 +128,8 @@ def test_units_with_a_missing_parameter_are_labelled_rather_than_dropped(
     assert not incomplete.empty
     assert incomplete["lcz_primary"].notna().all()
     assert "aspect_ratio" in named
-    # Only the weighted dimensions can be reported missing; under bernard2024 that is three of
-    # the seven for a built unit, and both of the nullable ones are among them.
+    # Only the weighted dimensions can be reported missing; under the default preset that is
+    # three of the seven for a built unit, and both nullable ones are among them.
     assert named <= {"aspect_ratio", "height_of_roughness_elements_m", "building_surface_fraction"}
     assert incomplete["n_params_used"].min() >= 1
 

@@ -735,7 +735,12 @@ def show(results: dict[str, Any]) -> None:
     # whose columns *are* labelled, and the two references give opposite answers: on Berlin,
     # lcz_v3 said height 31.8% / compactness 25.8% where the labels said 17.0% / 55.2%. Lift is
     # printed beside the raw share because raw shares are not comparable across references either.
-    print("\n  confusion axes, as a share of all disagreement (lift in brackets):")
+    # Lift, not the raw share. Phase 12 retired the share from reporting: it cannot compare the two
+    # axes, because height affords six confusable pairs to compactness's three and a null that never
+    # looks at the data hands height 3.9x more error on that alone. A record too old to carry the
+    # summaries is printed as "—" rather than recomputed from the share it stored — recomputing
+    # would put the retired quantity back on screen under a column heading that says lift.
+    print("\n  confusion axes, as pair-normalised lift (1.00 = what the class mix affords):")
     for name, arm in results["arms"].items():
         for source, report in (
             ("vs truth", arm.get("agreement_ground_truth")),
@@ -747,23 +752,13 @@ def show(results: dict[str, Any]) -> None:
             height = report.get("height_axis_summary")
             compact = report.get("compactness_axis_summary")
             if height is None or compact is None:
-                height = {
-                    "share_of_disagreement": sum(
-                        e["share_of_disagreement"] for e in report["height_axis"]
-                    ),
-                    "lift": float("nan"),
-                }
-                compact = {
-                    "share_of_disagreement": sum(
-                        e["share_of_disagreement"] for e in report["compactness_axis"]
-                    ),
-                    "lift": float("nan"),
-                }
+                print(f"    {name} {source:<10} — (record predates the normalised axis summaries)")
+                continue
             print(
                 f"    {name} {source:<10} height (1-2-3, 4-5-6) "
-                f"{height['share_of_disagreement']:>6.1%} [{height['lift']:>4.2f}]    "
+                f"{height['lift']:>5.2f}    "
                 f"compactness (1-4, 2-5, 3-6) "
-                f"{compact['share_of_disagreement']:>6.1%} [{compact['lift']:>4.2f}]    "
+                f"{compact['lift']:>5.2f}    "
                 f"n_disagree={report['n_disagree']}"
             )
 

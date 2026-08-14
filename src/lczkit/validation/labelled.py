@@ -12,9 +12,21 @@ on the Berlin fixture bbox: 473 patches, 48.4 km2 of patch area over a 7.1 km2 u
 overlapping pairs. An areal overlay would therefore count the same ground up to nine times, under
 labels that need not agree, and the resulting "majority" would be a property of the sampling
 density rather than of the city. Anchoring each label on the patch centre removes the double
-counting entirely and is exact at the scale lczkit validates on: the patch grid and `GridUnits` are
-both aligned to the local UTM origin at 100 m, so on the Berlin fixture 438 patch centres fall into
-438 distinct cells with **no cell receiving two labels**.
+counting entirely and is exact at the scale lczkit validates on: on the Berlin fixture 438 patch
+centres fall into 438 distinct cells with **no cell receiving two labels**.
+
+The 1:1 property holds, but not for the reason first recorded here. The patch centres are *not*
+aligned to the local UTM origin: measured on the Berlin fixture in EPSG:32633 they sit on an exact
+100 m stride at a fixed phase offset of **(40.0, 70.0) m** from the `GridUnits` cell corners. That
+offset is what makes the property robust - being far from both 0 and 50 m, no centre can land on a
+cell boundary and no two centres can share a cell. An offset near either value would degrade, which
+is precisely what `LabelMatch` exists to expose, so it is reported per run rather than assumed.
+
+**What the centre rule does not control** is support. The label describes a 320 x 320 m patch,
+10.24 ha, and is attributed to one 1 ha cell whose centre is systematically ~22 m from the patch
+centre. A 100 m cell inside a compact-midrise patch can legitimately be a courtyard. That is an
+irreducible floor under any agreement figure measured this way, and it is the same patch-versus-cell
+mismatch Phase 13 found in the published parameter ranges - the labels are patch-scale objects too.
 
 The reduction is deliberately not raster-based. `reference_lcz` reads a categorical raster through
 `LocalRasterSource` because the Demuzere map *is* one; these patches are vector polygons whose

@@ -307,3 +307,55 @@ def test_the_axis_summary_reads_the_same_confusion_matrix_a_run_persists() -> No
     recomputed = axis_summary(report.confusion, HEIGHT_AXIS_PAIRS, axis="height")
 
     assert recomputed == report.height_axis_summary
+
+
+def test_over_prediction_is_invisible_to_recall_and_visible_to_user_accuracy() -> None:
+    """The reason both are reported. A classifier that calls everything LCZ 5 scores a perfect
+    producer's accuracy on LCZ 5 — it found all of it — while being useless, and grouping by the
+    reference alone is structurally unable to say so. Demuzere et al. (2021) report the pair
+    through F1 for this reason."""
+    predicted, reference, area = build([5, 5, 5, 5], [5, 2, 2, 2])
+
+    report = agreement(predicted, reference, area)
+    by_code = {entry.code: entry for entry in report.per_class}
+
+    assert by_code[5].agreement == pytest.approx(1.0)  # found all of the one real LCZ 5
+    assert by_code[5].user_accuracy == pytest.approx(0.25)  # and three false ones besides
+    assert by_code[5].f1 == pytest.approx(2 * 1.0 * 0.25 / 1.25)
+    assert by_code[2].agreement == pytest.approx(0.0)
+
+
+def test_a_class_only_ever_predicted_still_gets_a_row() -> None:
+    """Grouping by reference class alone would drop it, and a class the map invents wholesale is
+    precisely what a reader needs to see."""
+    predicted, reference, area = build([8, 8], [2, 2])
+
+    report = agreement(predicted, reference, area)
+
+    assert {entry.code for entry in report.per_class} == {2, 8}
+    assert next(e for e in report.per_class if e.code == 8).n_reference == 0
+    assert next(e for e in report.per_class if e.code == 8).user_accuracy == pytest.approx(0.0)
+
+
+def test_built_versus_natural_accuracy_separates_two_different_failures() -> None:
+    """OA_bu, per Demuzere et al. (2021) Sect. 2.4: "the overall accuracy of the built vs. natural
+    LCZ classes only, ignoring their internal differentiation".
+
+    Finding the built fabric and misjudging its form is a different failure from not finding it,
+    and `overall_agreement` charges both the same. Here every unit is built and every label is
+    wrong, so overall agreement is zero while the built/natural call is perfect."""
+    predicted, reference, area = build([2, 3, 5], [1, 2, 6])
+
+    report = agreement(predicted, reference, area)
+
+    assert report.overall_agreement == pytest.approx(0.0)
+    assert report.built_natural_agreement == pytest.approx(1.0)
+
+
+def test_built_versus_natural_accuracy_falls_when_the_family_is_missed() -> None:
+    predicted, reference, area = build([2, 12, 5, 5], [1, 2, 6, 6])
+
+    report = agreement(predicted, reference, area)
+
+    # One of four calls the wrong family — a built patch labelled scattered trees.
+    assert report.built_natural_agreement == pytest.approx(0.75)

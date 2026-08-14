@@ -79,6 +79,8 @@ def make_parameters(units: gpd.GeoDataFrame) -> pd.DataFrame:
             "water_fraction": np.zeros(n),
             "height_of_roughness_elements_m": np.linspace(3.0, 28.0, n),
             "aspect_ratio": aspect,
+            "industrial_fraction_of_building_area": np.zeros(n),
+            "industrial_fraction_of_unit_area": np.zeros(n),
             "industrial_fraction": np.zeros(n),
             "mean_building_area_m2": np.linspace(120.0, 9000.0, n),
         },

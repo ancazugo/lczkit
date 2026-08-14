@@ -31,6 +31,13 @@ def aggregate(
     string) rather than silently guessing a reducer for them.
 
     `to_units` rows with no overlapping `from_units` polygon get null attribute values.
+
+    Every result carries an **`aggregate_coverage`** column: the share of the target polygon that
+    overlapping source polygons actually cover. `"area_weighted"` normalises by the summed overlap
+    area rather than by the target's own area, so a target one tenth covered reports the mean over
+    that tenth and is otherwise indistinguishable from a fully measured one. Reporting coverage
+    beside the value is what makes the two distinguishable; the normalisation is left alone because
+    changing it would move every arm-B projection.
     """
     assert_projected_crs(from_units, "from_units")
     assert_projected_crs(to_units, "to_units")
@@ -67,7 +74,16 @@ def aggregate(
     else:
         raise ValueError(f"Unknown aggregate method: {method!r}")
 
+    target_area = to_units.geometry.area
+    coverage = (
+        pieces.groupby("to_id")["overlap_area"]
+        .sum()
+        .reindex(to_units.index)
+        .div(target_area.where(target_area > 0))
+    )
+
     joined = to_units[["geometry"]].join(agg, how="left")
+    joined["aggregate_coverage"] = coverage
     result = gpd.GeoDataFrame(joined, geometry="geometry", crs=to_units.crs)
     result.index.name = "unit_id"
     return result

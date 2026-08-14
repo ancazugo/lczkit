@@ -134,40 +134,97 @@ def test_the_port_is_overwhelmingly_industrial_by_area(parameters: pd.DataFrame)
     assert parameters["industrial_fraction"].quantile(0.75) > 0.9
 
 
-def test_no_unit_has_lcz_8_and_lcz_10_as_its_two_nearest_prototypes(
+def test_the_metric_still_never_places_a_port_cell_near_lcz_10(
     classified: pd.DataFrame,
 ) -> None:
-    """**The finding.** CLAUDE.md's rule fires "where a unit's nearest prototypes are 8 and 10".
-    On a real industrial port that pair never occurs: the distance metric places these cells on
-    LCZ 9 (sparsely built) and LCZ 4, because port plots are large and sparsely built and the
-    building surface fraction that dominates the built metric comes out well below LCZ 8's 30-50%.
+    """**The finding that retired the pair-gated rule, kept as a test.**
 
-    So the rule as specified is inert, and the fixture CLAUDE.md required in order to establish
-    that it discriminates establishes instead that it does not get the opportunity to. Asserted
-    rather than worked around: this test failing in future means someone changed the rule or the
-    metric, which is exactly when a reader should be told.
+    The original rule fired "where a unit's nearest prototypes are 8 and 10". On a real industrial
+    port that pair never occurs: the distance metric places these cells on LCZ 9 (sparsely built)
+    and LCZ 4, because port plots are large and sparsely built and the building surface fraction
+    that dominates the built metric comes out well below LCZ 8's 30-50%. The rule was inert here at
+    every threshold, so the fixture that was meant to show it discriminating showed instead that it
+    never got the opportunity.
+
+    LCZ 10 is now outside the metric entirely, so the pair cannot occur by construction — but the
+    underlying morphological fact is what justified that change, and it is worth keeping asserted.
+    If these cells ever do start reading as LCZ 8, the reasoning behind the functional rule needs
+    revisiting and this test is where a reader finds that out.
     """
-    pair = classified.apply(
-        lambda row: {row["lcz_primary"], row["lcz_secondary"]} == {8, 10}, axis=1
-    )
+    # LCZ 10 arrives only through the rule: it is never the argmin, so `lcz_primary == 10` and
+    # "the rule fired" are the same set of cells.
+    is_ten = (classified["lcz_primary"] == 10).fillna(False).to_numpy(dtype=bool)
+    assert (is_ten == classified["lcz10_rule_applied"].to_numpy(dtype=bool)).all()
 
-    assert not pair.any()
-    assert not classified["lcz10_rule_applied"].any()
+    # And the morphology, left to itself, does not put these cells on LCZ 8 either — which is what
+    # made the pair-gated rule unreachable. Displaced answers are LCZ 9 and the natural classes.
+    displaced = classified.loc[classified["lcz10_rule_applied"], "lcz_secondary"]
+    assert (displaced == 8).mean() < 0.10  # measured 5.3%
 
 
-def test_the_threshold_is_not_what_is_stopping_it(parameters: pd.DataFrame) -> None:
-    """Lowering the threshold does not help, which is what distinguishes "set too conservatively"
-    from "never reached". The conservative default is therefore not the thing to revisit."""
+def test_the_functional_rule_does_fire_where_the_pair_gated_one_could_not(
+    classified: pd.DataFrame,
+) -> None:
+    """The point of the replacement. Assigned functionally, the port is found; gated on the
+    morphology it never was."""
+    fired = classified["lcz10_rule_applied"]
+
+    # 95 cells, against a reference of 88 — the rate matches, which is what the threshold buys.
+    assert fired.sum() > 50
+    assert (classified.loc[fired, "lcz_primary"] == 10).all()
+    # The displaced morphological answer is kept, and it is not LCZ 10 — that is the whole reason
+    # the evidence had to override rather than break a tie.
+    assert (classified.loc[fired, "lcz_secondary"] != 10).all()
+
+
+def test_the_threshold_now_controls_how_much_of_the_port_is_labelled(
+    parameters: pd.DataFrame,
+) -> None:
+    """It could not before: the pair-gated rule fired zero times at 0.05, 0.25 and 0.5 alike, which
+    is what distinguished "set too conservatively" from "never reached".
+
+    Note what the threshold does and does not buy. `scripts/lcz10_threshold_sweep.py` measures
+    precision **flat at 24-27% across the whole range** against the Rotterdam reference, so this
+    governs how much of the map carries LCZ 10 and not how often that label is right.
+    """
     firings = {
         threshold: int(
             PrototypeClassifier(ClassificationConfig(lcz10_min_industrial_fraction=threshold))
             .classify(parameters)["lcz10_rule_applied"]
             .sum()
         )
-        for threshold in (0.05, 0.25, 0.5)
+        for threshold in (0.05, 0.5, 0.95)
     }
 
-    assert set(firings.values()) == {0}
+    assert firings[0.05] > firings[0.5] > firings[0.95] > 0
+
+
+def test_the_building_area_share_keeps_real_spread_at_a_hundred_metre_cell(
+    parameters: pd.DataFrame,
+) -> None:
+    """`FIND/B` survives the move from an RSU to a 100 m cell, and the *unit-area* share is the more
+    saturated of the two.
+
+    This test previously asserted the opposite, and the opposite was an artefact of how the
+    numerator was built rather than a property of the quantity. Counting every building standing
+    inside an industrial *parcel* as industrial made 84% of cells read exactly 1.0 — parcels are
+    large and swallow whole cells — and that was read as `FIND/B` degenerating into a binary
+    indicator. Counting industrial *buildings*, which is what `FIND/B` means, gives a median of
+    0.66 and a tenth percentile of 0.11.
+
+    Kept as a test because the failure mode is live: a numerator that mixes ground evidence into a
+    building-area share will reproduce it, and it looks exactly like a scale finding.
+    """
+    built = parameters["industrial_fraction_of_building_area"]
+    ground = parameters["industrial_fraction_of_unit_area"]
+
+    present = built[built > 0]
+    assert (present >= 0.999).mean() < 0.3
+    assert 0.05 < present.quantile(0.1) < 0.5
+    assert 0.4 < present.median() < 0.9
+
+    # And the comparison that decides which column the rule reads.
+    assert (ground[ground > 0] >= 0.999).mean() > (present >= 0.999).mean()
 
 
 def test_the_reference_map_does_put_heavy_industry_here(units: gpd.GeoDataFrame) -> None:

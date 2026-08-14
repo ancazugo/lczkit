@@ -113,3 +113,22 @@ def test_mismatched_crs_raises() -> None:
 
     with pytest.raises(ValueError, match="crs"):
         aggregate(from_units, to_units, "area_weighted")
+
+
+def test_every_result_reports_how_much_of_the_target_was_covered() -> None:
+    """`area_weighted` normalises by summed overlap area, not by the target's own area, so a target
+    one tenth covered reports the mean over that tenth and is otherwise indistinguishable from a
+    fully measured one. The normalisation stays — changing it would move every arm-B projection —
+    so coverage is reported beside the value instead."""
+    source = _units(
+        ["partial", "whole"],
+        [box(0, 0, 30, 100), box(100, 0, 200, 100)],
+        value=[1.0, 2.0],
+    )
+    target = _units(["partial", "whole"], [box(0, 0, 100, 100), box(100, 0, 200, 100)])
+
+    result = aggregate(source, target, "area_weighted")
+
+    assert result.loc["partial", "value"] == pytest.approx(1.0)
+    assert result.loc["partial", "aggregate_coverage"] == pytest.approx(0.3)
+    assert result.loc["whole", "aggregate_coverage"] == pytest.approx(1.0)

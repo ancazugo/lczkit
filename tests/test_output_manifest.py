@@ -133,7 +133,11 @@ def test_the_classification_block_carries_the_metric_and_the_thresholds(
     assert block["weights"]["built"]["building_surface_fraction"] == 8.0
     assert block["weights"]["built"]["impervious_surface_fraction"] == 0.0
     assert block["normalisation"]["height_of_roughness_elements_m"]["std"] > 0
-    assert block["thresholds"]["lcz10_min_industrial_fraction"] == 0.5
+    # Calibrated in Phase 14 by `scripts/lcz10_threshold_sweep.py`, not picked.
+    assert block["thresholds"]["lcz10_min_industrial_fraction"] == 0.45
+    assert block["thresholds"]["lcz10_industrial_column"] == (
+        "industrial_fraction_of_building_area"
+    )
     # 10 built classes x 5 published dimensions, plus 7 natural x 7 (the five published plus tree
     # and water), less the height range LCZ G does not have: 50 + 49 - 1.
     assert len(block["prototypes"]) == 98

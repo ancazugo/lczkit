@@ -11,6 +11,19 @@ The one adaptation is that nodata is assigned to its own class instead of being 
 fractions still say how much of each unit the reference map reaches. Without that a unit lying
 half outside the map would report a confident majority computed from a corner of itself, and the
 agreement statistics would quietly include it.
+
+**"The 100 m grid" is CLAUDE.md's phrase for the target, not a description of the reference.**
+`lcz_v3.tif` is distributed in EPSG:4326 at 0.000898315 degrees, which is ~100 m north-south and
+100 m east-west only at the equator: at Berlin's latitude the cells are **60.9 m** wide, at
+Rotterdam 61.7 m, at Hong Kong 92.5 m. The lczkit unit is a 100 m square in a projected CRS, so the
+two grids share neither an origin nor an east-west cell size, and each unit takes the areal-majority
+label over roughly one-and-a-half reference cells across by one down.
+
+Nothing here is approximated by that - units are reprojected into the raster's CRS rather than
+warping a categorical raster, and `exactextract` weights each cell by its exact covered fraction.
+But the majority is a *reduction*, and `reference_majority_fraction` reports how decisively it was
+won. A unit whose winner holds 0.34 of the observed area is close to a coin toss between three
+classes and is currently weighted the same as one holding 1.0.
 """
 
 from __future__ import annotations

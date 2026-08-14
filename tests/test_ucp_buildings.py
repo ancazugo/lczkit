@@ -13,6 +13,7 @@ import numpy as np
 import pytest
 from shapely.geometry import box
 
+from lczkit.cleaning.buildings import FEATURE_ID
 from lczkit.config import UcpConfig
 from lczkit.ucp.buildings import building_metrics
 
@@ -200,3 +201,95 @@ def test_buildings_that_never_went_through_the_cascade_are_refused() -> None:
 
     with pytest.raises(ValueError, match="fill_heights"):
         building_metrics(buildings, make_units(), CONFIG)
+
+
+def _with_feature_ids(buildings: gpd.GeoDataFrame, ids: list[str]) -> gpd.GeoDataFrame:
+    out = buildings.copy()
+    out[FEATURE_ID] = ids
+    return out
+
+
+def test_one_building_arriving_as_several_parts_still_votes_once_in_hr() -> None:
+    """Phase 1 explodes multipolygons before either layer forks, so a courtyard block or a
+    multi-wing complex reaches this module as N rows carrying one height. Left alone that is N
+    equal terms in an unweighted mean of logs — a multi-part footprint outvoting its single-part
+    neighbours N to one, for a reason that is about data encoding rather than about the city.
+
+    Here the four-part 4 m feature would drag the geometric mean of {4, 32} down to 6.7 if each
+    part voted; collapsed to one vote per feature it is the true sqrt(4*32) = 11.3.
+    """
+    parts = make_buildings(
+        ((0, 0, 10, 10), 4.0),
+        ((12, 0, 22, 10), 4.0),
+        ((24, 0, 34, 10), 4.0),
+        ((36, 0, 46, 10), 4.0),
+        ((60, 0, 70, 10), 32.0),
+    )
+    one_feature = _with_feature_ids(parts, ["f0", "f0", "f0", "f0", "f1"])
+
+    collapsed = building_metrics(one_feature, make_units(), CONFIG)
+    exploded = building_metrics(parts, make_units(), CONFIG)
+
+    assert collapsed.loc["left", "height_of_roughness_elements_m"] == pytest.approx(
+        (4.0 * 32.0) ** 0.5
+    )
+    assert exploded.loc["left", "height_of_roughness_elements_m"] == pytest.approx(
+        (4.0**4 * 32.0) ** (1 / 5)
+    )
+
+
+def test_collapsing_parts_does_not_touch_the_area_a_unit_reports() -> None:
+    """Only the per-building statistics change. Building surface fraction sums overlay pieces and
+    is indifferent to how the source encoded them, which is what makes this a safe fix."""
+    parts = make_buildings(((0, 0, 10, 10), 4.0), ((12, 0, 22, 10), 4.0))
+    one_feature = _with_feature_ids(parts, ["f0", "f0"])
+
+    collapsed = building_metrics(one_feature, make_units(), CONFIG)
+    exploded = building_metrics(parts, make_units(), CONFIG)
+
+    assert collapsed.loc["left", "building_surface_fraction"] == pytest.approx(
+        exploded.loc["left", "building_surface_fraction"]
+    )
+    # But the object statistics do move, which is the point.
+    assert collapsed.loc["left", "building_count"] == 1
+    assert exploded.loc["left", "building_count"] == 2
+    assert collapsed.loc["left", "mean_building_area_m2"] == pytest.approx(200.0)
+    assert exploded.loc["left", "mean_building_area_m2"] == pytest.approx(100.0)
+
+
+def test_buildings_without_a_feature_id_are_left_exactly_as_they_were() -> None:
+    """A caller assembling a building layer by hand does not have to know about Phase 1's internal
+    column, and the collapse is skipped rather than guessed at."""
+    plain = make_buildings(((0, 0, 10, 10), 4.0), ((12, 0, 22, 10), 16.0))
+
+    result = building_metrics(plain, make_units(), CONFIG)
+
+    assert result.loc["left", "height_of_roughness_elements_m"] == pytest.approx(8.0)
+    assert result.loc["left", "building_count"] == 2
+
+
+def test_the_area_weighted_geometric_mean_ships_beside_hr_without_replacing_it() -> None:
+    """`Hr` stays unweighted: Bernard et al. (2024) Table 1 specifies that form and the Stewart &
+    Oke ranges Phase 6 normalises against were defined for it, so weighting it would change the
+    definition of an LCZ silently. The weighted version is emitted so the size of the difference is
+    measurable — a 5 m2 shed currently counts as much as a tower block, and Phase 10 already found
+    that Hr's sensitivity to dispersion is what made the most accurate height product hurt."""
+    # A big low shed and a small tall tower: unweighted they average to sqrt(4*64) = 16, but almost
+    # all the roughness-bearing area is 4 m high.
+    buildings = make_buildings(((0, 0, 90, 90), 4.0), ((92, 0, 96, 4), 64.0))
+
+    result = building_metrics(buildings, make_units(), CONFIG)
+
+    assert result.loc["left", "height_of_roughness_elements_m"] == pytest.approx(16.0)
+    assert result.loc["left", "h_geometric_area_weighted"] < 5.0
+
+
+def test_the_two_geometric_means_agree_when_every_footprint_is_the_same_size() -> None:
+    """The weight is the only difference between them, so equal weights must collapse the two."""
+    buildings = make_buildings(((0, 0, 20, 20), 5.0), ((30, 0, 50, 20), 45.0))
+
+    result = building_metrics(buildings, make_units(), CONFIG)
+
+    assert result.loc["left", "h_geometric_area_weighted"] == pytest.approx(
+        result.loc["left", "height_of_roughness_elements_m"]
+    )

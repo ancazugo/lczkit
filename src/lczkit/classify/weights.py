@@ -9,8 +9,8 @@ preset appears in the manifest.
 **Their weights are for the built types only.** Sect. 2.5, p. 2085: "Those weights are only used
 in the closest-distance approach for LCZ built types." The natural types never touch the distance
 metric in GeoClimate at all; they go through a land-cover decision tree. That is why `WeightPreset`
-carries two vectors, and why the natural half of `bernard2024` is marked as lczkit's rather than
-as published.
+carries two vectors, and why the natural half of `bernard2024_partial` is marked as lczkit's
+rather than as published.
 """
 
 from __future__ import annotations
@@ -68,7 +68,7 @@ _BERNARD_BUILT: dict[str, float] = {
 _UNIFORM: dict[str, float] = dict.fromkeys(DIMENSIONS, 1.0)
 
 BERNARD2024 = WeightPreset(
-    name="bernard2024",
+    name="bernard2024_partial",
     built=_BERNARD_BUILT,
     natural=dict(_UNIFORM),
     description=(
@@ -78,7 +78,9 @@ BERNARD2024 = WeightPreset(
         "and z0 (0.5) weights cannot be applied because this package computes neither, so the "
         "effective built metric has three non-zero dimensions rather than five. The natural "
         "vector is uniform and is lczkit's own: the paper classifies the natural types by a "
-        "land-cover decision tree and defines no distance metric for them."
+        "land-cover decision tree and defines no distance metric for them. Named `_partial` "
+        "because 17 of the published 21.5 weight units are applied: it is not Bernard's metric, "
+        "and FB carries roughly 47% of what remains."
     ),
 )
 
@@ -87,7 +89,8 @@ EQUAL = WeightPreset(
     built=dict(_UNIFORM),
     natural=dict(_UNIFORM),
     description=(
-        "Uniform weights over every available dimension, for comparison against bernard2024. "
+        "Uniform weights over every available dimension, for comparison against "
+        "bernard2024_partial. "
         "Gives the impervious and pervious fractions real influence over the built types, which "
         "is the right choice where the land-cover input is trusted more than Bernard's was."
     ),

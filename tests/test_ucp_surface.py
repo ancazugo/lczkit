@@ -154,3 +154,19 @@ def test_the_canopy_dataset_is_refused_as_a_land_cover_source() -> None:
 
     with pytest.raises(ValueError, match="non_tree"):
         surface_fractions(frame, buildings(a=0.0), canopy, CONFIG)
+
+
+def test_an_empty_group_is_null_where_the_raster_never_reached() -> None:
+    """An empty group is legitimate for a dataset that emits no such class, but it must not answer
+    0.0 for a unit that was never observed. The module's own contract is that a null land-cover
+    fraction is not zero cover, and a group with no columns was the one path that broke it."""
+    frame = land_cover(seen=(0.1, 0.2, 0.6, 0.1), unseen=(np.nan, np.nan, np.nan, np.nan))
+    config = CONFIG.model_copy(update={"water_classes": [], "pervious_classes": ["pervious"]})
+    dataset = WORLDCOVER.model_copy(update={"classes": ["tree", "pervious", "impervious"]})
+
+    result = surface_fractions(
+        frame.drop(columns=["frac_water"]), buildings(seen=0.0, unseen=0.0), dataset, config
+    )
+
+    assert result.loc["seen", "water_fraction"] == 0.0
+    assert pd.isna(result.loc["unseen", "water_fraction"])

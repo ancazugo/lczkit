@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from lczkit.cleaning.report import CleaningReport, CleaningStep
+from lczkit.cleaning.report import CleaningReport, CleaningStep, FootprintCoverage
 
 
 def _step(operation: str, stage: str, area_in: float, area_out: float) -> CleaningStep:
@@ -85,3 +85,22 @@ def test_the_report_round_trips_through_json_with_its_areas() -> None:
     restored = CleaningReport.model_validate_json(report.model_dump_json())
 
     assert restored.area_retention("buildings_area") == pytest.approx(0.99)
+
+
+def test_the_acceptance_criterion_survives_serialisation() -> None:
+    """`union_retention` is Phase 1's acceptance criterion and every headline ratio was a plain
+    `@property`, so `model_dump()` and the JSON manifest carried only the four raw areas. Someone
+    reading a run record saw four numbers and had to know the formula."""
+    coverage = FootprintCoverage(
+        raw_summed_area_m2=1000.0,
+        raw_union_area_m2=900.0,
+        area_summed_m2=891.0,
+        area_union_m2=882.0,
+    )
+
+    dumped = coverage.model_dump()
+
+    assert dumped["union_retention"] == pytest.approx(0.99)
+    assert dumped["ground_retention"] == pytest.approx(0.98)
+    assert dumped["raw_self_overlap_fraction"] == pytest.approx(0.1)
+    assert dumped["residual_self_overlap_fraction"] == pytest.approx(1.0 - 882.0 / 891.0)

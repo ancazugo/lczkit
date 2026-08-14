@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field
 from lczkit.classify.classifier import PrototypeClassifier
 from lczkit.classify.labels import DEMUZERE_2022, legend
 from lczkit.classify.prototypes import UNUSED_PROPERTIES
-from lczkit.classify.weights import UNAPPLIED_BERNARD_WEIGHTS
+from lczkit.classify.weights import BERNARD2024, UNAPPLIED_BERNARD_WEIGHTS
 from lczkit.cleaning.report import CleaningReport
 from lczkit.config import Settings
 from lczkit.heights.cascade import HeightFillReport
@@ -192,7 +192,7 @@ def build_manifest(
             {"property": name, "weight": weight, "reason": reason}
             for name, weight, reason in UNAPPLIED_BERNARD_WEIGHTS
         ]
-        if classifier.weights.name == "bernard2024"
+        if classifier.weights.name == BERNARD2024.name
         else [],
         classification=classifier.describe(),
         classification_summary=classification_summary or {},

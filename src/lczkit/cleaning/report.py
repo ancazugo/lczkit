@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 Stage = Literal[
     "ingestion",
@@ -52,6 +52,7 @@ class CleaningStep(BaseModel):
     area_out_m2: float = 0.0
     detail: dict[str, Any] = Field(default_factory=dict)
 
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def area_retained(self) -> float | None:
         """Fraction of incoming area this step passed through, or `None` for an areal-free stage.
@@ -91,6 +92,7 @@ class FootprintCoverage(BaseModel):
 
     area_union_m2: float = 0.0
 
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def raw_self_overlap_fraction(self) -> float | None:
         """Share of the raw summed area that is double-counted. 0.0 for a disjoint source."""
@@ -98,6 +100,7 @@ class FootprintCoverage(BaseModel):
             return None
         return 1.0 - self.raw_union_area_m2 / self.raw_summed_area_m2
 
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def residual_self_overlap_fraction(self) -> float | None:
         """The same measure on `buildings_area`, after cleaning.
@@ -111,6 +114,7 @@ class FootprintCoverage(BaseModel):
             return None
         return 1.0 - self.area_union_m2 / self.area_summed_m2
 
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def union_retention(self) -> float | None:
         """`buildings_area`'s summed area over the raw **union** — Phase 1's acceptance criterion.
@@ -124,6 +128,7 @@ class FootprintCoverage(BaseModel):
             return None
         return self.area_summed_m2 / self.raw_union_area_m2
 
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def ground_retention(self) -> float | None:
         """Union out over union in: the share of covered ground the layer kept.

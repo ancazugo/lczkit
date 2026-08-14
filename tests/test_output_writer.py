@@ -49,6 +49,8 @@ def make_parameters(units: gpd.GeoDataFrame) -> pd.DataFrame:
             "water_fraction": np.zeros(n),
             "height_of_roughness_elements_m": np.linspace(3.0, 20.0, n),
             "aspect_ratio": np.linspace(0.1, 1.4, n),
+            "industrial_fraction_of_building_area": np.zeros(n),
+            "industrial_fraction_of_unit_area": np.zeros(n),
             "industrial_fraction": np.zeros(n),
             "mean_building_area_m2": np.linspace(123.456789, 9876.54321, n),
         },
@@ -157,7 +159,7 @@ def test_the_manifest_is_valid_json_and_names_what_was_written(settings: Setting
 
     assert loaded["run_id"] == "test-run"
     assert set(loaded["outputs"]) == {UNITS_FILE, VIZ_FILE, MANIFEST_FILE}
-    assert loaded["config"]["classification"]["weight_preset"] == "bernard2024"
+    assert loaded["config"]["classification"]["weight_preset"] == "bernard2024_partial"
 
 
 def test_breaks_cover_the_continuous_columns_and_skip_the_categorical_ones(

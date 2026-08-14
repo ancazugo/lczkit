@@ -81,7 +81,30 @@ class ClassAgreement(BaseModel):
 
     agreement: float
     """`area_agree_m2 / area_reference_m2`, or 0.0 where the class is absent from the
-    reference."""
+    reference. This is **producer's accuracy** (recall): of the ground the reference calls this
+    class, how much did lczkit agree on."""
+
+    n_predicted: int = 0
+    """Units *lczkit* assigns to this class. The denominator of `user_accuracy`."""
+
+    area_predicted_m2: float = 0.0
+
+    user_accuracy: float = 0.0
+    """`area_agree_m2 / area_predicted_m2`, or 0.0 where the class is never predicted.
+
+    The complement of `agreement`, and the reason both are needed: producer's accuracy alone
+    cannot see over-prediction. A classifier that labels every cell LCZ 5 scores 100% producer's
+    accuracy on LCZ 5 while being useless, and nothing in this report would have said so.
+    Demuzere et al. (2021) report the pair through F1 for exactly this reason.
+    """
+
+    f1: float = 0.0
+    """Harmonic mean of `user_accuracy` and `agreement`, 0.0 where either is zero.
+
+    The class-wise metric Demuzere et al. (2021), Sect. 2.4 use, following Verdonck et al. (2017):
+    "the F1 metric, which is a harmonic mean of the user's and producer's accuracy". Reported so
+    lczkit's per-class figures are directly comparable to published LCZ maps.
+    """
 
 
 class ConfusionCell(BaseModel):
@@ -203,6 +226,17 @@ class AgreementReport(BaseModel):
     """Area share of the compared units the reference calls natural. Stated alongside the headline
     so a figure carried by water is recognisable as one."""
 
+    built_natural_agreement: float = 0.0
+    """`OA_bu`: agreement on the built-versus-natural distinction alone, ignoring which built or
+    which natural class.
+
+    Demuzere et al. (2021) Sect. 2.4 and Demuzere et al. (2022) Sect. 2.4 both report it beside
+    OA and OA_u, and it separates two failures this report otherwise conflates: a city where lczkit
+    finds the built fabric and misjudges its form, and one where it does not find the built fabric
+    at all. `overall_agreement` charges both the same. It is also the one accuracy figure here that
+    a height-blind pipeline can still score well on, which is the point when tier-1 coverage is 1%.
+    """
+
     per_class: list[ClassAgreement] = Field(default_factory=list)
     confusion: list[ConfusionCell] = Field(default_factory=list)
     by_height_completeness: list[Stratum] = Field(default_factory=list)
@@ -287,6 +321,11 @@ def agreement(
         float(natural.loc[natural["agree"], "area"].sum()), float(natural["area"].sum())
     )
     report.natural_share = _share(float(natural["area"].sum()), total_area)
+    # OA_bu: collapse both sides to the built/natural dichotomy and score that alone.
+    same_family = is_natural == compared["predicted"].isin(NATURAL_CODES)
+    report.built_natural_agreement = _share(
+        float(compared.loc[same_family, "area"].sum()), total_area
+    )
 
     report.per_class = _per_class(compared)
     report.confusion = _confusion(compared)
@@ -311,13 +350,24 @@ def _share(part: float, whole: float) -> float:
 
 
 def _per_class(compared: pd.DataFrame) -> list[ClassAgreement]:
-    """One row per reference class present, ascending by code."""
+    """One row per class the reference or the prediction uses, ascending by code.
+
+    Both sides, not just the reference: a class lczkit predicts and the reference never assigns has
+    a user's accuracy of zero and is exactly the over-prediction that producer's accuracy alone
+    cannot see. Grouping by reference only would drop it from the report entirely.
+    """
+    codes = sorted(set(compared["reference"].unique()) | set(compared["predicted"].unique()))
     rows: list[ClassAgreement] = []
-    for code in sorted(compared["reference"].unique()):
+    for code in codes:
         entry = lcz(int(code))
         group = compared[compared["reference"] == code]
+        predicted = compared[compared["predicted"] == code]
         area = float(group["area"].sum())
+        predicted_area = float(predicted["area"].sum())
         agreed = group[group["agree"]]
+        agreed_area = float(agreed["area"].sum())
+        producer = _share(agreed_area, area)
+        user = _share(agreed_area, predicted_area)
         rows.append(
             ClassAgreement(
                 code=entry.code,
@@ -326,8 +376,12 @@ def _per_class(compared: pd.DataFrame) -> list[ClassAgreement]:
                 n_reference=int(len(group)),
                 area_reference_m2=area,
                 n_agree=int(len(agreed)),
-                area_agree_m2=float(agreed["area"].sum()),
-                agreement=_share(float(agreed["area"].sum()), area),
+                area_agree_m2=agreed_area,
+                agreement=producer,
+                n_predicted=int(len(predicted)),
+                area_predicted_m2=predicted_area,
+                user_accuracy=user,
+                f1=(2 * user * producer / (user + producer)) if (user + producer) > 0 else 0.0,
             )
         )
     return rows

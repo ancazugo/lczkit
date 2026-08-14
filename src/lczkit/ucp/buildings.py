@@ -28,6 +28,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 
+from lczkit.cleaning.buildings import FEATURE_ID
 from lczkit.config import UcpConfig
 from lczkit.crs import assert_projected_crs
 from lczkit.units import check_units
@@ -35,6 +36,7 @@ from lczkit.units import check_units
 COLUMNS = (
     "building_surface_fraction",
     "height_of_roughness_elements_m",
+    "h_geometric_area_weighted",
     "h_mean_area_weighted",
     "h_std",
     "building_count",
@@ -84,9 +86,12 @@ def _area_metrics(
     buildings: gpd.GeoDataFrame, units: gpd.GeoDataFrame, config: UcpConfig
 ) -> pd.DataFrame:
     """Surface fraction and the three height statistics, over footprints split by unit."""
+    columns = ["height", "geometry"]
+    if FEATURE_ID in buildings.columns:
+        columns.insert(0, FEATURE_ID)
     pieces = gpd.overlay(
         units[["geometry"]].reset_index(),
-        buildings[["height", "geometry"]].reset_index(drop=True),
+        buildings[columns].reset_index(drop=True),
         how="intersection",
     )
     unit_area = units.geometry.area
@@ -95,6 +100,7 @@ def _area_metrics(
             {
                 "building_surface_fraction": 0.0,
                 "height_of_roughness_elements_m": np.nan,
+                "h_geometric_area_weighted": np.nan,
                 "h_mean_area_weighted": np.nan,
                 "h_std": np.nan,
             },
@@ -121,21 +127,48 @@ def _height_stats(pieces: pd.DataFrame, index: pd.Index, config: UcpConfig) -> d
     geometric means once each; assigning it to a single unit instead would leave `Hr` null in cells
     that are visibly built, which is the worse failure.
 
-    The two secondaries are area-weighted, as a matched pair. The population (no Bessel correction)
-    standard deviation is used because an area-weighted spread has no natural sample correction —
-    the weights are areas, not observation counts — and because a unit holding one building should
-    report a spread of zero rather than a null.
+    **One building, one vote.** Phase 1's shared prefix explodes multipolygons before either layer
+    forks, so a courtyard block or a multi-wing complex arrives here as N rows carrying one height.
+    Left alone that is N equal terms in an unweighted mean of logs, which quietly weights a
+    multi-part footprint N times against its single-part neighbours. Parts are therefore collapsed
+    on `FEATURE_ID` first, taking one height per source feature per unit. Where the column is absent
+    — a caller assembling buildings by hand — the collapse is skipped rather than guessed at.
+
+    `h_geometric_area_weighted` is the same geometric mean with footprint area as the weight,
+    shipped **secondary and unused by classification**. Bernard et al. Table 1 specifies the
+    unweighted form and the Stewart & Oke ranges Phase 6 normalises against were defined for it, so
+    substituting the weighted one would change the definition of `Hr` silently. It is emitted
+    because the unweighted mean gives a 5 m² shed the same vote as a tower block, and Phase 10
+    already established that `Hr`'s sensitivity to dispersion is what made the most accurate height
+    product degrade the map — this column is what makes the size of that effect measurable without
+    moving a published number.
+
+    The remaining two secondaries are area-weighted, as a matched pair. The population (no Bessel
+    correction) standard deviation is used because an area-weighted spread has no natural sample
+    correction — the weights are areas, not observation counts — and because a unit holding one
+    building should report a spread of zero rather than a null.
     """
     empty = pd.Series(np.nan, index=index, dtype="float64")
     if pieces.empty:
         return {
             "height_of_roughness_elements_m": empty,
+            "h_geometric_area_weighted": empty.copy(),
             "h_mean_area_weighted": empty.copy(),
             "h_std": empty.copy(),
         }
 
+    if FEATURE_ID in pieces.columns:
+        # Sum the parts' areas and take their shared height once. `first` rather than a mean
+        # because every part of one feature carries the same height by construction.
+        pieces = (
+            pieces.groupby(["unit_id", FEATURE_ID], observed=True)
+            .agg(piece_area=("piece_area", "sum"), height=("height", "first"))
+            .reset_index()
+        )
+
     weight = pieces["piece_area"]
     height = pieces["height"]
+    log_h = np.log(height.clip(lower=config.min_building_height_m))
     grouped = (
         pd.DataFrame(
             {
@@ -143,11 +176,12 @@ def _height_stats(pieces: pd.DataFrame, index: pd.Index, config: UcpConfig) -> d
                 "w": weight,
                 "wh": weight * height,
                 "wh2": weight * height**2,
-                "log_h": np.log(height.clip(lower=config.min_building_height_m)),
+                "w_log_h": weight * log_h,
+                "log_h": log_h,
             }
         )
         .groupby("unit_id")
-        .agg({"w": "sum", "wh": "sum", "wh2": "sum", "log_h": "mean"})
+        .agg({"w": "sum", "wh": "sum", "wh2": "sum", "w_log_h": "sum", "log_h": "mean"})
     )
 
     total = grouped["w"].where(grouped["w"] > 0)
@@ -155,15 +189,29 @@ def _height_stats(pieces: pd.DataFrame, index: pd.Index, config: UcpConfig) -> d
     # Var(X) = E[X^2] - E[X]^2, clipped because catastrophic cancellation can drive a
     # single-height unit fractionally below zero.
     variance = (grouped["wh2"] / total - mean**2).clip(lower=0.0)
+    geometric_weighted = pd.Series(
+        np.exp((grouped["w_log_h"] / total).to_numpy()), index=grouped.index, dtype="float64"
+    )
     return {
         "height_of_roughness_elements_m": np.exp(grouped["log_h"]).reindex(index),
+        "h_geometric_area_weighted": geometric_weighted.reindex(index),
         "h_mean_area_weighted": mean.reindex(index),
         "h_std": np.sqrt(variance).reindex(index),
     }
 
 
 def _object_metrics(buildings: gpd.GeoDataFrame, units: gpd.GeoDataFrame) -> pd.DataFrame:
-    """Count and mean footprint area, over whole buildings assigned by representative point."""
+    """Count and mean footprint area, over whole buildings assigned by representative point.
+
+    Multi-part features are recombined first, on the same grounds as `Hr`: a courtyard block that
+    arrived as a MultiPolygon is one building, and counting its wings separately inflates
+    `building_count` while deflating `mean_building_area_m2` — the parameter that carries LCZ 8's
+    "large, low, sparse" character. The parts are dissolved rather than merely counted once, so the
+    reported area is the whole footprint and its representative point lies inside the whole.
+    """
+    if FEATURE_ID in buildings.columns and buildings[FEATURE_ID].duplicated().any():
+        buildings = buildings.dissolve(by=FEATURE_ID, as_index=False)
+
     points = gpd.GeoDataFrame(
         {"footprint_area": buildings.geometry.area.to_numpy()},
         geometry=buildings.geometry.representative_point().to_numpy(),

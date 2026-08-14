@@ -737,9 +737,16 @@ class ClassificationConfig(BaseModel):
     rather than Stewart & Oke's and there is no published value to defer to.
     """
 
-    weight_preset: str = "bernard2024"
-    """Named entry in `lczkit.classify.weights.PRESETS`. `"bernard2024"` is the published default
-    for the built types; `"equal"` is the uniform comparison."""
+    weight_preset: str = "bernard2024_partial"
+    """Named entry in `lczkit.classify.weights.PRESETS`. `"bernard2024_partial"` is Bernard et al.
+    (2024)'s published built-type default with the dimensions this package cannot compute left
+    out; `"equal"` is the uniform comparison.
+
+    The `_partial` is load-bearing rather than decorative: SVF (weight 4) and z0 (weight 0.5) are
+    deferred and FI/FP are zero-weighted, so 17 of the published 21.5 weight units are applied and
+    the effective metric has three non-zero dimensions, of which FB is roughly 47%. Calling it
+    `bernard2024` would claim a metric this package does not implement. The unapplied dimensions
+    are recorded in the run manifest."""
 
     built_min_building_fraction: float = 0.10
     """Building surface fraction at or above which a unit is classified against the built
@@ -754,14 +761,29 @@ class ClassificationConfig(BaseModel):
     reachable_natural_classes: list[str] = Field(default_factory=lambda: ["A", "B", "D", "E", "G"])
     """Which natural classes the gate may assign, by Stewart & Oke label.
 
-    C (bush, scrub), D (low plants) and F (bare soil or sand) are mutually indistinguishable with
-    the parameters this package computes: the published table separates them only by sky view
-    factor, aspect ratio and height of roughness elements, all building-derived and all absent in
-    open ground, and the default WorldCover mapping folds shrubland, grassland and bare ground
-    into a single `pervious` class. Rather than let three tied prototypes be resolved by index
-    order, C and F are excluded and the exclusion is recorded in the manifest. Reaching them needs
-    a land-cover mapping that emits shrub and bare separately, and a Phase 5 fraction carrying
-    them. Distances to the excluded classes are still computed and reported.
+    C (bush, scrub), D (low plants) and F (bare soil or sand) are mutually indistinguishable in
+    open ground with the parameters this package computes: the published table separates them only
+    by sky view factor, aspect ratio and height of roughness elements, all building-derived and all
+    null where nothing is built, and the default WorldCover mapping folds shrubland, grassland and
+    bare ground into a single `pervious` class. Rather than let tied prototypes be resolved by index
+    order, C and F are excluded and the exclusion is recorded in the manifest. Distances to the
+    excluded classes are still computed and reported.
+
+    **The two exclusions are not the same kind of thing, and only one of them is a policy choice.**
+
+    C is genuinely excluded by this setting: its box differs from D's on aspect ratio (0.25-1.0
+    against at most 0.1) and on Hr (at most 2 m against at most 1 m), both of which carry weight 1.0
+    in the natural vector. Where those two are non-null C wins outright, so adding it back here
+    changes labels. The tie is real only where both are null, which for a buildingless unit is the
+    common case - hence the exclusion.
+
+    F is excluded by **arithmetic, not by this list**. D's box contains F's in every dimension -
+    identical on aspect ratio, building, impervious, pervious, tree and water, and wider on Hr (at
+    most 1 m against at most 0.25 m) - so d(F) >= d(D) for every possible unit, and ties break to
+    the lower code. **Adding "F" here cannot make F reachable.** Reaching it needs a land-cover
+    mapping that emits bare ground separately and a Phase 5 fraction carrying it, not a config
+    change. The manifest records F as dominated rather than excluded, so the distinction survives
+    into the run record.
     """
 
     natural_dominant_fraction: float = 0.50
@@ -772,16 +794,41 @@ class ClassificationConfig(BaseModel):
     """Tree or water cover a natural class treats as absent. Reuses the 10% boundary Stewart &
     Oke apply to building and impervious cover throughout their natural rows."""
 
-    lcz10_min_industrial_fraction: float = 0.50
-    """`industrial_fraction` above which a unit whose two nearest prototypes are LCZ 8 and LCZ 10
-    is relabelled LCZ 10.
+    lcz10_industrial_column: str = "industrial_fraction_of_building_area"
+    """Which industrial share the LCZ 10 rule reads.
+
+    Named explicitly because the two are not interchangeable and the threshold below is calibrated
+    against one of them.
+
+    `industrial_fraction_of_building_area` is Bernard et al. (2024)'s `FIND/B`, so their published
+    0.33 transfers to it directly. It is the default on both theory and measurement: on the
+    Rotterdam fixture it selects 95 cells against a reference of 88, where the unit-area share
+    selects 196 at its own best operating point. Getting the *rate* right matters when precision
+    cannot be improved (see the threshold below), because the remaining choice is how much of the
+    map to label.
+
+    The unit-area share is the alternative, and is the more saturated of the two at a 100 m cell —
+    42.6% of cells holding any industrial ground read exactly 1.0, against 12.6% for `FIND/B`.
+    """
+
+    lcz10_min_industrial_fraction: float = 0.45
+    """`lcz10_industrial_column` above which a unit is assigned LCZ 10.
 
     Deliberately set to under-trigger, per CLAUDE.md: Overture cannot distinguish heavy from light
     industry, so a missing LCZ 10 is a visible gap while a light-industrial estate mislabelled as
-    heavy industry is an invisible error that propagates into any model consuming the map. A
-    majority of the unit's area has to be industrial before the rule fires. Note the denominator
-    differs from Bernard et al. (2024)'s `FIND/B`, which is a share of building area rather than
-    of unit area, so their 0.33 does not transfer.
+    heavy industry is an invisible error that propagates into any model consuming the map.
+
+    **Calibrated, not picked** — `scripts/lcz10_threshold_sweep.py` sweeps it against the Rotterdam
+    reference and writes the precision/recall curve into the run record. 0.45 is that sweep's
+    operating point, the precision maximum over `FIND/B`. Bernard's published 0.33 sits just below
+    it and performs comparably (22.4% precision, 27.3% recall against 23.2% and 25.0%), so this is
+    not a number in tension with the paper it comes from.
+
+    **Read the curve before trusting it.** Precision is roughly flat — 16.7% to 23.2% across the
+    whole range — so this threshold governs how much of the map carries LCZ 10 and not how often
+    that label is right. The rule fires plausibly, not accurately, and it is scored against
+    `lcz_v3`, a comparator carrying its own error which CLAUDE.md records as coarser than the ground
+    in this very city.
     """
 
     lcz1_min_height_m: float | None = None
@@ -905,7 +952,9 @@ class VizConfig(BaseModel):
             "aspect_ratio",
             "street_openness",
             "mean_building_area_m2",
-            "industrial_fraction",
+            # The column the LCZ 10 rule actually thresholds, so the map shows the evidence behind
+            # the label rather than a second industrial share that does not decide anything.
+            "industrial_fraction_of_building_area",
         ]
     )
     """Attributes carried at *every* zoom, because a choropleth needs them while the map is zoomed

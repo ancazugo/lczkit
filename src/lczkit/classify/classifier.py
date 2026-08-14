@@ -24,7 +24,7 @@ import pandas as pd
 
 from lczkit.classify import rules
 from lczkit.classify.distance import PrototypeSpace, uniqueness
-from lczkit.classify.labels import BUILT_CODES, CODES, NATURAL_CODES, code_of
+from lczkit.classify.labels import BUILT_CODES, CODES, NATURAL_CODES, code_of, lcz
 from lczkit.classify.prototypes import build_prototypes
 from lczkit.classify.weights import WeightPreset, preset
 from lczkit.config import ClassificationConfig
@@ -42,6 +42,7 @@ LABEL_COLUMNS: tuple[str, ...] = (
     "label_route",
     "lcz10_rule_applied",
     "n_params_used",
+    "n_params_available",
     "missing_parameters",
 )
 
@@ -70,6 +71,12 @@ class PrototypeClassifier:
         )
         unreachable = set(NATURAL_CODES) - set(self.reachable_natural)
         self.unreachable_natural: tuple[int, ...] = tuple(sorted(unreachable))
+        # LCZ 10 is scored and reported but never selected: it leaves the metric per Bernard et al.
+        # and arrives only through the industrial rule. Kept as a derived tuple rather than a
+        # literal so `lcz_d10` and the selection set cannot drift apart.
+        self.selectable_built: tuple[int, ...] = tuple(
+            code for code in BUILT_CODES if code != FUNCTIONAL_ONLY_CODE
+        )
 
     def classify(self, parameters: pd.DataFrame) -> pd.DataFrame:
         """Classify a Phase 5 parameter table, returning one row per `unit_id`.
@@ -80,10 +87,13 @@ class PrototypeClassifier:
         """
         if parameters.index.name != "unit_id":
             raise ValueError("parameters must be indexed by unit_id")
-        if "industrial_fraction" not in parameters.columns:
+        industrial_column = self.config.lcz10_industrial_column
+        if industrial_column not in parameters.columns:
             raise ValueError(
-                "parameters has no industrial_fraction column, so LCZ 10 would be unreachable. "
-                "Pass the table lczkit.ucp.compute_parameters() returns."
+                f"parameters has no {industrial_column!r} column, so LCZ 10 would be unreachable - "
+                "it is not in the distance metric and the industrial rule is its only route. "
+                "Pass the table lczkit.ucp.compute_parameters() returns, or point "
+                "ClassificationConfig.lcz10_industrial_column at a column it carries."
             )
 
         built = self.space.distances(parameters, BUILT_CODES, self.weights.built)
@@ -101,13 +111,13 @@ class PrototypeClassifier:
             == rules.BUILT
         )
         candidates = _combine(
-            built_distances[list(BUILT_CODES)],
+            built_distances[list(self.selectable_built)],
             natural.distances[list(self.reachable_natural)],
             is_built,
         )
         ranked, fired = rules.apply_lcz10_rule(
             _two_closest(candidates),
-            parameters["industrial_fraction"],
+            parameters[industrial_column],
             self.config.lcz10_min_industrial_fraction,
         )
         route = pd.Series(
@@ -116,7 +126,14 @@ class PrototypeClassifier:
             dtype="object",
         ).where(~fired, rules.ROUTE_INDUSTRIAL)
 
-        vector = pd.concat([built_distances, natural.distances], axis=1)
+        # Select by code before renaming. Concatenating and assigning column labels positionally
+        # assumes each frame comes back in its family's code order - true today, since `distances`
+        # builds its dict in `codes` order, but a mislabelled distance vector would be silent and
+        # selecting by code costs nothing.
+        vector = pd.concat(
+            [built_distances[list(BUILT_CODES)], natural.distances[list(NATURAL_CODES)]],
+            axis=1,
+        )
         vector.columns = pd.Index(
             [f"{DISTANCE_PREFIX}{code}" for code in [*BUILT_CODES, *NATURAL_CODES]]
         )
@@ -133,6 +150,13 @@ class PrototypeClassifier:
                         "lcz10_rule_applied": fired,
                         "n_params_used": _pick(
                             built.n_params_used, natural.n_params_used, is_built
+                        ),
+                        "n_params_available": pd.Series(
+                            np.where(
+                                is_built, built.n_params_available, natural.n_params_available
+                            ),
+                            index=parameters.index,
+                            dtype="int64",
                         ),
                         "missing_parameters": _pick(
                             built.missing_parameters, natural.missing_parameters, is_built
@@ -171,24 +195,72 @@ class PrototypeClassifier:
             ],
             "thresholds": {
                 "built_min_building_fraction": self.config.built_min_building_fraction,
+                "lcz10_industrial_column": self.config.lcz10_industrial_column,
                 "lcz10_min_industrial_fraction": self.config.lcz10_min_industrial_fraction,
                 "lcz1_min_height_m": self.config.lcz1_min_height_m,
                 "natural_dominant_fraction": self.config.natural_dominant_fraction,
                 "natural_negligible_fraction": self.config.natural_negligible_fraction,
             },
             "unreachable_classes": {
-                str(code): (
-                    "Not separable from LCZ D with the parameters this package computes: the "
-                    "published table distinguishes them only by sky view factor, aspect ratio "
-                    "and height of roughness elements, all building-derived and all absent in "
-                    "open ground, and the default land-cover mapping folds shrubland, grassland "
-                    "and bare ground into one pervious class. Distances to it are reported but "
-                    "it is never assigned. See "
-                    "docs/references/tables/lczkit_natural_class_ranges.md."
-                )
-                for code in self.unreachable_natural
+                **{str(code): _unreachable_reason(code) for code in self.unreachable_natural},
+                str(FUNCTIONAL_ONLY_CODE): (
+                    "Functional only: removed from the distance metric per Bernard et al. (2024) "
+                    "and assigned solely by the industrial rule, above "
+                    f"{self.config.lcz10_min_industrial_fraction} of "
+                    f"{self.config.lcz10_industrial_column}. The morphological rule it replaced "
+                    "was measured inert on the Rotterdam fixture at every threshold from 0.05 to "
+                    "0.5 - port plots are sparsely built, so building surface fraction places them "
+                    "on LCZ 9 and LCZ 10 never came within reach of the argmin. Its distance is "
+                    "still computed and reported as lcz_d10."
+                ),
             },
         }
+
+
+FUNCTIONAL_ONLY_CODE = 10
+"""LCZ 10 (heavy industry): scored and reported, never selected by the metric.
+
+Bernard et al. (2024) remove it from the closest-distance approach, and the measurement behind
+following them is Rotterdam's: the pair-gated rule that assigned it morphologically was inert at
+every threshold from 0.05 to 0.5 across 671 cells of working port. Its distance stays in the
+seventeen-way vector because CLAUDE.md requires the full vector; only the argmin excludes it.
+"""
+
+DOMINATED_CLASSES: dict[int, int] = {16: 14}
+"""Natural classes whose prototype box is contained in another's, and by which class.
+
+LCZ F (bare soil or sand, 16) sits inside LCZ D (low plants, 14) in every dimension: identical on
+aspect ratio, building, impervious, pervious, tree and water, and tighter on Hr - at most 0.25 m
+against D's at most 1 m. A contained box can never be strictly nearer than its container, so
+d(F) >= d(D) for every possible unit, and `_two_closest` breaks ties to the lower code.
+
+**F is therefore unreachable by arithmetic, not by configuration**, and removing it from
+`reachable_natural_classes` would not make it assignable. Recorded separately so the run manifest
+distinguishes a class this package chose not to assign from one it cannot.
+"""
+
+
+def _unreachable_reason(code: int) -> str:
+    """Why `code` is never assigned, distinguishing a policy exclusion from a dominated box."""
+    dominator = DOMINATED_CLASSES.get(code)
+    if dominator is not None:
+        return (
+            f"Dominated: the LCZ {lcz(code).label} prototype box is contained in "
+            f"LCZ {lcz(dominator).label}'s in every dimension, so its distance can never be "
+            "strictly smaller and ties break to the lower code. Unreachable by arithmetic rather "
+            "than by configuration - adding it to reachable_natural_classes would not make it "
+            "assignable. Reaching it needs a land-cover mapping that emits bare ground separately. "
+            "Distances to it are reported but it is never assigned. See "
+            "docs/references/tables/lczkit_natural_class_ranges.md."
+        )
+    return (
+        "Excluded by configuration: not separable from LCZ D with the parameters this package "
+        "computes, where no building stands. The published table distinguishes them only by sky "
+        "view factor, aspect ratio and height of roughness elements, all building-derived, and the "
+        "default land-cover mapping folds shrubland, grassland and bare ground into one pervious "
+        "class. Distances to it are reported but it is never assigned. See "
+        "docs/references/tables/lczkit_natural_class_ranges.md."
+    )
 
 
 def _combine(built: pd.DataFrame, natural: pd.DataFrame, is_built: pd.Series) -> pd.DataFrame:

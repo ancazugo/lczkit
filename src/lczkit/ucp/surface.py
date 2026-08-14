@@ -49,10 +49,19 @@ def surface_fractions(
     index = building_surface_fraction.index
     aligned = land_cover.reindex(index)
 
+    # A unit the raster never reached is null in every land-cover column. Kept as an explicit mask
+    # so an empty group can distinguish "this dataset emits no such class" from "this unit was not
+    # observed" - answering 0.0 for both would report cover the raster never measured.
+    observed = (
+        aligned.notna().any(axis=1)
+        if len(aligned.columns)
+        else pd.Series(False, index=index, dtype="bool")
+    )
+
     def total(group: str) -> pd.Series:
         columns = groups[group]
         if not columns:
-            return pd.Series(0.0, index=index, dtype="float64")
+            return pd.Series(0.0, index=index, dtype="float64").where(observed)
         return aligned[columns].sum(axis=1, min_count=len(columns))
 
     tree = total("tree_classes")

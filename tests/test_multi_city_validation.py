@@ -48,6 +48,28 @@ def load_script() -> ModuleType:
 
 SCRIPT = load_script()
 
+
+def load_multi_city() -> ModuleType:
+    """`multi_city_validation.py` itself, for the tags and guards that live there.
+
+    Registered in `sys.modules` before execution because `@dataclass` resolves its own module
+    through it while the class body is processed, and fails outright if it is absent.
+    """
+    path = Path(__file__).resolve().parent.parent / "scripts" / "multi_city_validation.py"
+    sys.path.insert(0, str(path.parent))
+    try:
+        spec = importlib.util.spec_from_file_location("multi_city_validation", path)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        sys.path.remove(str(path.parent))
+
+
+MULTI_CITY = load_multi_city()
+
 #: The windows the published sixteen-city results were computed over, read back from the Phase 13
 #: run record. `densest_window` is deterministic, so these are stable — a change here means the
 #: windows moved, which would make two runs of the same city incomparable and is worth failing on.
@@ -209,3 +231,102 @@ def test_a_short_raster_names_the_side_it_is_short_on(
     short = SCRIPT.coverage_shortfall(bounds, (1.0, 1.0, 9.0, 9.0), 0.1)
     assert set(short) == {side}
     assert short[side] == pytest.approx(10.0)
+
+
+def test_no_reporting_path_reads_the_retired_raw_axis_share() -> None:
+    """Phase 12 Ruling 1 retired `share_of_disagreement` outright — "removed from reporting", not
+    "use with care" — because it cannot carry a comparison in either direction. Not across cities,
+    where the denominator is all disagreement and the natural-class share ranges 3.5% to 54.1%, and
+    not between the axes, where height affords six confusable pairs to compactness's three so a
+    null that never looks at the data awards it 3.9x more error.
+
+    The field stays on `AxisSummary` — Phase 6.7 to 11 records depend on its definition and must
+    not move silently — but the scripts that report must read `lift`. This one was the path never
+    migrated: it went on medianing the raw share across sixteen cities for four phases after the
+    ruling. The failure mode is a script quietly reading a field that still exists, so the guard
+    has to be on the reading rather than on the field.
+    """
+    # `axis_reconciliation.py` is the one exemption, and it is the reason the ruling exists: its
+    # table prints raw share, axis-eligible share and lift side by side because the *comparison
+    # between them* is the Phase 12 measurement. Showing the broken quantity next to what replaces
+    # it is the evidence; showing it alone is the defect.
+    exempt = {"axis_reconciliation.py"}
+    offenders = [
+        f"{path.name}:{index + 1}"
+        for path in (Path(__file__).resolve().parent.parent / "scripts").glob("*.py")
+        if path.name not in exempt
+        for index, line in enumerate(path.read_text().splitlines())
+        if ('"share_of_disagreement"' in line or "'share_of_disagreement'" in line)
+        and not line.lstrip().startswith("#")
+    ]
+
+    assert offenders == [], f"scripts still read the retired raw axis share: {offenders}"
+
+
+def test_percent_of_ceiling_is_not_reported_anywhere() -> None:
+    """The other committed ruling this script was violating. The ceiling is another estimator, not
+    a bound: Vancouver scores 41.8% against a 36.7% ceiling, which as a ratio reads 114% and looks
+    like an impossibility rather than what it is — lczkit beating `lcz_v3` in that city. Report the
+    two side by side, or their difference in points."""
+    scripts = Path(__file__).resolve().parent.parent / "scripts"
+    script = (scripts / "multi_city_validation.py").read_text()
+
+    assert "/ r['ceiling']" not in script
+    assert '/ r["ceiling"]' not in script
+    assert "share of ceiling" not in script
+
+
+def _provenance(*tiers: tuple[str, int]) -> dict:
+    """A provenance dict shaped like the one `build_arms` returns."""
+    return {
+        "height_fill": {
+            "tiers": [{"tier": name, "n_filled": filled} for name, filled in tiers],
+        }
+    }
+
+
+def test_the_cascade_tag_names_the_tiers_that_actually_fired() -> None:
+    """Phase 12's ruling: tag every stored diagnostic with the configuration it was measured under.
+    Phase 9's records were untagged and read for three phases as though they described the shipped
+    default, when they were measured at `none` — and Phase 10, which shipped `coarse`, was itself
+    the intervention that invalidated them.
+
+    Derived from what fired rather than from the config, because a tier configured but whose product
+    is not on disk is silently skipped and the difference is invisible in the config.
+    """
+    assert MULTI_CITY._cascade_tag(_provenance(("overture_height", 900))) == "none"
+    assert (
+        MULTI_CITY._cascade_tag(
+            _provenance(("overture_height", 900), ("wsf3d", 400), ("ghsl", 100))
+        )
+        == "coarse"
+    )
+    assert (
+        MULTI_CITY._cascade_tag(
+            _provenance(
+                ("overture_height", 900), ("gob25d", 50), ("wsf3d", 400), ("ghsl", 100)
+            )
+        )
+        == "full"
+    )
+
+
+def test_a_configured_tier_that_filled_nothing_is_not_counted_as_having_run() -> None:
+    """The whole point of deriving the tag from the fill rather than the config. A tier whose raster
+    is absent is skipped in silence, and a record tagged `coarse` that ran at `none` is exactly the
+    mislabelling this function exists to prevent."""
+    tag = MULTI_CITY._cascade_tag(
+        _provenance(("overture_height", 900), ("wsf3d", 0), ("ghsl", 0))
+    )
+
+    assert tag == "none"
+
+
+def test_the_tag_reads_the_structure_build_arms_actually_returns() -> None:
+    """Guarding the shape, not just the logic. The tiers list sits at `height_fill.tiers`, and a
+    lookup one level too shallow returns an empty list rather than raising — so every city would be
+    tagged `none` and the tag would be worse than absent, because it would look measured."""
+    shallow = {"tiers": [{"tier": "wsf3d", "n_filled": 400}]}
+
+    assert MULTI_CITY._cascade_tag(shallow) == "none"
+    assert MULTI_CITY._cascade_tag(_provenance(("wsf3d", 400), ("ghsl", 100))) == "coarse"

@@ -52,53 +52,52 @@ def ranked(primary: float, secondary: float, closest: float, runner_up: float) -
     )
 
 
-def test_lcz10_fires_only_on_the_eight_ten_pair_above_the_threshold() -> None:
-    swapped, fired = apply_lcz10_rule(ranked(8, 10, 0.2, 0.3), pd.Series([0.9], index=["u0"]), 0.5)
+def test_lcz10_is_assigned_functionally_whatever_the_morphology_said() -> None:
+    """The measured failure of the pair-gated rule it replaces. Rotterdam has 671 cells of working
+    port, 254 industrial buildings, three quarters of cells over 90% industrial by area and 88 cells
+    placed in LCZ 10 by the reference — and the LCZ 8 / LCZ 10 pair never opened once, at any
+    threshold from 0.05 to 0.5. Port plots are large and sparsely built, so building surface
+    fraction lands them on LCZ 9. The evidence has to override the morphology, not wait for it."""
+    swapped, fired = apply_lcz10_rule(ranked(9, 6, 0.2, 0.3), pd.Series([0.9], index=["u0"]), 0.5)
 
     assert fired.to_list() == [True]
     assert swapped.primary.to_list() == [10]
-    assert swapped.secondary.to_list() == [8]
+    assert swapped.secondary.to_list() == [9]
 
 
-def test_lcz10_leaves_the_pair_alone_below_the_threshold() -> None:
+def test_lcz10_leaves_the_unit_alone_below_the_threshold() -> None:
     """The default is set to under-trigger. Overture cannot tell heavy industry from light, so a
     light-industrial estate mislabelled as heavy industry is an invisible error that propagates
     into any model consuming the map, whereas a missing LCZ 10 is a visible gap."""
-    swapped, fired = apply_lcz10_rule(ranked(8, 10, 0.2, 0.3), pd.Series([0.4], index=["u0"]), 0.5)
+    swapped, fired = apply_lcz10_rule(ranked(8, 6, 0.2, 0.3), pd.Series([0.4], index=["u0"]), 0.5)
 
     assert fired.to_list() == [False]
     assert swapped.primary.to_list() == [8]
+    assert swapped.closest.to_list() == [0.2]
 
 
-def test_lcz10_ignores_a_pair_that_is_not_eight_and_ten() -> None:
-    """A heavily industrial unit that reads morphologically as LCZ 6 is not relabelled. The rule
-    breaks a tie the morphology genuinely cannot resolve; it is not a land-use override."""
-    _, fired = apply_lcz10_rule(ranked(8, 6, 0.1, 0.2), pd.Series([0.99], index=["u0"]), 0.5)
+def test_the_displaced_morphological_answer_is_kept_with_its_distance() -> None:
+    """`runner_up` is the distance to `secondary`, and that invariant has to survive the rule:
+    after firing, `secondary` is the class the morphology chose and `runner_up` is how far away it
+    was. The output then says exactly what would have been emitted without the evidence."""
+    swapped, _ = apply_lcz10_rule(ranked(8, 6, 0.2, 0.7), pd.Series([0.9], index=["u0"]), 0.5)
 
-    assert fired.to_list() == [False]
-
-
-def test_a_unit_already_nearest_lcz10_does_not_count_as_fired() -> None:
-    """The flag means the rule *changed* the label, which is what a reader seeing LCZ 10 on a map
-    wants to know. A unit the morphology placed there unaided is a different claim."""
-    swapped, fired = apply_lcz10_rule(ranked(10, 8, 0.1, 0.2), pd.Series([0.99], index=["u0"]), 0.5)
-
-    assert fired.to_list() == [False]
-    assert swapped.primary.to_list() == [10]
-
-
-def test_the_swapped_distance_follows_the_swapped_label() -> None:
-    """`min_distance` has to be the distance to the class actually reported, or the two columns
-    describe different classifications."""
-    swapped, _ = apply_lcz10_rule(ranked(8, 10, 0.2, 0.7), pd.Series([0.9], index=["u0"]), 0.5)
-
-    assert swapped.closest.to_list() == [0.7]
+    assert swapped.secondary.to_list() == [8]
     assert swapped.runner_up.to_list() == [0.2]
 
 
+def test_a_functionally_assigned_unit_has_no_distance_to_report() -> None:
+    """LCZ 10 is not in the metric, so no distance to it exists. Carrying the displaced class's
+    distance under `min_distance` would describe a different classification from `lcz_primary`."""
+    swapped, _ = apply_lcz10_rule(ranked(9, 6, 0.2, 0.3), pd.Series([0.9], index=["u0"]), 0.5)
+
+    assert swapped.closest.isna().to_list() == [True]
+
+
 def test_a_null_industrial_fraction_never_fires_the_rule() -> None:
-    """Phase 5 reports 0.0 where there is no industrial evidence, so a null means the layer was
-    absent entirely — a reason to leave the morphological answer alone, not to override it."""
+    """The unit-area share is 0.0 where there is no evidence, so a null means the layer was absent
+    entirely — or, for the building-area share the rule reads by default, that the unit holds no
+    buildings to judge. Neither is grounds for calling it heavy industry."""
     _, fired = apply_lcz10_rule(ranked(8, 10, 0.2, 0.3), pd.Series([np.nan], index=["u0"]), 0.5)
 
     assert fired.to_list() == [False]

@@ -8,6 +8,7 @@ Berlin fixture holds 36 industrial buildings out of 6195 and 2 industrial land-u
 from __future__ import annotations
 
 import geopandas as gpd
+import pandas as pd
 import pytest
 from shapely.geometry import box
 
@@ -109,9 +110,49 @@ def test_a_unit_with_nothing_industrial_is_zero_not_null() -> None:
 
     result = industrial_metrics(buildings, land_use, make_units(), CONFIG)
 
-    assert result.loc["none", "industrial_fraction"] == 0.0
+    assert result.loc["none", "industrial_fraction_of_unit_area"] == 0.0
+    assert result.loc["none", "industrial_fraction_of_building_area"] == 0.0
     assert result.loc["none", "industrial_evidence"] == "none"
-    assert result.notna().to_numpy().all()
+    assert result.drop(columns=["industrial_fraction_of_building_area"]).notna().to_numpy().all()
+
+
+def test_the_building_area_share_is_null_only_where_there_are_no_buildings() -> None:
+    """The one column that is undefined rather than zero. A share of no buildings has no value, and
+    answering 0.0 would tell the LCZ 10 rule that a buildingless cell is definitely not industrial
+    rather than that there is nothing to judge — the `land_use` cell here holds an industrial parcel
+    and no building at all, which is exactly the case that must not read as evidence against."""
+    buildings, land_use = scene()
+
+    result = industrial_metrics(buildings, land_use, make_units(), CONFIG)
+    column = result["industrial_fraction_of_building_area"]
+
+    assert pd.isna(column.loc["land_use"])
+    assert column.loc["both"] == pytest.approx(1.0)  # its only building is the industrial one
+    assert column.loc["none"] == pytest.approx(0.0)  # a building, and none of it industrial
+
+
+def test_the_two_denominators_diverge_on_a_sparsely_built_industrial_cell() -> None:
+    """The reason both are emitted rather than one being picked. A working port plot is mostly open
+    ground, so its unit-area share is low while its building-area share is total — and it is
+    precisely the fabric the LCZ 10 rule exists to catch. One column cannot answer both questions,
+    and this repository contradicted itself in three places about which one it was answering."""
+    buildings = layer(((0, 0, 20, 20), "industrial", "industrial"))  # 400 m2 of a 10 000 m2 cell
+    land_use = layer(((0, 0, 30, 30), "developed", "industrial"))
+
+    result = industrial_metrics(buildings, land_use, make_units(), CONFIG)
+
+    assert result.loc["both", "industrial_fraction_of_building_area"] == pytest.approx(1.0)
+    assert result.loc["both", "industrial_fraction_of_unit_area"] == pytest.approx(0.09)
+
+
+def test_the_bare_name_remains_an_alias_for_the_unit_area_column() -> None:
+    """Deprecated, not removed: anything still reading `industrial_fraction` gets the unit-area
+    answer it has always got, rather than silently switching denominator underneath it."""
+    buildings, land_use = scene()
+
+    result = industrial_metrics(buildings, land_use, make_units(), CONFIG)
+
+    assert result["industrial_fraction"].equals(result["industrial_fraction_of_unit_area"])
 
 
 def test_a_warehouse_is_not_industrial() -> None:
@@ -192,3 +233,20 @@ def test_the_units_entry_contract_is_enforced() -> None:
         industrial_metrics(buildings, land_use, make_units().reset_index(), CONFIG)
     with pytest.raises(ValueError, match="buildings.crs"):
         industrial_metrics(buildings.to_crs("EPSG:32634"), land_use, make_units(), CONFIG)
+
+
+def test_overlapping_land_use_parcels_cannot_push_the_share_past_one() -> None:
+    """`land_use` gets no overlap resolution in Phase 1 — `lczkit.cleaning.land_use` says so
+    outright — so the component shares have to dissolve too. They used to skip it, on the reasoning
+    that Phase 1 had already removed within-layer overlaps, which is true of `buildings_area` and
+    false here: two parcels covering the same ground counted it twice."""
+    buildings, _ = scene()
+    land_use = layer(
+        ((0, 0, 100, 100), "developed", "industrial"),  # the whole first cell
+        ((0, 0, 100, 100), "developed", "industrial"),  # and again, exactly
+    )
+
+    result = industrial_metrics(buildings, land_use, make_units(), CONFIG)
+
+    assert result.loc["both", "industrial_fraction_land_use"] == pytest.approx(1.0)
+    assert (result["industrial_fraction_land_use"] <= 1.0).all()

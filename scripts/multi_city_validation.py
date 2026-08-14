@@ -249,15 +249,54 @@ def run_city(city: City, settings: Settings) -> dict[str, Any] | None:
     results = evaluate(fixture, arms, provenance, cleaned.buildings_area, completeness)
     results["window"] = window
     results["elapsed_s"] = round(time.time() - started, 1)
+    results["cascade"] = _cascade_tag(provenance)
     show(results)
     return results
 
 
+def _cascade_tag(provenance: dict[str, Any]) -> str:
+    """Which height tiers actually fired, as a name — `none`, `coarse`, `full`, or the tier list.
+
+    Recorded per city rather than inferred from the config, because a tier configured but whose
+    product is not on disk is silently skipped, and the difference is not visible in the config.
+    Phase 12's ruling: tag every stored diagnostic with the configuration it was measured under.
+    Phase 9's records are untagged and were read for three phases as though they described the
+    shipped default, when they were measured at `none` — and Phase 10, which shipped `coarse`,
+    was itself the intervention that invalidated them.
+    """
+    tiers = {
+        entry["tier"]
+        for entry in provenance.get("height_fill", {}).get("tiers", [])
+        if entry.get("n_filled", 0) > 0 and not entry["tier"].startswith("overture")
+    }
+    if not tiers:
+        return "none"
+    if tiers == {"wsf3d", "ghsl"}:
+        return "coarse"
+    if tiers == {"gob25d", "wsf3d", "ghsl"}:
+        return "full"
+    return "+".join(sorted(tiers))
+
+
 def _axes(report: dict[str, Any]) -> tuple[float, float]:
-    """The two confusion axes as shares of all disagreement: (height, compactness)."""
-    height = sum(entry["share_of_disagreement"] for entry in report["height_axis"])
-    compact = sum(entry["share_of_disagreement"] for entry in report["compactness_axis"])
-    return height, compact
+    """The two confusion axes as pair-normalised lift: (height, compactness).
+
+    **Not the raw share.** Phase 12 retired it outright — "removed from reporting", not "use with
+    care" — and this script was the one reporting path never migrated, so it went on summing
+    `share_of_disagreement` across sixteen cities and taking medians of it. That quantity is not
+    comparable in either direction: not across cities, where the denominator is all disagreement
+    and the natural-class share ranges 3.5% to 54.1%, and not between the two axes, where height
+    affords six confusable pairs to compactness's three and a null that never looks at the data
+    still awards height 3.9x more error.
+
+    `lift` divides the observed share by what a composition-preserving null affords, so 1.0 means
+    "no more than the class mix already implies". Read it as a lower bound: the null draws wrong
+    labels from the run's own error distribution, so a real concentration on one axis inflates the
+    expectation it is measured against and pulls its own lift back toward 1.
+    """
+    height = report["height_axis_summary"]["lift"]
+    compact = report["compactness_axis_summary"]["lift"]
+    return float(height), float(compact)
 
 
 def _quantiles(values: list[float]) -> str:
@@ -267,6 +306,28 @@ def _quantiles(values: list[float]) -> str:
     return (
         f"{array.min():.1%} / {np.median(array):.1%} / {array.max():.1%}"
         f"  (n={len(values)}, mean {array.mean():.1%})"
+    )
+
+
+def _points(values: list[float]) -> str:
+    """Same shape as `_quantiles`, for a signed difference in percentage points."""
+    if not values:
+        return "—"
+    array = 100.0 * np.asarray(values, dtype="float64")
+    return (
+        f"{array.min():+.1f} / {np.median(array):+.1f} / {array.max():+.1f}"
+        f"  (n={len(values)}, mean {array.mean():+.1f})"
+    )
+
+
+def _lifts(values: list[float]) -> str:
+    """Same shape as `_quantiles`, but a lift is a ratio and reads wrong as a percentage."""
+    if not values:
+        return "—"
+    array = np.asarray(values, dtype="float64")
+    return (
+        f"{array.min():.2f} / {np.median(array):.2f} / {array.max():.2f}"
+        f"  (n={len(values)}, mean {array.mean():.2f})"
     )
 
 
@@ -286,7 +347,7 @@ def summarise(record: dict[str, Any]) -> None:
 
     print(
         f"\n{'city':16s}{'region':16s}{'cells':>7}{'ceiling':>9}{'A':>8}{'B':>8}"
-        f"{'A built':>9}{'B built':>9}{'A/ceil':>8}{'hgt ax':>8}{'cmp ax':>8}{'tier1':>7}"
+        f"{'A built':>9}{'B built':>9}{'A-ceil':>8}{'hgt ax':>8}{'cmp ax':>8}{'tier1':>7}"
     )
     rows: list[dict[str, Any]] = []
     for city in cities:
@@ -313,8 +374,8 @@ def summarise(record: dict[str, Any]) -> None:
         print(
             f"{row['city']:16s}{row['region']:16s}{row['n']:>7}{ceiling:>9.1%}"
             f"{row['a']:>8.1%}{row['b']:>8.1%}{row['a_built']:>9.1%}{row['b_built']:>9.1%}"
-            f"{(row['a'] / ceiling if ceiling else 0):>8.0%}"
-            f"{height:>8.1%}{compact:>8.1%}"
+            f"{100 * (row['a'] - ceiling):>+8.1f}"
+            f"{height:>8.2f}{compact:>8.2f}"
             f"{(f'{tier1:.0%}' if tier1 is not None else '—'):>7}"
         )
 
@@ -322,8 +383,13 @@ def summarise(record: dict[str, Any]) -> None:
     print(f"   ceiling, lcz_v3 vs labels   {_quantiles([r['ceiling'] for r in rows])}")
     print(f"   lczkit arm A vs labels      {_quantiles([r['a'] for r in rows])}")
     print(f"   arm A, built classes only   {_quantiles([r['a_built'] for r in rows])}")
-    share = [r["a"] / r["ceiling"] for r in rows if r["ceiling"]]
-    print(f"   arm A as a share of ceiling {_quantiles(share)}")
+    # Their *difference*, never their ratio. CLAUDE.md: "% of ceiling" is a broken metric, because
+    # the comparator is another estimator rather than a bound — Vancouver scores 41.8% against a
+    # 36.7% ceiling, which reads as 114% and means lczkit beat lcz_v3 there, not that it exceeded
+    # what is achievable. Ceilings span 22.8% to 83.2%, so agreement is not comparable across
+    # cities without its ceiling printed beside it, which is what the table above does.
+    gap = [r["a"] - r["ceiling"] for r in rows]
+    print(f"   arm A minus ceiling, points {_points(gap)}")
 
     print("\n2. A vs B — enclosures minus grid, in points, against labels")
     deltas = [
@@ -336,12 +402,14 @@ def summarise(record: dict[str, Any]) -> None:
     print(f"   B ahead in {wins} of {len(deltas)} cities; mean {mean_delta:+.1f} points")
 
     print("\n3. CONFUSION AXES — which lever is next")
+    print("   Pair-normalised lift against a composition-preserving null; 1.00 = no more than the")
+    print("   class mix already affords. The raw share was retired in Phase 12 and is not shown.")
     heights = [r["height_axis"] for r in rows]
     compacts = [r["compactness_axis"] for r in rows]
-    print(f"   height axis (1-2-3, 4-5-6)      {_quantiles(heights)}")
-    print(f"   compactness axis (1-4, 2-5, 3-6) {_quantiles(compacts)}")
+    print(f"   height axis (1-2-3, 4-5-6)       {_lifts(heights)}")
+    print(f"   compactness axis (1-4, 2-5, 3-6) {_lifts(compacts)}")
     dominant = sum(1 for h, c in zip(heights, compacts, strict=True) if c > h)
-    print(f"   compactness dominates in {dominant} of {len(rows)} cities")
+    print(f"   compactness leads in {dominant} of {len(rows)} cities")
 
     print("\n4. HEIGHT TIER FRACTIONS — the founding premise, by region")
     print("   (share of building area; the cascade runs tier 1 only, see this module's docstring)")

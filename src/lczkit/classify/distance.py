@@ -106,6 +106,16 @@ class DistanceResult:
     n_params_used: pd.Series
     """Dimensions that carried non-zero weight *and* a non-null value, per unit."""
 
+    n_params_available: int
+    """How many dimensions carried non-zero weight at all, for this family's weight vector.
+
+    The denominator `n_params_used` is a count out of, and it differs *between families*: under
+    `bernard2024_partial` a built unit can reach 3 and a natural unit 7, because four dimensions
+    are zero-weighted for built types and leave both sides of the renormalisation. Without this,
+    a single `n_params_used` column silently mixes the two scales and a built unit scoring 3 of 3
+    is indistinguishable from a natural unit scoring 3 of 7.
+    """
+
     missing_parameters: pd.Series
     """Comma-separated names of the weighted dimensions that were null, per unit; empty string
     where nothing was missing. A string rather than a list so the column survives a GeoParquet
@@ -203,6 +213,7 @@ class PrototypeSpace:
         return DistanceResult(
             distances=pd.DataFrame(columns, index=values.index),
             n_params_used=pd.Series(present.sum(axis=1), index=values.index, dtype="int64"),
+            n_params_available=len(weighted),
             missing_parameters=pd.Series(
                 [
                     ",".join(name for name, ok in zip(weighted, row, strict=True) if not ok)

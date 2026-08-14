@@ -17,6 +17,24 @@ W m-2 against at most 50, which nothing in open vector or raster data measures. 
 attribute has to break the tie. CLAUDE.md is explicit that it must be applied *after* the distance
 and never folded into the metric, where a functional attribute would silently distort every other
 class.
+
+**The rule is functional, not a pair gate, and the difference was measured.** The original design
+swapped LCZ 10 in only where it was already the runner-up behind LCZ 8. That was **measured inert
+on the Rotterdam fixture at every threshold from 0.05 to 0.5**: 671 cells of working port, 254
+industrial buildings, three quarters of cells over 90% industrial by area, 88 placed in LCZ 10 by
+the reference - and the pair never opened once. Port plots are large and sparsely built, so
+building surface fraction lands them on LCZ 9 and LCZ 10 is nowhere near second. The threshold was
+never the binding constraint, so no amount of tuning it could have helped.
+
+Following Bernard et al. (2024), LCZ 10 is therefore **removed from the distance metric entirely**
+and assigned functionally. Its distance is still computed and reported in the seventeen-way vector
+- CLAUDE.md requires the full vector, and a class that is unreachable *by selection* is exactly
+what the manifest's `unreachable_classes` field exists to record - but it can no longer win an
+argmin, so the only route to LCZ 10 is the industrial evidence.
+
+Note the asymmetry with LCZ 8, which is a deliberate divergence from Bernard, who excludes both.
+LCZ 8's defining character - large, low, sparse buildings - is genuinely morphological, so it stays
+in the metric. Excluding it would leave it assignable only functionally, which is worse.
 """
 
 from __future__ import annotations
@@ -75,36 +93,42 @@ def apply_lcz10_rule(
     industrial_fraction: pd.Series,
     threshold: float,
     *,
-    lcz8: int = 8,
     lcz10: int = 10,
 ) -> tuple[Ranked, pd.Series]:
-    """Prefer LCZ 10 over LCZ 8 where the unit is predominantly industrial.
+    """Assign LCZ 10 wherever the industrial evidence exceeds `threshold`, whatever the morphology.
 
-    Fires where the nearest prototype is LCZ 8, the runner-up is LCZ 10 and `industrial_fraction`
-    exceeds `threshold`. The two ranks are then swapped as a pair, so the reported
-    `min_distance` stays the distance to the class actually reported and the runner-up becomes
-    the morphological answer the rule displaced - which is more useful than nulling it, since it
-    says precisely what would have been emitted without the industrial evidence.
+    Functional assignment, not a swap between two candidates the metric already liked. LCZ 10 is
+    not in the built prototype set at all, so this is the only thing that can produce it: a unit
+    over the threshold becomes LCZ 10 regardless of where the distance placed it, which is the
+    point - the measured failure of the previous rule was that the port cells it was meant to
+    catch were nowhere near LCZ 10 in the metric.
 
-    A unit already nearest LCZ 10 does not "fire": the flag means the rule *changed* the label,
-    which is the question a reader has when they see LCZ 10 on a map.
+    The displaced morphological answer is preserved as `secondary`, so the output still says
+    precisely what would have been emitted without the industrial evidence, and `runner_up` moves
+    with it - it becomes the distance to that displaced class, keeping the invariant that
+    `runner_up` is the distance to `secondary`.
 
-    A null `industrial_fraction` never fires the rule. Phase 5 reports 0.0 rather than null for a
-    unit with no industrial evidence, so a null means the layer was missing entirely - a reason to
-    leave the morphological answer alone, not to override it.
+    `closest` becomes null for a fired unit. LCZ 10 is outside the metric, so no distance to it is
+    defined, and carrying the displaced class's distance under a column called `min_distance` would
+    be a quiet lie about a label that was never measured by distance at all. `uniqueness` follows
+    the same null: a margin between the two nearest prototypes is a property of the metric, and a
+    functional assignment did not come from it.
+
+    A null `industrial_fraction` never fires the rule. The unit-area share is 0.0 rather than null
+    where there is no evidence, so a null means either that the layer was missing entirely or -
+    for the building-area share, which is the default column - that the unit holds no buildings to
+    judge. Neither is grounds for calling it heavy industry.
     """
-    fired = (
-        (ranked.primary == lcz8)
-        & (ranked.secondary == lcz10)
-        & (industrial_fraction > threshold).fillna(False)
+    fired = (industrial_fraction > threshold).fillna(False)
+    return (
+        Ranked(
+            primary=ranked.primary.where(~fired, lcz10),
+            secondary=ranked.secondary.where(~fired, ranked.primary),
+            closest=ranked.closest.where(~fired),
+            runner_up=ranked.runner_up.where(~fired, ranked.closest),
+        ),
+        fired,
     )
-    swapped = Ranked(
-        primary=ranked.primary.where(~fired, ranked.secondary),
-        secondary=ranked.secondary.where(~fired, ranked.primary),
-        closest=ranked.closest.where(~fired, ranked.runner_up),
-        runner_up=ranked.runner_up.where(~fired, ranked.closest),
-    )
-    return swapped, fired
 
 
 def drop_lcz1_below_height(

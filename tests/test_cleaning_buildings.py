@@ -9,6 +9,7 @@ from shapely.geometry import LineString, MultiPolygon, Polygon, box
 
 from lczkit.cleaning.buildings import (
     BUILDING_ID,
+    MAX_PLANARITY_EPS_M,
     absorb_small_buildings,
     clean_buildings,
     drop_non_polygons,
@@ -194,6 +195,17 @@ def test_enforce_planarity_widens_the_buffer_between_passes() -> None:
     assert step.detail["eps_final_m"] <= 1e-3
 
 
+def test_eps_final_m_reports_the_width_that_was_actually_subtracted() -> None:
+    """It used to be derived after the loop by dividing the escalated value back down, which is
+    wrong precisely where the escalation stops: once `eps` saturates at the ceiling, two passes
+    share a width and the division reports one that was never used. Starting at the ceiling makes
+    the loop saturate on its first pass, so the reported width must be the ceiling itself."""
+    _, step = enforce_planarity(_zero_area_overlap(), eps_m=MAX_PLANARITY_EPS_M)
+
+    assert step.detail["n_passes"] >= 1
+    assert step.detail["eps_final_m"] == MAX_PLANARITY_EPS_M
+
+
 def test_enforce_planarity_drops_a_pair_it_cannot_separate_rather_than_ending_the_run() -> None:
     """Last resort, and recorded rather than silent.
 
@@ -259,6 +271,9 @@ def test_clean_buildings_forks_into_two_layers_sharing_a_building_id() -> None:
     )
 
     assert [s.operation for s in steps] == [
+        # First, and necessarily before the explode: it is the only point at which one source
+        # feature is still one row, which is what "one building, one vote" downstream needs.
+        "assign_feature_id",
         "fix_invalid_geometries",
         "explode_multipolygons",
         "drop_non_polygons",
@@ -272,9 +287,9 @@ def test_clean_buildings_forks_into_two_layers_sharing_a_building_id() -> None:
     ]
     # The shared prefix is stage "buildings"; after the fork each step names the layer it built,
     # so `CleaningReport.area_retention` can be asked about either one.
-    assert [s.stage for s in steps[:5]] == ["buildings"] * 5
-    assert steps[5].stage == "buildings_area"
-    assert {s.stage for s in steps[6:]} == {"buildings_topo"}
+    assert [s.stage for s in steps[:6]] == ["buildings"] * 6
+    assert steps[6].stage == "buildings_area"
+    assert {s.stage for s in steps[7:]} == {"buildings_topo"}
 
     # Area preserves both features; topo merges them into one.
     assert len(layers.area) == 2

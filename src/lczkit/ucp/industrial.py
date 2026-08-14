@@ -13,6 +13,26 @@ industrial parcel counts once rather than twice. The two sources therefore reinf
 *coverage* without inflating the magnitude. Each source's own fraction ships alongside the
 combined one, together with `industrial_evidence` naming which contributed — CLAUDE.md requires
 that, and the two are very differently reliable.
+
+**Two denominators, both emitted, each named for what it divides by.** The denominator was
+contradicted three ways across this repository at once: CLAUDE.md's resolved-discrepancy table and
+`ucp.parameters`' docstring both said building area, while this module, `ucp.registry` and the
+config field all said unit area and argued for it. A single column called `industrial_fraction`
+cannot be read correctly under that disagreement, and the disagreement is not resolvable by
+picking, because the two quantities answer different questions:
+
+- `industrial_fraction_of_building_area` — of what is *built* here, how much is industrial. This
+  is Bernard et al. (2024)'s `FIND/B`, so their published 0.33 threshold transfers to it directly.
+  Null where nothing is built, because "what share of no buildings is industrial" has no answer.
+- `industrial_fraction_of_unit_area` — of this cell's *ground*, how much is industrial. Sensitive
+  to how much of the cell is built at all, which is why Bernard's threshold does not transfer.
+
+A working port plot is a case where they diverge sharply: sparsely built, so a low unit-area share
+and a high building-area one. That is exactly the fabric the LCZ 10 rule has to catch, which is why
+the rule reads the building-area column by default.
+
+`industrial_fraction` is retained as a deprecated alias for the unit-area column, so no stored
+figure changes meaning underneath a reader.
 """
 
 from __future__ import annotations
@@ -25,11 +45,21 @@ from lczkit.crs import assert_projected_crs
 from lczkit.units import check_units
 
 COLUMNS = (
+    "industrial_fraction_of_building_area",
+    "industrial_fraction_of_unit_area",
     "industrial_fraction",
     "industrial_fraction_buildings",
     "industrial_fraction_land_use",
     "industrial_evidence",
 )
+
+DEPRECATED_ALIAS = "industrial_fraction"
+"""Alias for `industrial_fraction_of_unit_area`, kept for one release.
+
+Named rather than merely left in place: a bare `industrial_fraction` is precisely the column whose
+denominator nobody could agree on, and anything still reading it is reading the unit-area answer
+whether or not it meant to.
+"""
 
 EVIDENCE = ("none", "buildings", "land_use", "both")
 """Fixed category set for `industrial_evidence`, so the output schema does not depend on which
@@ -41,12 +71,23 @@ def industrial_metrics(
     land_use: gpd.GeoDataFrame,
     units: gpd.GeoDataFrame,
     config: UcpConfig,
+    *,
+    building_area_m2: pd.Series | None = None,
 ) -> pd.DataFrame:
     """Per-unit industrial area shares and evidence, indexed by `unit_id` to match `units`.
 
-    Every column is zero rather than null where nothing industrial is present: unlike a land-cover
-    fraction, which can be genuinely unobserved, "no industrial feature covers this unit" is a
-    measurement. Neither input is mutated.
+    `building_area_m2` is the per-unit building footprint area, the denominator of
+    `industrial_fraction_of_building_area`. Passed in rather than recomputed because
+    `lczkit.ucp.buildings` has already overlaid every footprint against every unit to get
+    `building_surface_fraction`, and repeating that at whole-city scale is the expensive half of
+    this function.
+
+    Every unit-area column is zero rather than null where nothing industrial is present: unlike a
+    land-cover fraction, which can be genuinely unobserved, "no industrial feature covers this unit"
+    is a measurement. The building-area column is the exception and is null where the unit holds no
+    buildings, because a share of nothing is not zero — it is undefined, and reporting 0.0 there
+    would tell the LCZ 10 rule that a buildingless cell is definitely not industrial rather than
+    that there is nothing to judge. Neither input is mutated.
     """
     check_units(units)
     for name, layer in (("buildings", buildings), ("land_use", land_use)):
@@ -73,9 +114,18 @@ def industrial_metrics(
         pd.concat([from_buildings, from_land_use], ignore_index=True), crs=units.crs
     )
 
-    building_share = _covered_fraction(from_buildings, units)
-    land_use_share = _covered_fraction(from_land_use, units)
+    # `from_buildings` comes from `buildings_area`, which `trim_overlaps` has already made
+    # non-overlapping, so it needs no dissolve. `from_land_use` does: `lczkit.cleaning.land_use`
+    # states it gets no overlap resolution of any kind, and two parcels covering the same ground
+    # would count it twice. `combined` dissolves because that is the whole point of unioning two
+    # evidence sources. Dissolving all three cost a union over every industrial feature three times
+    # rather than once, for no gain on the one layer that is already planar.
+    building_share = _covered_fraction(from_buildings, units, dissolve=False)
+    land_use_share = _covered_fraction(from_land_use, units, dissolve=True)
     union_share = _covered_fraction(combined, units, dissolve=True)
+    of_building_area = _industrial_share_of_building_area(
+        from_buildings, units, buildings, building_area_m2=building_area_m2
+    )
 
     evidence = pd.Series("none", index=units.index, dtype="object")
     evidence[building_share > 0] = "buildings"
@@ -84,6 +134,8 @@ def industrial_metrics(
 
     frame = pd.DataFrame(
         {
+            "industrial_fraction_of_building_area": of_building_area,
+            "industrial_fraction_of_unit_area": union_share,
             "industrial_fraction": union_share,
             "industrial_fraction_buildings": building_share,
             "industrial_fraction_land_use": land_use_share,
@@ -92,6 +144,59 @@ def industrial_metrics(
     )
     frame.index.name = "unit_id"
     return frame
+
+
+def _industrial_share_of_building_area(
+    industrial_buildings: gpd.GeoSeries,
+    units: gpd.GeoDataFrame,
+    all_buildings: gpd.GeoDataFrame,
+    *,
+    building_area_m2: pd.Series | None,
+) -> pd.Series:
+    """Bernard et al. (2024)'s `FIND/B`: industrial building area over all building area, per unit.
+
+    **Industrial *buildings* only, not the union with land-use parcels.** A parcel is evidence about
+    ground, and `industrial_fraction_of_unit_area` is where ground evidence belongs; folding it into
+    a building-area numerator would make this a second unit-area measure wearing a different name.
+    This is also what `FIND/B` means in the paper — industrial building typology over building area.
+
+    `building_area_m2` is the denominator, passed in from the overlay `building_metrics` has already
+    performed rather than recomputed here. That is not only cheaper: it guarantees the ratio shares
+    a denominator with `building_surface_fraction`, so the two are internally consistent. A direct
+    caller may omit it and pay for the overlay, which is what they would otherwise write themselves;
+    `compute_parameters` always supplies it, and at metropolitan scale that difference is the whole
+    cost of this function.
+
+    Null where the unit holds no building area at all — a share of nothing is undefined.
+    """
+    index = units.index
+    total = (
+        building_area_m2.reindex(index)
+        if building_area_m2 is not None
+        else _overlaid_area(all_buildings, units)
+    )
+    if industrial_buildings.empty:
+        return pd.Series(0.0, index=index, dtype="float64").where(total > 0)
+
+    # Overlay against the industrial subset alone. Overlaying every footprint and then intersecting
+    # each piece against a dissolved industrial geometry is the same answer at whole-city cost: it
+    # unions every industrial feature and then runs 892k intersections against the result. The
+    # subset is a few hundred features on the fixtures and a few thousand at metropolitan scale.
+    covering = gpd.GeoDataFrame(
+        geometry=industrial_buildings.reset_index(drop=True), crs=units.crs
+    )
+    pieces = gpd.overlay(units[["geometry"]].reset_index(), covering, how="intersection")
+    if pieces.empty:
+        return pd.Series(0.0, index=index, dtype="float64").where(total > 0)
+
+    numerator = (
+        pieces.assign(area=pieces.geometry.area)
+        .groupby("unit_id")["area"]
+        .sum()
+        .reindex(index)
+        .fillna(0.0)
+    )
+    return numerator.div(total.where(total > 0))
 
 
 def _select(
@@ -119,24 +224,51 @@ def _select(
     return gpd.GeoSeries(layer.geometry[mask], crs=layer.crs)
 
 
+def _overlaid_area(buildings: gpd.GeoDataFrame, units: gpd.GeoDataFrame) -> pd.Series:
+    """Building footprint area inside each unit, splitting at unit boundaries.
+
+    The fallback denominator for a direct caller. `compute_parameters` never reaches this — it hands
+    the value down from the overlay `building_metrics` already ran.
+    """
+    if buildings.empty:
+        return pd.Series(0.0, index=units.index, dtype="float64")
+    covering = gpd.GeoDataFrame(geometry=buildings.geometry.reset_index(drop=True), crs=units.crs)
+    pieces = gpd.overlay(units[["geometry"]].reset_index(), covering, how="intersection")
+    if pieces.empty:
+        return pd.Series(0.0, index=units.index, dtype="float64")
+    return (
+        pieces.assign(area=pieces.geometry.area)
+        .groupby("unit_id")["area"]
+        .sum()
+        .reindex(units.index)
+        .fillna(0.0)
+    )
+
+
 def _covered_fraction(
-    geometries: gpd.GeoSeries, units: gpd.GeoDataFrame, *, dissolve: bool = False
+    geometries: gpd.GeoSeries, units: gpd.GeoDataFrame, *, dissolve: bool
 ) -> pd.Series:
     """Share of each unit's area covered by `geometries`.
 
-    With `dissolve`, overlapping inputs are unioned first so shared area is counted once — which
-    is the whole point of combining the two evidence sources this way. Without it the inputs come
-    from a single layer, where Phase 1's planar enforcement has already removed the overlaps.
+    `dissolve` unions overlapping inputs first so shared ground counts once. Required for
+    `land_use`, which `lczkit.cleaning.land_use` states gets no overlap resolution of any kind — two
+    parcels covering the same ground double-counted it and could push the fraction past 1.0. Not
+    required for `buildings_area`, which `trim_overlaps` has already made non-overlapping, and a
+    union is superlinear, so it is not run there.
+
+    Explicit rather than defaulted: each caller has a reason, and the wrong answer here is either a
+    fraction above 1.0 or a whole-extent union nobody asked for.
     """
     unit_area = units.geometry.area
     zero = pd.Series(0.0, index=units.index, dtype="float64")
     if geometries.empty:
         return zero
 
-    if dissolve:
-        covering = gpd.GeoDataFrame(geometry=gpd.GeoSeries([geometries.union_all()], crs=units.crs))
-    else:
-        covering = gpd.GeoDataFrame(geometry=geometries.reset_index(drop=True))
+    covering = (
+        gpd.GeoDataFrame(geometry=gpd.GeoSeries([geometries.union_all()], crs=units.crs))
+        if dissolve
+        else gpd.GeoDataFrame(geometry=geometries.reset_index(drop=True), crs=units.crs)
+    )
 
     pieces = gpd.overlay(units[["geometry"]].reset_index(), covering, how="intersection")
     if pieces.empty:
