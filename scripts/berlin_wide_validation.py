@@ -29,12 +29,14 @@ The two rasters are clipped out of their global sources **into the run directory
 from __future__ import annotations
 
 import json
+import math
 import sys
 import time
 from pathlib import Path
 from typing import Any
 
 import rasterio
+from rasterio.merge import merge as merge_rasters
 from rasterio.windows import from_bounds
 
 from lczkit.classify import PrototypeClassifier
@@ -71,12 +73,10 @@ RELEASE = "2026-07-22.0"
 """Same pinned release as the committed fixtures, so the vector data is the data the offline
 numbers were computed from — only the extent differs."""
 
-#: ESA WorldCover v200 (2021) tile N51E012 covers 12-15E, 51-54N, i.e. the whole window. Read as a
-#: remote COG over range requests, the way `scripts/build_landcover_fixture.py` reads it.
-WORLDCOVER_URL = (
-    "https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map/"
-    "ESA_WorldCover_10m_2021_v200_N51E012_Map.tif"
-)
+WORLDCOVER_BASE = "https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map"
+WORLDCOVER_TILE_DEG = 3
+"""ESA WorldCover v200 ships on a 3-degree grid named for each tile's lower-left corner. Read as
+remote COGs over range requests, the way `scripts/build_landcover_fixture.py` reads them."""
 
 LCZ_SOURCE_DIR_NAME = "Demuzere_2022_complete"
 LCZ_SOURCE_FILENAME = "lcz_v3.tif"
@@ -104,6 +104,89 @@ def clip_raster(source: str, destination: Path, bbox: BBox) -> Path:
     return destination
 
 
+def worldcover_tiles(bbox: BBox) -> list[str]:
+    """Every ESA WorldCover v200 tile URL covering `bbox`.
+
+    A 30 km window is about a quarter of a degree and usually lands inside one 3-degree tile, but
+    nothing makes it do so — a city near a tile corner needs two or four. Returning the list and
+    mosaicking is the only version of this that is correct everywhere, and a single-tile guess
+    would fail as a band of nodata down one side of the map rather than as an error.
+    """
+    minx, miny, maxx, maxy = bbox
+    step = WORLDCOVER_TILE_DEG
+    lons = range(math.floor(minx / step) * step, math.floor(maxx / step) * step + 1, step)
+    lats = range(math.floor(miny / step) * step, math.floor(maxy / step) * step + 1, step)
+    urls = []
+    for lat in lats:
+        for lon in lons:
+            ns = f"N{lat:02d}" if lat >= 0 else f"S{abs(lat):02d}"
+            ew = f"E{lon:03d}" if lon >= 0 else f"W{abs(lon):03d}"
+            urls.append(f"{WORLDCOVER_BASE}/ESA_WorldCover_10m_2021_v200_{ns}{ew}_Map.tif")
+    return urls
+
+
+def coverage_shortfall(
+    bounds: tuple[float, float, float, float], bbox: BBox, res: float
+) -> dict[str, float]:
+    """How far a raster's `bounds` fall short of `bbox` on each side, in pixels.
+
+    Empty when the raster covers the window. A shortfall under one pixel is not reported: a clip
+    lands on cell boundaries, so a fraction of a cell is rounding rather than missing ground.
+
+    Separated out because the failure this guards against is silent. `clip_raster` windows with
+    `from_bounds` and then `read(window=...)`, which **returns a smaller array** rather than
+    raising when the window overruns the source, and `LocalRasterSource.fractions` turns units
+    with no coverage into all-`NaN` rather than an error. Both behaviours are correct on their
+    own; together they let a raster that covers a quarter of the requested window produce a map
+    with a quarter of its land cover missing and nothing anywhere saying so.
+    """
+    left, bottom, right, top = bounds
+    minx, miny, maxx, maxy = bbox
+    gaps = {
+        "west": (left - minx) / res,
+        "south": (bottom - miny) / res,
+        "east": (maxx - right) / res,
+        "north": (maxy - top) / res,
+    }
+    return {side: round(gap, 3) for side, gap in gaps.items() if gap > 1.0}
+
+
+def clip_worldcover(bbox: BBox, destination: Path) -> Path:
+    """Mosaic whichever WorldCover tiles `bbox` spans and write the window into the run dir."""
+    urls = worldcover_tiles(bbox)
+    if len(urls) == 1:
+        clip_raster(urls[0], destination, bbox)
+    else:
+        sources = [rasterio.open(url) for url in urls]
+        try:
+            values, transform = merge_rasters(sources, bounds=bbox)
+            profile = sources[0].profile | {
+                "driver": "GTiff",
+                "height": values.shape[1],
+                "width": values.shape[2],
+                "transform": transform,
+                "compress": "deflate",
+                "tiled": False,
+                "count": 1,
+            }
+        finally:
+            for source in sources:
+                source.close()
+        with rasterio.open(destination, "w", **profile) as dst:
+            dst.write(values[0], 1)
+
+    with rasterio.open(destination) as written:
+        short = coverage_shortfall(tuple(written.bounds), bbox, written.res[0])
+    if short:
+        raise ValueError(
+            f"WorldCover mosaic for {bbox} falls short of the requested window by "
+            f"{short} pixels; tiles used: {[url.rsplit('/', 1)[-1] for url in urls]}. "
+            "Land cover is the sole classifier for LCZ A-G, so a partial raster would be "
+            "silently missing classes rather than failing."
+        )
+    return destination
+
+
 def clip_patches(source: Path, destination: Path, bbox: BBox) -> Path:
     """So2Sat patches intersecting `bbox`, geometries **unclipped**.
 
@@ -128,7 +211,7 @@ def main() -> None:
     started = time.time()
 
     print(f"clipping rasters for {window} {bbox}...", file=sys.stderr, flush=True)
-    worldcover = clip_raster(WORLDCOVER_URL, settings.run_dir / f"worldcover_{name}.tif", bbox)
+    worldcover = clip_worldcover(bbox, settings.run_dir / f"worldcover_{name}.tif")
     reference = clip_raster(
         str(settings.source_dir(LCZ_SOURCE_DIR_NAME) / LCZ_SOURCE_FILENAME),
         settings.run_dir / f"lcz_reference_{name}.tif",

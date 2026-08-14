@@ -62,8 +62,7 @@ from lczkit.units.grid import GridUnits
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from berlin_wide_validation import (  # noqa: E402 - sibling script, imported after the path fix
-    WORLDCOVER_URL,
-    clip_raster,
+    clip_worldcover,
 )
 from unit_scale_experiment import (  # noqa: E402 - sibling script, imported after the path fix
     CLEANING,
@@ -174,9 +173,7 @@ def main() -> None:
         bbox = BERLIN if full else _window(extent_km2)
         extent_tag = "full" if full else f"{extent_km2}"
         print(f"\n{extent_tag} km2 {bbox}", flush=True)
-        worldcover = clip_raster(
-            WORLDCOVER_URL, settings.run_dir / f"worldcover_{extent_tag}.tif", bbox
-        )
+        worldcover = clip_worldcover(bbox, settings.run_dir / f"worldcover_{extent_tag}.tif")
 
         # Arm "whole" pins the threshold the quadratic whole-network resolver would have chosen;
         # arm "pooled" lets `simplify_streets_tiled` derive it from the tiles.

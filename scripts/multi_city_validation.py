@@ -61,8 +61,6 @@ from typing import Any
 
 import geopandas as gpd
 import numpy as np
-import rasterio
-from rasterio.merge import merge as merge_rasters
 
 from lczkit.classify import PrototypeClassifier
 from lczkit.config import Settings
@@ -78,6 +76,10 @@ from berlin_wide_validation import (  # noqa: E402 - sibling script
     SO2SAT_SOURCE_DIR_NAME,
     clip_patches,
     clip_raster,
+    # Lives beside `clip_raster` rather than here because that module is imported *by* this one
+    # and so cannot import back. Re-exported through this import, which is where
+    # `berlin_metropolitan_run` and `publish_sites` already look for it.
+    clip_worldcover,
 )
 from unit_scale_experiment import (  # noqa: E402 - sibling script
     HEIGHTS,
@@ -93,10 +95,6 @@ WINDOW_KM = 30.0
 """Side of the square window, in kilometres. ~900 km2, matching the measured Berlin extent."""
 
 SO2SAT_CITIES = Path("v4") / "cities"
-
-WORLDCOVER_BASE = "https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map"
-WORLDCOVER_TILE_DEG = 3
-"""ESA WorldCover v200 ships on a 3-degree grid named for each tile's lower-left corner."""
 
 MIN_PATCHES = 500
 MIN_CLASSES = 4
@@ -142,52 +140,6 @@ CITIES = (
 )
 
 BY_KEY = {city.key: city for city in CITIES}
-
-
-def worldcover_tiles(bbox: BBox) -> list[str]:
-    """Every ESA WorldCover v200 tile URL covering `bbox`.
-
-    A 30 km window is about a quarter of a degree and usually lands inside one 3-degree tile, but
-    nothing makes it do so — a city near a tile corner needs two or four. Returning the list and
-    mosaicking is the only version of this that is correct everywhere, and a single-tile guess
-    would fail as a band of nodata down one side of the map rather than as an error.
-    """
-    minx, miny, maxx, maxy = bbox
-    step = WORLDCOVER_TILE_DEG
-    lons = range(math.floor(minx / step) * step, math.floor(maxx / step) * step + 1, step)
-    lats = range(math.floor(miny / step) * step, math.floor(maxy / step) * step + 1, step)
-    urls = []
-    for lat in lats:
-        for lon in lons:
-            ns = f"N{lat:02d}" if lat >= 0 else f"S{abs(lat):02d}"
-            ew = f"E{lon:03d}" if lon >= 0 else f"W{abs(lon):03d}"
-            urls.append(f"{WORLDCOVER_BASE}/ESA_WorldCover_10m_2021_v200_{ns}{ew}_Map.tif")
-    return urls
-
-
-def clip_worldcover(bbox: BBox, destination: Path) -> Path:
-    """Mosaic whichever WorldCover tiles `bbox` spans and write the window into the run dir."""
-    urls = worldcover_tiles(bbox)
-    if len(urls) == 1:
-        return clip_raster(urls[0], destination, bbox)
-    sources = [rasterio.open(url) for url in urls]
-    try:
-        values, transform = merge_rasters(sources, bounds=bbox)
-        profile = sources[0].profile | {
-            "driver": "GTiff",
-            "height": values.shape[1],
-            "width": values.shape[2],
-            "transform": transform,
-            "compress": "deflate",
-            "tiled": False,
-            "count": 1,
-        }
-    finally:
-        for source in sources:
-            source.close()
-    with rasterio.open(destination, "w", **profile) as dst:
-        dst.write(values[0], 1)
-    return destination
 
 
 def densest_window(patches: gpd.GeoDataFrame, side_km: float = WINDOW_KM) -> BBox:

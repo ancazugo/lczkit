@@ -289,7 +289,7 @@ fewer than two break boundaries, so a layer that could only paint one colour doe
 CLAUDE.md asks for at least two sites, one high-coverage and one low tier-1. Three were published,
 chosen on measured coverage rather than reputation:
 
-| city | run | built cells | site | wall |
+| city | run | built cells | tiles | wall |
 |---|---|---:|---:|---:|
 | Berlin | `20260814T094116Z-berlin` | 59 152 | 36.12 MB | 12.8 min |
 | Hong Kong | `20260814T101702Z-hong_kong` | 25 233 | 20.43 MB | 12.7 min |
@@ -382,3 +382,60 @@ classes painting real Demuzere colours each, zero no-data.
 | at least two cities | three |
 
 `file://` is not among them, and cannot be — see §1.2.
+
+### 7.6 The same question asked of the validation runs — and the answer
+
+§7.3's WorldCover defect raises an obvious follow-up, and it is the serious one: **did the Phase
+9–13 validation runs clip land cover through that same single-tile path?** If they had, every
+non-Berlin city would be missing land cover, and since the rasters are the sole classifier for
+LCZ A–G, natural-class and overall agreement across sixteen cities would all be suspect.
+
+**They did not.** `multi_city_validation` never imported `WORLDCOVER_URL`; `prepare` has always
+called the mosaicking `clip_worldcover`. Checked against the persisted rasters rather than by
+reading the code — every run writes its clip as `worldcover_<city>.tif`, so each city's raster
+bounds can be compared directly against the window it was asked for:
+
+| run | phase | cities | worst shortfall | multi-tile cities | guard fires |
+|---|---|---:|---:|---:|---|
+| `20260810T083158Z` | 9 | 15 | 0.45 px | 5 | no |
+| `20260811T110749Z` | 10 | 9 | 0.45 px | 1 | no |
+| `20260812T184810Z` | 11 | 16 | 0.45 px | 6 | no |
+| `20260813T161048Z` | 13 | 16 | 0.45 px | 6 | no |
+
+Sub-pixel throughout, which is clip rounding. Nodata is 0.000% in fourteen of sixteen cities;
+Cologne and Rome carry 0.031%, which is **exactly one bottom row** — interior zeros are zero, so it
+is the clip edge and not a mosaic seam.
+
+**The mosaic path was exercised by real inputs, not merely present.** Six of the sixteen straddle a
+tile boundary: London, Cologne, Rome, Cairo, Hong Kong, Vancouver.
+
+**Why the question was still worth asking.** Phase 7's version failed loudly only because Hong Kong
+and Cairo miss Berlin's tile *entirely*. A city one tile-width away would have been **partially**
+covered, and that failure is silent, because two individually correct behaviours compose:
+
+- `clip_raster` windows with `from_bounds` and then `read(window=…)`, which returns a **smaller
+  array** rather than raising when the window overruns the source;
+- `LocalRasterSource.fractions` returns **all-`NaN`** for units with no coverage rather than an
+  error — intended, and tested by `test_a_unit_outside_the_raster_is_null_not_zero`.
+
+So a partial raster yields NaN land cover over the uncovered strip and nothing anywhere says so.
+`clip_worldcover` now reopens what it wrote and raises, naming the side it is short on;
+`coverage_shortfall` ignores gaps under one pixel, because every real clip has one and a guard that
+fired on the 0.45 px above would be useless. The last two `WORLDCOVER_URL` call sites — both
+Berlin-only, both correct — were retired so the pattern is gone.
+
+**The test that keeps it that way, and its own first version being wrong.**
+`tests/test_multi_city_validation.py` asserts per city that the resolved tiles cover the published
+window. Its coverage helper originally walked the window in 3-degree strides from the lower-left
+corner, which for a 0.4-degree city window samples exactly **one** point — so it returned `True` for
+every straddling city even with the second tile removed, agreeing with the implementation by
+construction. That is §7.4's failure mode exactly, reintroduced in the test written to prevent it.
+Replaced with dense sampling, which knows nothing about the tiling. Verified by breaking
+`worldcover_tiles` to return only its first tile: **8 failures before the fix, 14 after**, the extra
+six being the straddling cities.
+
+**A denominator correction, caught while rebuilding.** The size column in §7.3 and in both READMEs
+was labelled "site" and is the **tileset**. The whole directory is 1.28 MB larger — 1.17 MB of that
+the vendored `maplibre-gl.js`, which is a per-site constant and so appeared as a suspiciously
+identical delta across three cities of different sizes. Berlin: 36.12 MB tiles, 1.17 MB assets,
+0.11 MB root, **37.40 MB total**. Column relabelled `tiles`; the figures themselves were right.

@@ -443,6 +443,9 @@ Four things about it are worth knowing before relying on it:
   including its own `Range`/206 support, because `SimpleHTTPRequestHandler` has none and would
   re-send a whole tileset per tile. Nothing reaches the network: no CDN, no glyph endpoint, no
   basemap key. What is given up is opening the file directly; what is kept is opening it offline.
+  Every built site carries a `README.md` giving the working command (`python serve.py`, then
+  <http://127.0.0.1:8000/>) and saying why the obvious one does not, since opening `index.html` is
+  the first thing a recipient tries and it fails with an unexplained network error.
 - **The basemap is the run's own Overture layers, not a Protomaps extract.** A Protomaps extract
   needs a Go CLI or a ~120 GB download; the run's water and streets are already there, are correctly
   attributable, and show the reader the same linework the classification was computed from. Land use
@@ -458,7 +461,7 @@ Four things about it are worth knowing before relying on it:
 
 Three cities are published, chosen on measured tier-1 coverage. Over cells containing buildings:
 
-| city | built cells | tier-1 | WSF-3D | GHS-BUILT-H | unresolved | site |
+| city | built cells | tier-1 | WSF-3D | GHS-BUILT-H | unresolved | tiles |
 |---|---:|---:|---:|---:|---:|---:|
 | Berlin | 59 152 | **0.797** | 0.191 | 0.008 | 0.003 | 36.12 MB |
 | Hong Kong | 25 233 | 0.308 | 0.547 | 0.120 | 0.026 | 20.43 MB |

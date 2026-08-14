@@ -47,6 +47,11 @@ Read this section before writing any code. Violations here are expensive to unwi
 - Each phase ends with: tests passing, `ruff` and `mypy` clean, and a short written summary
   of what was built, what was deferred, and any decision you had to make that the spec did
   not cover.
+- **A phase is not concluded until its own block in this file says so.** Phase 7 shipped in
+  `6ebaca2` during Phase 8, and the spec went on calling it "the only outstanding deliverable" for
+  fourteen commits while three of its rulings lived only in the experiment write-up. Code that
+  exists and looks done is the easiest kind to leave half-finished. Writing the block is the last
+  step of the phase, not a tidy-up afterwards.
 - Ask before making a decision the spec leaves ambiguous. Do not silently pick.
 
 ---
@@ -1055,7 +1060,7 @@ at 172 181 units — measured, and the price of a layer that must paint from til
 
 **Three cities published**, ~91 000 grid cells each over their So2Sat windows, buildings off:
 
-| city | built cells | tier-1 | WSF-3D | GHS-BUILT-H | unresolved | site |
+| city | built cells | tier-1 | WSF-3D | GHS-BUILT-H | unresolved | tiles |
 |---|---:|---:|---:|---:|---:|---:|
 | Berlin | 59 152 | **0.797** | 0.191 | 0.008 | 0.003 | 36.12 MB |
 | Hong Kong | 25 233 | 0.308 | 0.547 | 0.120 | 0.026 | 20.43 MB |
@@ -1254,13 +1259,15 @@ reconcile silently.** That flagging behaviour is working; keep it.
 | LCZ 7 at 8.2% in range | 0.417 against a published 0.60–0.90, low on both tails, five non-European cities. An **Overture coverage limit on informal settlements**, not evidence about the 100 m cell. **Opened as a bounded exception, paper scope only** — measured from existing records, no new phase. It is the class the founding premise is about. | 13 |
 | Per-cell heterogeneity measure | Future work, discussion section only. Do not build. | 13 |
 | Phase 7 built during Phase 8 and never recorded as concluded | The site shipped in `6ebaca2` (2026-08-09) while this spec went on calling it "the only outstanding deliverable" for fourteen commits, and three user rulings lived only in the experiment write-up. **A phase is not concluded until CLAUDE.md says so** — a deliverable built out of order is the easiest to leave half-finished, because the code exists and looks done. | 7, 8 |
-| Phase 7 `file://` acceptance criterion | **Not satisfiable, amended.** PMTiles reads byte ranges through `fetch`; the Fetch standard leaves `file:` URLs unhandled, so Chrome and Firefox both error. Criterion is now "opens with no network and no software the user must install". `site/serve.py` is standard library only and implements `Range`, which `SimpleHTTPRequestHandler` does not. | 7 |
+| Phase 7 `file://` acceptance criterion | **Not satisfiable, amended.** PMTiles reads byte ranges through `fetch`; the Fetch standard leaves `file:` URLs unhandled, so Chrome and Firefox both error. Criterion is now "opens with no network and no software the user must install". `site/serve.py` is standard library only and implements `Range`, which `SimpleHTTPRequestHandler` does not. **The amendment reached the anti-pattern list late** — that bullet still demanded a `file://` open after the criterion had been retired in two other places, which is how a superseded acceptance test survives. Every built site now ships a `README.md` giving the working command, because the recipient's first move is the one that fails. | 7 |
 | Phase 7 basemap as a Protomaps extract | **Not reachable here, replaced.** An extract needs a Go CLI or a ~120 GB download. Built from the run's own cleaned water and streets: already cached for the bbox, ODbL-attributable, and the same linework the classification used. | 7 |
 | tippecanoe at 256 cores | Fails with `745 shards not a power of 2` from its radix sort. Capped at `min(cpus, 32)`; output byte-identical across thread counts. Third defect invisible on a laptop and fatal on the deployment machine, after Phase 8's `fork` deadlock and thread oversubscription. | 7, 8 |
 | Selector order inherited from the manifest's `breaks` | Break order is DataFrame column order — incidental. It put `height_completeness` twelfth of thirteen and gave `height_tier_fractions` no entry at all, in the one place the spec names a position. Ordered deliberately; tier fractions reach the render set by prefix, since their columns are named after whichever cascade fired. **+2.12 MB, +7.5%** at 172 181 units, measured. | 7 |
 | The LCZ layer painted every cell as no-data | **The site's default view never rendered, from `6ebaca2` until it was looked at.** tippecanoe's FlatGeobuf reader emits integer attributes as *strings* — measured at int16, int32, int64 and uint8, while float64 survives as a number — so `["match", ["get", "lcz_primary"], 1, …]` found no label and fell through to `NODATA_COLOUR`. `lcz_primary` is the only integer column the site renders, which is why the choropleths were fine. Coerced with `to-number`. | 7 |
 | Style and tiles each tested against their own assumption | The style test asserted the expression carries the committed colours; the site test asserted the tileset is a valid archive. **Nothing asserted that the type in the tiles is a type the expression can match**, so a defect in the gap between them was invisible to 37 tests. A test now decodes the built tiles and evaluates the real paint expression against the real values — it fails 6 of 6 without the fix. | 7 |
 | WorldCover clipped from one hardcoded tile | Berlin's `N51E012`, inherited by the publish driver. Hong Kong and Cairo span two tiles each and both failed with `RasterioIOError: 0x0 dataset`. `clip_worldcover` already resolved and mosaicked correctly. **Found only by publishing a second city** — a city one tile-width away would have lost a quarter of its land cover silently. | 7 |
+| Did the Phase 9–13 validation runs share that hardcoded path? | **No — checked against the persisted rasters, and clean.** `multi_city_validation` never imported `WORLDCOVER_URL`; `prepare` has always called the mosaicking `clip_worldcover`. All four stored runs verified: 15/9/16/16 cities, **worst shortfall 0.45 px**, no raster missing, nodata 0.000% bar a one-row clip edge on Cologne and Rome. **Six of sixteen cities span two tiles** — London, Cologne, Rome, Cairo, Hong Kong, Vancouver — so the mosaic path was exercised by real inputs, not merely present. No re-run needed. | 9–13 |
+| Nothing asserted that a clipped raster covers its window | The silent variant was one line away and would not have raised: `clip_raster` windows with `from_bounds` and `read(window=…)`, which **returns a smaller array** rather than erroring, and `LocalRasterSource.fractions` turns uncovered units into **all-`NaN`** by design. Two correct behaviours composing into a quarter-missing map. `clip_worldcover` now reopens what it wrote and raises, naming the short side; `coverage_shortfall` ignores sub-pixel gaps because every real clip has one. The last `WORLDCOVER_URL` call sites were retired — Berlin-only, so no stored result moves. | 4, 7, 13 |
 | Pooling a partial sweep against a complete stored record | Reported the difference between two city lists as a pipeline deviation (6.6%). Stability comparisons now intersect the city sets; restricted, the deviation is 0.0%. | 13 |
 | Superseded text left in concluded phase blocks | Phase 8's block opened with a nine-minute runtime and later asserted the package could not process a city; Phase 3 still carried the corrected-away axis pairing; deferred still listed SVF first. **Concluded phases keep measurements and rulings and drop imperatives.** | 3, 6, 8, 13 |
 
@@ -1328,8 +1335,12 @@ deferred OSM source; the only realistic route to the distinction Overture discar
   cannot reproduce a classification.
 - Don't delete anything under `input/`. To mark a cache entry as superseded, write a
   `<name>.discarded` sidecar next to it; never remove the entry itself.
-- Don't inline data into `index.html`, link a CDN, or use a basemap requiring an API key. The
-  site must open offline from `file://` and remain valid years from now.
+- Don't inline data into `index.html`, link a CDN, or use a basemap requiring an API key. The site
+  must open with no network and no software the user must install, and remain valid years from now.
+  It is served by its own bundled `serve.py` over loopback — `file://` is not satisfiable, because
+  PMTiles reads byte ranges through `fetch` and the Fetch standard leaves `file:` URLs unhandled.
+  Every built site carries a `README.md` saying so, since the first thing a recipient tries is
+  opening `index.html` and it fails with an unexplained network error.
 - Don't recompute parameters or classification breaks at site-build time. Phase 7 reads
   `units_viz.parquet` and the manifest; it does not do analysis.
 - Don't hardcode dataset class mappings, thresholds, or storey heights — they go in config.
@@ -1368,6 +1379,10 @@ deferred OSM source; the only realistic route to the distinction Overture discar
   land cover from a single hardcoded tile: correct for Berlin, a hard error for the next two cities,
   and — for a city one tile-width away — a quarter of the map silently missing. The second input is
   the one that tests the abstraction, which is why the spec asks for two cities and not one.
+- **Assert the precondition where a missing input would go quiet rather than loud.** Land cover is
+  the sole classifier for A–G, and a raster short of its window produces `NaN` fractions, not an
+  error. Wherever two individually-correct behaviours compose into silence — a read that truncates,
+  a lookup that returns null — the guard has to be written explicitly; nothing else will notice.
 - **Don't test a producer and a consumer only against their own assumptions.** The style test
   asserted the paint expression was right and the tile test asserted the tileset was valid, and the
   site's default view painted blank grey in every city because nothing asserted the *type in the

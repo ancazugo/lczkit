@@ -146,6 +146,7 @@ def test_the_site_directory_holds_what_claude_md_specifies(run_dir: Path) -> Non
     assert (site / "style.json").is_file()
     assert (site / "manifest.json").is_file()
     assert (site / "serve.py").is_file()
+    assert (site / "README.md").is_file()
     assert (site / "assets" / "vendor" / "maplibre-gl.js").is_file()
     assert (site / "assets" / "vendor" / "pmtiles.js").is_file()
     assert (site / "assets" / "app.js").is_file()
@@ -159,6 +160,20 @@ def test_the_site_directory_holds_what_claude_md_specifies(run_dir: Path) -> Non
     }
     assert report.site_dir == site
     assert report.n_units == 24
+
+
+def test_the_readme_gives_the_command_that_works_and_not_the_one_that_does_not(
+    run_dir: Path,
+) -> None:
+    """The site is handed to people as a directory, and the first thing they will try is opening
+    `index.html`. That fails with a network error and no explanation, so the README has to lead
+    with the working command — this is the one instruction the directory cannot do without."""
+    build_site(run_dir)
+    readme = (run_dir / "site" / "README.md").read_text(encoding="utf-8")
+
+    assert "python serve.py" in readme
+    assert "http://127.0.0.1:8000/" in readme
+    assert "will not work" in readme, "the README must say that opening index.html directly fails"
 
 
 def test_every_tileset_is_a_real_pmtiles_archive(run_dir: Path) -> None:

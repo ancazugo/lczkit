@@ -204,6 +204,9 @@ def build_site(run_dir: Path | str, *, config: VizConfig | None = None) -> SiteR
     for name in ("app.js", "app.css", "LICENSES.md"):
         shutil.copy2(ASSETS_DIR / name, site_dir / "assets" / name)
     shutil.copy2(Path(__file__).resolve().parent / "serve.py", site_dir / "serve.py")
+    # At the root beside `serve.py`, not under `assets/`: it is addressed to whoever receives the
+    # directory, and the one thing they need to know is that opening `index.html` will not work.
+    shutil.copy2(ASSETS_DIR / "README.md", site_dir / "README.md")
     shutil.copy2(run_dir / MANIFEST_FILE, site_dir / MANIFEST_FILE)
     (site_dir / "style.json").write_text(json.dumps(style, indent=2) + "\n", encoding="utf-8")
 
