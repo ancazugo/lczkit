@@ -477,7 +477,13 @@ deferred list, where unit definition and footprint coverage lead.
 
 **Resolved:** Bernard et al. (2024) §2.5, p. 2085 states the weights apply only to built types;
 natural types go through a separate branch (Figs. 2–3). Phase 4's raster pipeline is therefore
-**the only thing that classifies A–G at all** — the opposite of decorative.
+**what supplies every dimension that separates A–G** — the opposite of decorative.
+
+*(Corrected in Phase 14: this previously read "the only thing that classifies A–G at all", which is
+not what the code does. lczkit classifies A–G by the same prototype-distance metric as the built
+types, over seven dimensions, two of which — `tree_fraction` and `water_fraction` — are lczkit's own
+and tagged `source="lczkit"`. Bernard's separate land-cover decision tree was not implemented. The
+divergence is defensible and honestly tagged in the prototype table; it was simply never recorded.)*
 
 **Null parameter policy.** Some units legitimately have null parameters — `aspect_ratio` is null
 wherever no street reaches a building, which occurs in a small but nonzero share of units.
@@ -966,6 +972,126 @@ range finding.
 
 ---
 
+### Phase 14 — Audit remediation — CONCLUDED
+
+**Not a diagnostic phase. It opened no new question — it closed the gap between what this file
+records as decided and what the code does**, and it found that gap to be four rulings wide.
+
+**The shape of the problem: the spec moved and the code did not.** The classify layer was last
+touched in `3931bbe`; the rulings superseding its behaviour were applied to this file in `f374e4e`,
+seven days later, and nothing reconciled the two. So `rules.py` carried the pair-gated LCZ 10 rule
+verbatim for eight phases after this file recorded it as measured inert and replaced; the
+`bernard2024` → `bernard2024_partial` rename was ruled in Phase 6 and never applied; and
+`industrial_fraction`'s denominator was contradicted **three ways inside the repository at once** —
+this file and `ucp/parameters.py` saying building area, the code, `config.py` and the registry
+saying unit area and arguing for it.
+
+Two committed rulings were also being actively violated by live code:
+`multi_city_validation.py` medianed the **retired raw axis share** across sixteen cities (Phase 12
+Ruling 1: "removed from reporting", not "use with care"), and printed **"% of ceiling"** in two
+places, which Phase 9 recorded as a broken metric. `unit_scale_experiment.py` was a third raw-share
+reader. `axis_reconciliation.py` keeps its raw-share column and is exempt: showing the broken
+quantity beside what replaces it *is* the Phase 12 measurement.
+
+#### Measurements
+
+**LCZ 10, calibrated at last — and the threshold is not the binding constraint, for the second time
+by a different mechanism.** `scripts/lcz10_threshold_sweep.py`, 19 thresholds, both denominators,
+against the Rotterdam reference (`lcz_v3`, permitted for this rule only):
+
+| | precision range over 0.05–0.95 | recall at 0.05 → 0.95 | predicted at operating point |
+|---|---|---|---|
+| `industrial_fraction_of_building_area` (`FIND/B`) | 16.7% – 23.2% | 31.8% → 5.7% | **95** |
+| `industrial_fraction_of_unit_area` | 24.4% – 26.5% | 92.0% → 51.1% | 196 |
+
+**Precision is flat.** CLAUDE.md predicted landing high-precision/low-recall; high precision is not
+reachable at any setting on either column — six points of movement on `FIND/B` over a nineteen-fold
+change in threshold. The rule now fires, which the pair-gated one never did, but the threshold
+governs *how much* of the map carries LCZ 10, not how often that label is right.
+
+Operating point: **`FIND/B` at 0.45**, the precision maximum. It is the default on both theory and
+rate: Bernard's published 0.33 sits just below it and performs comparably (22.4% / 27.3% against
+23.2% / 25.0%), and it labels 95 cells against a reference of 88 where the unit-area share labels
+196. When precision cannot be improved, matching the rate is what is left to get right.
+
+> **A correction, recorded because it was nearly shipped as a finding.** The first pass measured
+> `FIND/B` saturating — 83.9% of cells reading exactly 1.0 — and concluded that Bernard's quantity
+> does not survive the move from an RSU to a 100 m cell: a third instance of Phase 13's
+> patch-versus-cell result, and it was written into this file, the paper's argument and the README
+> before it was checked. **It was an artefact of the numerator.** That numerator counted every
+> building standing inside an industrial *parcel* as industrial, and parcels swallow whole cells, so
+> any cell touching one read 1.0. Counting industrial *buildings* — which is what `FIND/B` means —
+> gives 12.6% at 1.0, median 0.66, p10 0.11. The unit-area share is the more saturated of the two at
+> 42.6%. **A scale finding and a numerator bug are indistinguishable from the distribution alone**;
+> only changing the definition and re-measuring separated them. The `FIND/B` instance of
+> patch-versus-cell is void; the other two stand.
+
+**LCZ 8's separability, diagnosed from the metric's structure.** `mean_building_area_m2` is not a
+metric dimension, so this file's stated reason for keeping LCZ 8 in the distance metric described a
+parameter that never reaches it. LCZ 8's BSF band overlaps LCZ 3 and 6, and its `Hr` band is
+*identical* to LCZ 3, 6 and 9 — so the only dimension separating it is `aspect_ratio`, which is null
+exactly where large setbacks stop streets reaching buildings. **LCZ 8 fails by construction, not by
+tuning**, which predicts Phase 6.7's measured 0.0% (n=224) without reference to any run.
+
+**LCZ F is unreachable by arithmetic, not by configuration.** LCZ D's prototype box contains LCZ F's
+in every dimension, so `d(F) >= d(D)` always and ties break to the lower code. The config docstring
+framed the exclusion as a policy choice, which would invite someone to "re-enable" F and get
+silence. The manifest now records *dominated* separately from *excluded*.
+
+#### Blocked, and reported rather than guessed
+
+**`OA_w` — the LCZ-community weighted accuracy — is not implementable from what is on disk.**
+Demuzere et al. (2021) §2.4 and (2022) §2.4 both define it and both attribute the weight matrix to
+**Bechtel et al. (2017, 2020)**; neither prints the matrix, and neither paper is in
+`docs/references/papers/`. Per the standing anti-pattern, no matrix was inferred. `OA`, `OA_u`
+(built-class agreement) and `OA_bu` are all present; **`OA_w` needs Bechtel et al. (2017) or (2020)
+placed on disk and transcribed into `docs/references/tables/` before it can be built.**
+
+#### What shipped
+
+Instruments first, deliberately, so the changes could be read through the better instrument rather
+than the one that hid the problem — the inverse of the Phase 9→10 ordering, where the intervention
+invalidated the evidence that ordered the levers.
+
+- **Validation**: per-class **user's accuracy and F1** (recall alone cannot see over-prediction; a
+  class the map invents wholesale previously had no row at all), **`OA_bu`**, and a **spatial-block
+  bootstrap** giving confidence intervals on agreement and both axis lifts. Blocks, not cells: So2Sat
+  patches are 320 m on a 100 m stride, so a city's labelled cells are one correlated sheet and
+  cell-wise resampling would report an interval far too narrow.
+- **`Hr`, one building one vote.** Phase 1 explodes multipolygons before either layer forks, so a
+  courtyard block reached the geometric mean as N equal terms — a multi-part footprint outvoting its
+  neighbours N to one for a reason about data encoding, not about the city. `FEATURE_ID` is now
+  stamped before the explode and the parts collapse on it. Also fixes `building_count` and
+  `mean_building_area_m2`.
+- **`h_geometric_area_weighted`** as a secondary column. `Hr` stays unweighted — Bernard's Table 1
+  specifies that form and the Stewart & Oke ranges were defined for it — but the unweighted mean
+  gives a 5 m² shed the same vote as a tower block, and Phase 10 established that `Hr`'s sensitivity
+  to dispersion is what made the most accurate height product degrade the map. This makes the size
+  of that effect measurable without moving a published number.
+- Smaller: `eps_final_m` misreported at the escalation ceiling; `industrial_fraction_land_use` able
+  to exceed 1.0 because `land_use` gets no overlap resolution; an empty land-cover group answering
+  0.0 for units the raster never reached; `aggregate()` reporting no coverage; `FootprintCoverage`'s
+  ratios — including Phase 1's acceptance criterion — absent from every serialised artefact because
+  they were plain `@property`; `n_params_used` silently mixing a built maximum of 3 with a natural
+  maximum of 7.
+
+#### Rulings
+
+1. **A ruling is not applied until the code says so.** This is the same failure as Phase 7 shipping
+   unrecorded, in the opposite direction: there, code existed and the spec did not know; here, the
+   spec ruled and the code did not follow. Both were invisible for the same reason — nothing checked
+   the two against each other. The regression tests added here (no script reads the retired share, no
+   script prints "% of ceiling", the shipped threshold is the one the sweep selects) are that check,
+   for the specific rulings that had already drifted.
+2. **A quantity's denominator belongs in its name.** `industrial_fraction` was unreadable under a
+   three-way disagreement about what it divided by, and no amount of documentation fixes a column
+   whose meaning is contested. Both are emitted, each named for its denominator.
+
+*(The re-baseline this phase's label-moving changes require is recorded below, separately, because it
+is a measurement and not a remediation.)*
+
+---
+
 ### STOP RULE — applies after Phase 13
 
 **No further diagnostic phases.** Thirteen phases in, the finding rate remains high but the returns
@@ -975,8 +1101,16 @@ a better map. That is the paper's material, not the package's.
 Remaining work, in order:
 
 1. ~~**Phase 7 — the static map site.**~~ **Concluded** — three cities published.
-2. **The paper.**
-3. **Cleanup** — docs, release.
+2. ~~**Phase 14 — audit remediation.**~~ **Concluded** — four unapplied rulings closed, two live
+   ruling violations fixed. Not a diagnostic phase; it opened no new question.
+3. **The paper.**
+4. **Cleanup** — docs, release.
+
+**One thing is blocked rather than done:** `OA_w`, the LCZ-community weighted accuracy, needs
+Bechtel et al. (2017) or (2020) on disk — both Demuzere papers define it and attribute the weight
+matrix to them without printing it. It is the metric that makes lczkit's per-class numbers directly
+comparable to published LCZ maps, so it is worth placing those PDFs before the paper's tables are
+generated. `OA`, `OA_u`, `OA_bu` and per-class F1 are all present.
 
 **The argument is already complete and does not depend on the next lever landing:**
 
@@ -989,9 +1123,24 @@ Remaining work, in order:
    exceeds its own, and a 432-cell sample understated Berlin's by 22 points.
 4. Confusion-axis shares are not comparable without pair normalisation — a null awards height 3.9×
    on affordance alone.
-5. Stewart & Oke's parameter ranges describe an LCZ patch and do not transfer to a 100 m cell — not
-   because the central tendency is wrong, which it largely is not, but because the within-class
-   spread on a grid is wider than the published bands can hold.
+5. **The LCZ patch and the 100 m cell are different objects, and the comparison spans both ends.**
+   - *Stewart & Oke's parameter ranges* describe a patch and do not transfer to a cell (Phase 13).
+     Not because the central tendency is wrong, which it largely is not — six of ten medians fall
+     within 0.13 interval-widths — but because the within-class spread on a grid is wider than the
+     published bands can hold.
+   - *The So2Sat labels are patch-scale too* (Phase 14). A 320 × 320 m label — 10.24 ha — is
+     attributed to one 1 ha cell whose centre sits ~22 m off the patch centre. A cell inside a
+     compact-midrise patch can legitimately be a courtyard.
+
+   The second had not been stated anywhere, and it is the consequential one: **both the parameter
+   ranges and the ground truth are patch-scale objects, and lczkit is the only cell-scale thing in
+   the comparison.** That is an unquantified floor under the 35.3%-against-75.2% gap, and it
+   reframes part of the residual as a units-of-measurement mismatch rather than classifier error.
+
+   A third instance was claimed in Phase 14 and **retracted** — Bernard's `FIND/B` appeared to
+   saturate at a 100 m cell, and the saturation was an artefact of how that phase built the
+   numerator rather than a property of the quantity. Two instances, not three. The retraction is
+   worth as much as the claim: a scale finding and a numerator bug produce the same distribution.
 
 Plus, as an unexplained regularity worth reporting rather than resolving: **the compactness lift and
 the enclosure A/B advantage split along the same seven-against-nine regional line, twice measured,
@@ -1182,10 +1331,10 @@ reconcile silently.** That flagging behaviour is working; keep it.
 | `gpd.overlay` `keep_geom_type` warning | Correct not to silence package-wide, which would mask real geometry-type problems. If the noise becomes a problem, scope suppression to the specific call site with a comment explaining why it is benign there. | 3, 5 |
 | Confusion pairs 1↔4, 2↔5, 3↔6 labelled "height axis" | **Spec bug, corrected.** Those hold height fixed and vary compactness. The height axis is 1↔2↔3 and 4↔5↔6. Both are now reported, separately and correctly named. **Phase 3's copy of the same error was corrected later, in the Phase 13 consistency sweep.** | 3, 6 |
 | Bernard weights — do they apply to natural types? | **Resolved from the paper**, §2.5 p. 2085: built types only; natural types are a separate branch. Phase 4's rasters are the sole classifier for A–G. | 6 |
-| `bernard2024` preset only partially applicable | Renamed `bernard2024_partial`. 17 of 21.5 weight units applied; SVF and z₀ deferred; `FB` carries ~47% of the metric. Unapplied dimensions recorded in the manifest. | 6 |
-| LCZ 10 pair-gated rule measured inert on Rotterdam | Rule replaced. LCZ 10 removed from the distance metric per Bernard; assigned functionally with a threshold **calibrated by precision/recall against the Rotterdam reference**, not chosen a priori. | 6 |
-| LCZ 8 — Bernard also excludes it from the distance approach | **Diverge from Bernard: keep LCZ 8 in the metric.** Its character is genuinely morphological and mean building area captures it. Documented divergence. | 6 |
-| `industrial_fraction` denominator | Changed to share of **building** area, matching Bernard, so his 0.33 transfers. Unit-area version retained as secondary. | 5 |
+| `bernard2024` preset only partially applicable | Renamed `bernard2024_partial`. 17 of 21.5 weight units applied; SVF and z₀ deferred; `FB` carries ~47% of the metric. Unapplied dimensions recorded in the manifest. **The rename was ruled in Phase 6 and only applied in Phase 14** — the code shipped `bernard2024` for eight phases, and `output/manifest.py` keyed `unapplied_weights` off that literal, so renaming it anywhere but both places at once would have emitted `[]` in silence. The key now reads the preset constant. | 6, 14 |
+| LCZ 10 pair-gated rule measured inert on Rotterdam | Rule replaced. LCZ 10 removed from the distance metric per Bernard; assigned functionally with a threshold **calibrated by precision/recall against the Rotterdam reference**, not chosen a priori. **Ruled in Phase 6, implemented in Phase 14** — `rules.py` carried the pair gate verbatim for eight phases after the spec recorded it as superseded, with a threshold picked a priori at 0.50. | 6, 14 |
+| LCZ 8 — Bernard also excludes it from the distance approach | **Diverge from Bernard: keep LCZ 8 in the metric.** Ruling stands; **its stated reason was wrong and is corrected in Phase 14.** `mean_building_area_m2` is not a metric dimension and never has been, so it cannot be what captures LCZ 8. The real separator is `aspect_ratio` — 0.1–0.3 against LCZ 3's 0.75–1.5 and LCZ 6's 0.3–0.75 — since LCZ 8's BSF band overlaps both and its `Hr` band is identical to LCZ 3, 6 and 9. That is also why LCZ 8 scores 0.0% (n=224) on Rotterdam: `aspect_ratio` is null exactly where large setbacks stop streets reaching buildings. | 6, 14 |
+| `industrial_fraction` denominator | **Contradicted three ways at once, resolved in Phase 14 by emitting both.** This row said building area; `ucp/parameters.py`'s docstring said building area; the code, `config.py` and the registry said unit area and argued for it. Now `industrial_fraction_of_building_area` (Bernard's `FIND/B`) and `industrial_fraction_of_unit_area` ship as separate named columns, with the bare name a deprecated alias for the unit-area one. **The LCZ 10 rule reads `FIND/B`, and Bernard's 0.33 does transfer** — the shipped 0.45 is the sweep's own pick and the two perform comparably. An intermediate Phase 14 reading that `FIND/B` saturates at a 100 m cell was a numerator artefact and is retracted. | 5, 14 |
 | Davenport terrain roughness class in Phase 5 | **Spec bug, corrected.** Requires z₀, which is deferred. Moved to deferred alongside the roughness work. | 5 |
 | Anti-pattern "don't commit anything from `docs/references/`" contradicting Phase 0 | **Spec bug, corrected** (third occurrence). PDFs are ignored; `tables/`, `README.md`, `references.bib` are committed. | 0 |
 | Stewart & Oke cannot classify the natural family | **Accepted for MVP.** A–D separate only on building-derived parameters; F and G differ in no published dimension. lczkit-defined `tree_fraction`/`water_fraction` ranges tagged `source="lczkit"`; C and F recorded unreachable in the manifest. Reading Bernard's natural branch (Figs. 2–3) and feeding canopy height as the natural roughness element is **deferred**, not rejected. | 6 |
@@ -1375,6 +1524,36 @@ deferred OSM source; the only realistic route to the distinction Overture discar
 - **A phase is not concluded until this file says so.** Phase 7 shipped during Phase 8 and went
   unrecorded for fourteen commits, with three of its user rulings living only in its experiment
   write-up. Code that exists and looks done is the easiest kind to leave half-finished.
+- **A ruling is not applied until the code says so, either.** The mirror of the line above, and it
+  cost more: four rulings sat in this file as decided while the code did the superseded thing, the
+  largest for eight phases — `rules.py` kept a pair-gated LCZ 10 rule this file recorded as measured
+  inert and replaced. Nothing checked the two against each other in either direction. When a ruling
+  lands, either apply it or record explicitly that it is deferred and why.
+- **A quantity's denominator belongs in its name.** `industrial_fraction` was contradicted three ways
+  inside one repository — this file and one docstring saying building area, the code, config and
+  registry saying unit area and arguing for it. A column whose meaning is contested cannot be fixed
+  by documenting it harder; emit both, each named for what it divides by.
+- **Don't retire a quantity by writing "retired" — retire the code that reads it.** Phase 12 removed
+  the raw axis share "from reporting" and two scripts went on medianing it across sixteen cities.
+  The field has to stay (stored records depend on its definition), so the guard belongs on the
+  *reading*: a test that fails when a reporting path touches it. The same applies to "% of ceiling",
+  ruled broken in Phase 9 and still printed in two places by the same script.
+- **A quantity defined over a patch may not transfer to a 100 m cell.** Two instances: Stewart &
+  Oke's parameter ranges (Phase 13) and the So2Sat labels themselves (a 320 m patch attributed to a
+  1 ha cell). Before transferring a published threshold, check that the cell is large enough to be
+  the object the quantity describes.
+- **Before calling a degenerate distribution a scale finding, change the numerator and re-measure.**
+  Phase 14 measured Bernard's `FIND/B` saturating at 84% of cells reading exactly 1.0, concluded the
+  quantity does not survive an RSU-to-cell move, and wrote that into this file, the paper's argument
+  and the README. It was the numerator: it counted every building standing inside an industrial
+  *parcel* as industrial, and parcels swallow whole cells. The real figure is 12.6%. **A scale
+  finding and a definition bug are indistinguishable from the distribution alone**, and the scale
+  story is the more interesting one, which is exactly why it gets believed first.
+- **A performance regression can hide behind a correctness fix.** The same change added three
+  whole-extent geometric operations — two extra `union_all` calls and an intersection of every
+  footprint against a dissolved industrial geometry — and Berlin stopped completing inside 50
+  minutes. The fixtures are 9 km² and said nothing. This is the standing scaling anti-pattern being
+  broken by the very work that was auditing the codebase for broken rulings.
 - **Don't run a generalised driver over one input and call it general.** The publish driver clipped
   land cover from a single hardcoded tile: correct for Berlin, a hard error for the next two cities,
   and — for a city one tile-width away — a quarter of the map silently missing. The second input is

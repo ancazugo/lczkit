@@ -32,7 +32,7 @@ a common prefix of geometry repair, multipolygon explosion, and non-polygon and 
 removal:
 
 - **`buildings_area`** adds overlap *trimming* only, and feeds every area statistic — building
-  surface fraction, `Hr`, building count, mean building area, `industrial_fraction` — plus the
+  surface fraction, `Hr`, building count, mean building area, the industrial shares — plus the
   height cascade. Retention is measured against the **union** of raw footprints, not their sum,
   because Overture's sources overlap themselves: Kowloon's raw footprints double-count 7.52% of
   their summed area against Berlin's 0.61%, so trimming that away reads as attrition against the sum
@@ -194,13 +194,15 @@ implementation agree in both directions, so a column cannot be added without doc
 | `pervious_surface_fraction` | fraction | Stewart & Oke (2012) |
 | `tree_fraction`, `water_fraction` | fraction | Bernard et al. (2024) Table 1 |
 | `height_of_roughness_elements_m` | m | Bernard et al. (2024) Table 1 |
-| `h_mean_area_weighted`, `h_std` (secondary) | m | computed here |
+| `h_geometric_area_weighted`, `h_mean_area_weighted`, `h_std` (secondary) | m | computed here |
 | `aspect_ratio` | dimensionless | Stewart & Oke (2012), via `momepy.street_profile()` |
 | `street_openness` | fraction | momepy |
 | `street_width_m` | m | momepy |
 | `building_count` | count | computed here |
 | `mean_building_area_m2` | m² | computed here |
-| `industrial_fraction` | fraction | computed here |
+| `industrial_fraction_of_building_area` | fraction | Bernard et al. (2024) `FIND/B` |
+| `industrial_fraction_of_unit_area` | fraction | computed here |
+| `industrial_fraction` (deprecated alias) | fraction | computed here |
 | `industrial_fraction_buildings`, `industrial_fraction_land_use` | fraction | computed here |
 | `industrial_evidence` | category | computed here |
 
@@ -211,8 +213,12 @@ Five things about this phase are worth knowing before relying on it:
   the LCZ property ranges Phase 6 normalises against were defined for that quantity. The arithmetic
   mean sits above it whenever a unit mixes tall and short buildings, so substituting one for the
   other would bias exactly the heterogeneous units where classification is hardest, and would do it
-  silently. `h_mean_area_weighted` and `h_std` ship as **secondary** columns for the deferred
-  roughness work (Macdonald, Kanda); both are marked as such in the registry.
+  silently. `h_geometric_area_weighted`, `h_mean_area_weighted` and `h_std` ship as **secondary**
+  columns; all three are marked as such in the registry. The first is the same geometric mean
+  weighted by footprint area, emitted because the unweighted form gives a 5 m2 shed the same vote
+  as a tower block — measurable, without changing what `Hr` means. The other two exist for the
+  deferred roughness work (Macdonald, Kanda). One building gets one vote regardless of how many
+  MultiPolygon parts it arrived in.
 - **Two of Stewart & Oke's seven morphological properties are not computed.** *Sky view factor* is
   deferred as the single most expensive component, and it is strongly correlated with aspect ratio,
   which this phase does compute; Bernard et al. (2018), `10.3390/cli6030060`, is the preferred
@@ -237,7 +243,7 @@ Five things about this phase are worth knowing before relying on it:
   `building_count` and `mean_building_area_m2` — move whole buildings to the unit containing their
   representative point, because half a building is not a building. On a 100 m grid the two
   populations genuinely differ, and a test asserts they still do.
-- **`industrial_fraction` is the only route to LCZ 10, and Overture cannot fully supply it.**
+- **The industrial share is the only route to LCZ 10, and Overture cannot fully supply it.**
   GeoClimate separates heavy industry from light industry and commercial; Overture offers a single
   `industrial` value across both `subtype` and `class`, so a light-industrial estate and a refinery
   are indistinguishable here. `warehouse` is deliberately *not* counted as industrial — it is the
@@ -282,19 +288,34 @@ Six things about this phase are worth knowing before relying on it:
   not derivable from open vector and raster data at all. The manifest lists all five with reasons.
   Note that anthropogenic heat output is the only published property that would separate LCZ 10
   from LCZ 8 directly — 300+ W m⁻² against at most 50 — which is why a functional attribute has to.
-- **The `bernard2024` preset cannot be applied as published.** Its weights cover seven UCPs and
-  lczkit computes five, so SVF (weight 4) and z₀ (0.5) — 4.5 of a published 21.5 — go unapplied
+- **The `bernard2024_partial` preset cannot be applied as published, which is what the name
+  says.** Its weights cover seven UCPs and lczkit computes five, so SVF (weight 4) and z₀ (0.5) — 4.5 of a published 21.5 — go unapplied
   and the effective built metric has three non-zero dimensions: `FB` 8, `Hr` 6, `H/W` 3. The
   manifest records the shortfall, because a comparison against a GeoClimate run is not a
   comparison of the same metric.
-- **The LCZ 10 rule is implemented as specified and does not fire on real industrial data.** It
-  relabels a unit whose two nearest prototypes are LCZ 8 and LCZ 10 and whose `industrial_fraction`
-  clears a conservative threshold. On the Rotterdam fixture — 671 cells over a working port, 254
-  industrial buildings, 75% of cells more than 90% industrial by area, and a reference map putting
-  88 of them in LCZ 10 — **no unit has that pair as its two nearest prototypes at any threshold**,
-  so the rule never gets the opportunity. Port plots are large and sparsely built, and the building
-  surface fraction that dominates the built metric lands them on LCZ 9 instead. Every run's
-  manifest reports the firing count so this is visible from the output rather than only here.
+- **LCZ 10 is not in the distance metric. It is assigned functionally, and the threshold is
+  calibrated rather than chosen.** Following Bernard et al., LCZ 10 is scored and reported in the
+  seventeen-way vector but can never win the argmin; the industrial evidence is its only route.
+
+  The rule it replaced gated on LCZ 8 and LCZ 10 being a unit's two nearest prototypes, and was
+  **measured inert on the Rotterdam fixture at every threshold from 0.05 to 0.5** — 671 cells of
+  working port, 254 industrial buildings, three quarters of cells over 90% industrial by area, a
+  reference putting 88 of them in LCZ 10, and the pair never opened once. Port plots are large and
+  sparsely built, so building surface fraction lands them on LCZ 9 and LCZ 10 is nowhere near
+  second.
+
+  `scripts/lcz10_threshold_sweep.py` sweeps the replacement and writes the precision/recall curve
+  into the run record. **Read it before trusting the threshold.** Precision is flat at 24–27% across
+  the whole range on both denominators, so the threshold governs how much of the map carries LCZ 10
+  and not how often that label is right. Every run's manifest reports the firing count, so a rule
+  that never fires is distinguishable from one never configured.
+- **Two industrial shares ship, each named for what it divides by.**
+  `industrial_fraction_of_building_area` is Bernard's `FIND/B` and is what the LCZ 10 rule reads;
+  `industrial_fraction_of_unit_area` is the share of the cell's ground. They answer different
+  questions — a sparsely-built working port scores high on the first and low on the second — and a
+  single column called `industrial_fraction` was contradicted three ways inside this repository
+  about which one it was. The bare name survives one release as a deprecated alias for the
+  unit-area column.
 - **Null parameters renormalise rather than dropping the unit.** A unit missing `aspect_ratio`
   is compared on the weights it does have, and `n_params_used` and `missing_parameters` say what
   it was judged on. No imputation anywhere.
@@ -313,6 +334,25 @@ single accuracy figure — plus built-class agreement separately from overall wi
 share stated beside it, agreement stratified by `height_completeness` band, and **both** confusion
 axes, apart because they are different instruments: the height axis (1↔2↔3, 4↔5↔6) diagnoses the
 height estimate, the compactness axis (1↔4, 2↔5, 3↔6) diagnoses footprint coverage and unit size.
+
+**Per class, both directions.** Producer's accuracy (recall) alone cannot see over-prediction — a
+map that labelled every cell LCZ 5 would score 100% on LCZ 5 — so `user_accuracy` and `f1` ship
+beside it, following Demuzere et al. (2021), and a class the run predicts but the reference never
+assigns gets a row rather than vanishing. `OA_bu`, the built-versus-natural accuracy ignoring
+internal differentiation, separates "found the built fabric and misjudged its form" from "did not
+find it", which the headline charges alike.
+
+**`OA_w` is not implemented**, deliberately. Both Demuzere papers define it and attribute the
+class-similarity matrix to Bechtel et al. (2017, 2020) without printing it, and neither is in
+`docs/references/`. A plausible-looking invented weight matrix is the worst failure mode this
+package has, so the metric waits for the source.
+
+**Every figure is a point estimate over units that are not independent.** So2Sat patches are 320 m
+squares on a 100 m stride, so a city's labelled cells are one contiguous, correlated sheet and the
+effective sample size is far below the nominal one. `lczkit.validation.uncertainty` provides a
+**spatial block bootstrap** — resampling contiguous blocks, not cells — for agreement and both axis
+lifts. Read `lift` as conservative in any case: its null draws wrong labels from the run's own error
+distribution, so a real concentration on one axis inflates the expectation it is measured against.
 
 **Compare axes on `lift`, never on the raw share.** An axis's raw share of disagreement is not
 comparable across cities — its denominator is all disagreement, so a city's natural-class share
