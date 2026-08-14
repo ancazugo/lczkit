@@ -61,6 +61,11 @@ a diagnosis that phase had disproved.
 **If a supplied edit contradicts a committed record, flag it and stop.** The committed record wins;
 it was written with the measurement in front of it.
 
+**Concluded phases keep measurements and rulings; they drop imperatives and acceptance criteria.**
+Phase 8's block accumulated its own pre-conclusion text and ended up opening with a nine-minute
+runtime and later asserting the package could not process a city. When a phase concludes, delete
+the instructions it was working from.
+
 ---
 
 ## Locked architectural decisions
@@ -124,7 +129,7 @@ you must respect in every phase:
   │   ├── GEE/             # keyed on (units hash, collection, date range, reducer)
   │   ├── ESA_WorldCover/
   │   ├── GHSL/            # GHS-BUILT-H, height tier 4
-  │   ├── GOB25D/          # Google Open Buildings 2.5D, height tier 2
+  │   ├── GOB25D/          # Google Open Buildings 2.5D, height tier 2 (retired, Phase 11)
   │   ├── WSF3D/           # WSF-3D, height tier 3
   │   ├── So2Sat-LCZ42/    # v4 — primary validation reference, see below
   │   └── ETH_CanopyHeight/
@@ -167,6 +172,11 @@ you must respect in every phase:
 - **Fixture city**: a ~3×3 km bbox from a DFC2017 city (Berlin or Rome) so ground-truth LCZ
   polygons are available for free. Cache the Overture extract and a clipped land cover raster
   as files under `tests/fixtures/` so **CI never hits the network**.
+- **Primary fixture is Hong Kong** (Phase 10): 13 classes, the richest set on disk. Berlin's
+  fixture carried two mid-rise classes only, which made the height axis near-untestable by
+  construction and produced a wrong lever ordering that survived three phases. Berlin is retained
+  as a secondary fixture. **Rotterdam is the industrial fixture for the LCZ 10 rule only and is
+  not a validation city** (Phase 6.7).
 - Unit tests per stage against the fixture. One end-to-end integration test that runs the
   full pipeline on the fixture and asserts on shape, schema, and CRS — not on exact values.
 - Network-dependent tests (live Overture, live GEE) marked `@pytest.mark.network` and skipped
@@ -324,7 +334,9 @@ The package's answer is a graded cascade plus honest reporting, not a pretence o
 1. Overture `height`; else `num_floors × storey_height` (storey height **configurable**,
    default 3.0 m — varies regionally and is a real error source)
 2. **Google Open Buildings 2.5D** — fine-resolution heights across Africa, South and Southeast
-   Asia, and Latin America. The highest-value tier for exactly the regions where tier 1 fails.
+   Asia, and Latin America. **Retired from the default cascade in Phase 11** — measured harmful.
+   Code and tier interface retained; see Phase 10 for why per-building accuracy was the wrong
+   acceptance test.
 3. **WSF-3D** (DLR, TanDEM-X derived) — global ~90 m building height and volume
 4. **GHS-BUILT-H** — global 100 m mean building height
 
@@ -347,10 +359,12 @@ before anyone waits for a full run. Write it into the manifest.
 
 **Expected degradation — document, do not treat as a bug.** LCZ separates low-rise (<10 m),
 mid-rise (10–25 m) and high-rise (>25 m) largely on height. Areal height products cannot
-resolve those bands within a heterogeneous unit, so error concentrates along the height axis
-*within* a compactness category — 1↔4, 2↔5, 3↔6 — rather than scattering randomly. If Phase 6
-validation shows that pattern in a low-`height_completeness` city, it is the data behaving as
-expected.
+resolve those bands within a heterogeneous unit, so error concentrates on the **height axis —
+1↔2↔3 and 4↔5↔6** (compactness fixed, height band varies). Do **not** confuse this with the
+compactness axis (1↔4, 2↔5, 3↔6), which holds height fixed and varies building surface fraction;
+an earlier version of this spec had the two swapped. If Phase 6 validation shows the height
+pattern in a low-`height_completeness` city, it is the data behaving as expected — **but read it
+as pair-normalised lift, never as a raw share** (Phase 12).
 
 **Raster access in this phase.** Tiers 2–4 need raster reads, but the `RasterSource` protocol
 and its GEE backend are Phase 4. Do **not** pull Phase 4 forward. Implement a minimal local
@@ -451,11 +465,10 @@ Ship two presets and make the active one appear in the manifest:
   renormalisation in the manifest.
 - `equal` — uniform weights, for comparison.
 
-**This weighting interacts badly with the scale issue below.** The single parameter carrying
-half the metric (`FB`) is also the one systematically biased by unit choice. Treat any
-conclusion about classifier quality as provisional until the unit-scale experiment resolves.
-When SVF arrives from deferred it takes weight 4 and materially reshuffles the metric — this
-raises SVF's priority above the other deferred items.
+`FB` carrying roughly half the metric was the entry point for two separate defects — Phase 1's
+footprint attrition (Phases 6.5/6.6) and the 100 m cell's spread against the published bands
+(Phase 13). Both are now measured; neither is open. **SVF's priority is not raised** — see the
+deferred list, where unit definition and footprint coverage lead.
 
 **Resolved:** Bernard et al. (2024) §2.5, p. 2085 states the weights apply only to built types;
 natural types go through a separate branch (Figs. 2–3). Phase 4's raster pipeline is therefore
@@ -544,9 +557,16 @@ The spec previously conflated them; they are different instruments:
 - **Compactness axis — 1↔4, 2↔5, 3↔6.** Height held fixed, building surface fraction varies.
   This is the diagnostic for footprint coverage and unit definition.
 
+**Report both only as pair-normalised lift against a composition-preserving null** (Phase 12).
+The raw share is retired: the height axis affords six pairs to compactness's three, so a null
+that never looks at the data awards height 3.9× more error.
+
 *Acceptance:* end-to-end run produces a valid GeoParquet, `units_viz.parquet` and manifest; both
-confusion axes reported separately; LCZ 10 precision/recall curve present for the Rotterdam
-fixture.
+confusion axes reported separately as normalised lift; LCZ 10 precision/recall curve present for
+the Rotterdam fixture.
+
+---
+
 ### Phase 6.5 — Unit-scale experiment — CONCLUDED
 
 **Result: the scale hypothesis was wrong. Do not re-run.** Enclosure-based computation does not
@@ -570,6 +590,12 @@ pre-registered fallback pointed the wrong way.
 **Range recalibration remains blocked.** Recalibrating Stewart & Oke against a parameter biased
 by upstream data loss would encode that loss into the package's own definition of an LCZ and
 forfeit comparability with the literature.
+
+*(Superseded in part by Phase 13: the patch-versus-cell hypothesis returns and is supported,
+reached from the opposite direction once the numerator was fixed.)*
+
+---
+
 ### Phase 6.6 — Footprint attrition remediation — CONCLUDED
 
 `buildings_area` retains 99.49% (Berlin) / 100.00% (Rotterdam). Berlin arm A rose 17.7% → 24.3%
@@ -590,27 +616,31 @@ Findings worth keeping:
   Microsoft ML; the high-overlap tail is OSM kiosks and garages. It separates small structures
   standing in the roadway from blocks fronting it. The docstring must say so.
 
-**Residual: 24.3% against the 50–60% imagery-based maps reach. Not closed.**
+*(The axis movement reported here was read from raw shares and is superseded by Phase 12.)*
+
+---
+
 ### Phase 6.7 — Instrument diagnostics — CONCLUDED
 
 **The ceiling is 53.2%.** On the 432 Berlin fixture cells carrying both references, `lcz_v3.tif`
 agrees with So2Sat labels 53.2% of the time. The 50–60% band lczkit was held to is a band the
-comparator does not itself clear here.
+comparator does not itself clear here. **Superseded by Phase 9: that was a small-sample artefact;
+the real Berlin ceiling is 75.2% on 9 627 cells.**
 
-| Berlin, same run, same cells | agreement |
+| Berlin, same run, same cells (432) | agreement |
 |---|---|
-| lczkit arm A vs So2Sat labels | **40.9%** |
+| lczkit arm A vs So2Sat labels | 40.9% |
 | `lcz_v3` vs So2Sat labels — the ceiling | 53.2% |
 | lczkit arm A vs `lcz_v3` | 24.3% |
 
-**The residual is 12.3 points, not 26.** lczkit beats `lcz_v3` outright on LCZ 5 (32.1% vs 18.8%)
-and trails on LCZ 2 (43.7% vs 63.7%). Nothing was tuned to achieve this.
+lczkit beats `lcz_v3` outright on LCZ 5 (32.1% vs 18.8%) and trails on LCZ 2 (43.7% vs 63.7%).
+Nothing was tuned to achieve this.
 
-**The error diagnosis inverted.** Against `lcz_v3`, Berlin's height axis carried 31.8% of
-disagreement and compactness 25.8%. Against real labels it is compactness 55.2%, height 17.0% —
-most of the apparent height error was `lcz_v3` reading Mitte as compact high-rise. Phase 6.6
-promoted height estimation on evidence taken against the wrong reference. **Revised candidate
-order: unit definition / footprint coverage → SVF → height.**
+**The error diagnosis inverted** — against `lcz_v3`, Berlin's height axis carried 31.8% of
+disagreement and compactness 25.8%; against real labels, compactness 55.2% and height 17.0%.
+Phase 6.6 promoted height estimation on evidence taken against the wrong reference. **Both
+readings were later shown by Phase 12 to have been taken through a broken instrument** — the raw
+share cannot compare the axes at all.
 
 Also resolved: `is_planar_enforced: True` (three zero-area-overlap footprint pairs cleared by a
 1 µm buffer subtraction, 4.5×10⁻⁵ m² of 3.13 km², running after `absorb_small_buildings`).
@@ -621,21 +651,15 @@ threshold.
 0.30–0.50, bimodal shed/apron rather than flat low, arms A and C identical so cleaning removes
 nothing — and **10.7% of reference LCZ 8 cells contain no building at all.** The reference is
 coarser than the ground. With no So2Sat coverage either, its agreement figure carries no signal.
-Retain Rotterdam as the industrial fixture for the LCZ 10 rule only; drop it from quality
-reporting.
-
-**A vs B: do not adopt enclosures.** B leads Berlin against labels 45.4% vs 40.9% and lowers the
-compactness axis 55.2% → 49.0%, but the entire lead lives in one class of one city and it still
-trails Rotterdam. Revisit only with metropolitan-scale evidence.
+Retain Rotterdam as the industrial fixture for the LCZ 10 rule only.
 
 ---
 
 ## MVP COMPLETE — baseline recorded
 
-**Berlin 40.9% against So2Sat ground truth.** WARNING: **the 53.2% ceiling this was originally
-judged against was a small-sample artefact of 432 cells. The real Berlin ceiling is 75.2% on 9 627
-cells** (Phase 9). So 40.9% is ~54% of ceiling, not 77%. **Both sides need re-measuring on the full
-cell set** — the lczkit figure came from the same 432 cells.
+**Berlin 35.3% against a 75.2% ceiling, 9 627 cells** (Phase 10, independently reproduced). This
+supersedes the 40.9% / 53.2% figures the original MVP framing rested on — both came from the same
+432-cell sample. The gap is 40 points, not 12.
 
 The decision to stop optimising agreement stands, but on the correct grounds: the remaining causes
 are scoped work rather than mysteries. It was **not** because the package was near its ceiling.
@@ -656,6 +680,13 @@ Do not open further diagnostic phases against the 9 km² fixture.
 against a 15h14m run that never finished. Every remaining whole-extent step is sub-linear (max
 exponent 0.93, `clean_buildings`).
 
+The two quadratic bookends that produced the 15-hour runtime, and their fates:
+
+| step | scaling | outcome |
+|---|---|---|
+| `resolve_artifact_threshold` → whole-network `neatnet.fix_topology` | exponent 2.0 in feature count | replaced by pooled per-tile distributions; ~8.6 h → ~70 s |
+| `resolve_buildings_on_streets` → every footprint against one unioned road geometry | ~75 h extrapolated over Berlin | index-bounded, exact, 39.3× faster, 0.0 m² symmetric difference |
+
 **Pooled artifact threshold: ADOPTED.** The pre-registered bar — "does not move any
 classification" — was **wrong, and is superseded.** It presumed the whole-network threshold is
 reference truth. It is not: both are estimators of the same heuristic cut point, and neither has a
@@ -668,11 +699,19 @@ The corrected bar, and the measurements against it:
 | no systematic bias | both estimators converge; pooled returns 8.187586 three consecutive extents, whole-network settles at 8.191828 — 4 parts in 10 000 |
 | deviation not growing with extent | **shrinks**: 0.0257 (256 km²) → 0.0042 (400, 484 km²) |
 | flips confined to adjacent classes | yes — 5→4 ×2, 9→5 ×2, 8→6, 12→11 |
-| flip rate below enterprise noise | 6 / 26 040 = 0.023%, against a package agreement of 40.9% versus a 53.2% ceiling |
+| flip rate below enterprise noise | 6 / 26 040 = 0.023% |
 | cost | **~8.6 h → ~70 s**, up to 193× at 484 km² |
 
-Conditions: the 891 km² A/B is still to be reported; a materially higher flip rate there reopens
-this decision.
+**891 km² A/B — adoption CONFIRMED.** Whole-network 8.140679 (38 372 s / 10h39m) against pooled
+8.131236 (~70 s): deviation 0.009443, **10 of 172 181 cells moved (0.0058%)** — a four-fold fall
+from 0.0230% at 256 km². Note the exponent-2.0 fit projected ~8.6 h against a measured 10h39m:
+**power-law extrapolations from small extents run optimistic**, so treat such fits as lower bounds
+when deciding feasibility. Downstream pipeline arms took 456 s and 551 s.
+
+Three of the ten moves involve LCZ 10, which the distance metric never assigns. The path is real
+and unverified: `resolve_buildings_on_streets` consumes the simplified network, so a different
+threshold trims different footprints and every building-area parameter — including
+`industrial_fraction` — moves with it. **Check this first if those transitions ever matter.**
 
 **Per-seam stitching: built, measured, REVERTED.** Its premise was false. At 891 km² the global
 stitch is **17.4 s, not 6h50m**; per-seam was 24% slower, diverged in linework (23.5 km of 19 078,
@@ -680,94 +719,9 @@ stitch is **17.4 s, not 6h50m**; per-seam was 24% slower, diverged in linework (
 0.072). The 6h50m had been attributed to `_stitch` by inference — it is the next thing the code
 does — and a fix built on that inference without checking.
 
-**The real second bookend, found by systematic sweep:** `resolve_buildings_on_streets` intersected
-every footprint against one unioned road geometry — 87.8 s for 9 563 footprints at 16 km² against
-2.1 s to build the union, extrapolating to ~75 h over Berlin. It had never surfaced because no run
-had ever reached it. Index-bounding is **exact**: 39.3× faster, symmetric difference 0.0 m².
-
 `forkserver` note: a forkserver child re-executes the parent entry point like a spawn child does.
-`__main__`'s `__file__` and `__spec__` are hidden for the life of the pool.
-
-**The tiling core is validated.** 891 km² of Berlin, 594 tiles, simplified in **7.5 minutes**
-against ~28 hours projected untiled. Building cleaning is near-linear — 76.2 s for 303k footprints
-at 400 km², so ~4 min at 892k — and is not a problem; the earlier suspicion there was wrong.
-
-**Two serial bookends around the tiling are quadratic**, and together account for the entire
-15-hour runtime:
-
-| step | scaling | cost at metropolitan scale |
-|---|---|---|
-| `resolve_artifact_threshold` → `neatnet.fix_topology` on the whole network | exponent **2.0** in feature count (measured at 64/144/256/484 km²) | ~8.6 h extrapolated, ~8h15m observed |
-| `_stitch` → `remove_interstitial_nodes` on the full stitched network | quadratic | 6h50m and not completing |
-
-A whole-network step was introduced **to make seams correct** and reintroduced the quadratic that
-Phase 8 exists to remove. This is the third time in this project a correctness mechanism has
-created a defect that took a phase to find.
-
-**Three fixes, in this order:**
-
-1. **`mp_context="forkserver"`** on the process pool. The default `fork` deadlocks when the parent
-   has already run threaded native libraries — observed as parent and all 32 workers at zero CPU.
-   Also set `OMP_NUM_THREADS=1` and the MKL/OpenBLAS equivalents in workers; 32 workers each
-   spawning their own thread pool is the same root cause one step later. Do this first — it
-   unblocks measuring the other two in parallel.
-2. **Pin the artifact threshold from pooled per-tile distributions**, not the whole network. Each
-   tile already runs `fix_topology` on its own window inside `neatify`; pooling the per-tile
-   face-artifact-index distributions costs k × (n/k)² and parallelises.
-3. **Stitch per seam, not globally.** `remove_interstitial_nodes` only needs to run on linework
-   near a seam; tile interiors are already healed.
-
-**Fixes 2 and 3 each replace a global operation with a local one, and in both cases the
-correctness argument is "the interior is already handled." That argument must be measured, not
-asserted.** Required validation for each:
-
-- **Fix 2:** compute the tile-pooled threshold at 64, 144, 256 and 484 km² and compare against the
-  whole-network thresholds already measured at those extents. Faces spanning seams are split or
-  absent from every tile's distribution, so the pooled distribution is an approximation with an
-  unbounded error until measured. Adopt only if deviation does not move any classification, and
-  record the measured deviation. Divergence growing with extent is disqualifying.
-- **Fix 3:** compare per-seam stitched output against globally stitched output at 64 km², where
-  global remains tractable. The existing seam metric (99.97%) is the instrument.
-
-*Acceptance:* a full Berlin metropolitan extent completes end to end within a documented wall
-time; both equivalence tests pass with recorded deviations; per-tile results cached; no remaining
-whole-extent operation with an unmeasured scaling exponent.
-
-**lczkit cannot currently process a city.** `neatnet` is superlinear in extent: 9 km² cleans in
-~1 minute, 144 km² ran 1h35m and 256 km² 2h35m without completing. This has been invisible for
-seven phases because the fixture is 9 km², while three phases were spent chasing agreement points
-on that fixture. A package scoring 40.9% that runs on a whole city is worth far more than one
-scoring 45% on a tile it cannot leave.
-
-Everything else — Phase 7, SVF, unit definition, height tiers — is downstream of this.
-
-1. **Profile first.** Confirm the cost is `neatnet` itself and not the exclusion mask or an
-   upstream join. Do not optimise on assumption.
-2. **Spatial chunking with buffered overlap**: tile the extent, simplify per tile, stitch at the
-   seams. Superlinearity is what makes this pay — k tiles is much cheaper than one extent.
-   Seam correctness is the hard part; test that a road crossing a tile boundary simplifies
-   identically to the untiled case.
-3. **Parallelise across tiles.** This is an HPC deployment with idle cores.
-4. **Cache per-tile results** under `input/`, keyed like every other cache.
-5. Re-run the metropolitan A/B comparison once it completes — that decision is gated on this,
-   not on the classifier.
-
-*Acceptance:* a full Berlin metropolitan extent completes end to end within a documented wall
-time; tiled and untiled simplification agree on a fixture-scale extent; per-tile results cached.
-
----
-
-**891 km² A/B — adoption CONFIRMED.** Whole-network 8.140679 (38 372 s / 10h39m) against pooled
-8.131236 (~70 s): deviation 0.009443, **10 of 172 181 cells moved (0.0058%)** — a four-fold fall
-from 0.0230% at 256 km². The reopening condition is not met. Note the exponent-2.0 fit projected
-~8.6 h against a measured 10h39m: **power-law extrapolations from small extents run optimistic**,
-so treat such fits as lower bounds when deciding feasibility. Downstream pipeline arms took 456 s
-and 551 s.
-
-Three of the ten moves involve LCZ 10, which the distance metric never assigns. The path is real
-and unverified: `resolve_buildings_on_streets` consumes the simplified network, so a different
-threshold trims different footprints and every building-area parameter — including
-`industrial_fraction` — moves with it. **Check this first if those transitions ever matter.**
+`__main__`'s `__file__` and `__spec__` are hidden for the life of the pool. Workers also pin
+`OMP_NUM_THREADS=1` and the MKL/OpenBLAS equivalents, on both the serial and parallel branches.
 
 **Cached and cold runs differ by 75 of ~198 800 features — CLOSED in Phase 9 at `040be15`.** Both
 halves of the original diagnosis were inference from adjacency and both were wrong. The cache was
@@ -776,6 +730,9 @@ stitch ordering was innocent (`pool.map` preserves job order). The real unsorted
 the front door: `OvertureSource._fetch` runs a DuckDB scan over many remote parquet files with no
 `ORDER BY`, so row order was whatever the parallel readers finished in. Every layer now arrives
 sorted by GERS id. Phase 12 closed two residuals in the same claim — see its write-up.
+
+---
+
 ### Phase 9 — Multi-city validation — CONCLUDED
 
 **The founding premise is confirmed, and it is the binding constraint.**
@@ -793,21 +750,20 @@ The mechanism, stated precisely: with `Hr` null nearly everywhere the metric run
 surface fraction alone and **the built types stop being separable in principle** — not inaccurate,
 not separable. Cairo: 3.4% overall, 1.3% built.
 
-**The height axis dominates, reversing Phase 6.7.** Median 15.5% versus 2.6% compactness, in 11 of
-15 cities, roughly three to one. corr(tier-1, height-axis share) = −0.44. Phase 6.7's opposite
-finding came from 432 Berlin cells carrying two classes, both mid-rise — a fixture on which the
-height axis was **near-untestable by construction**. Candidate order is now: **areal height tiers →
-unit definition → SVF**.
-
 **A vs B: split verdict, not adopted.** B ahead in 5/15 overall (mean −1.5 pts) but **9/15 on built
 classes (mean +2.4 pts)**. Enclosures approximate an LCZ patch in built fabric and smear the natural
-classes, which are large and heterogeneous (Rio: −13.8 overall, −0.9 built). Overall is what a user
-gets, so not adopting — but "the lead lives in one class of one city" is dead: the built-class
-advantage spans three continents. Revisit after height lands.
+classes, which are large and heterogeneous (Rio: −13.8 overall, −0.9 built).
+
+*(This phase's "height dominates 15.5% vs 2.6%" reading is retired — see Phase 12. It was a raw
+share, measured at cascade `none`, through an instrument that awards height 3.9× on affordance
+alone.)*
 
 Caveats for the paper: Hong Kong failed on a GEOS predicate (`orientationIndex` encountered
-NaN/Inf) — a robustness gap. Windows retain a median 51% of each city's patches, so these are
-**urban cores, not whole cities**.
+NaN/Inf) — since fixed, see Phase 10. Windows retain a median 51% of each city's patches, so these
+are **urban cores, not whole cities**.
+
+---
+
 ### Phase 10 — Height cascade completion — CONCLUDED
 
 **The cascade works: built-class agreement improves in 9 of 9 cities, mean +6.5 points**, coverage
@@ -842,12 +798,13 @@ treats the wrong thing: the problem is dispersion, not a low tail — clipping a
 values while leaving the other side of an over-wide distribution intact.
 
 Hong Kong completes in 14.9 min with **13 classes — the richest class set on disk**, and the
-antidote to the two-mid-rise-class fixture that distorted Phase 6.7. Use it as a primary fixture.
+antidote to the two-mid-rise-class fixture that distorted Phase 6.7. It is the primary fixture.
 
 **Berlin at full sample: 35.3% against a 75.2% ceiling on 9 627 cells**, independently reproduced.
-This supersedes the 40.9%/53.2% figures the MVP-complete framing rested on. The gap is 40 points,
-not 12. It does not change priorities, but the honest framing is "here is what constrains this
-class of method," not "here is a good map."
+The honest framing is "here is what constrains this class of method," not "here is a good map."
+
+---
+
 ### Phase 11 — Unit decision and cascade ordering — CONCLUDED
 
 **E1 — split verdict, enclosures not adopted (third time, same reason).** Fifteen cities at
@@ -1006,14 +963,13 @@ range finding.
 
 ### STOP RULE — applies after Phase 13
 
-**No further diagnostic phases.** Twelve phases in, the finding rate remains high but the returns
+**No further diagnostic phases.** Thirteen phases in, the finding rate remains high but the returns
 are now scientific rather than engineering: each phase yields a better-understood limit rather than
 a better map. That is the paper's material, not the package's.
 
 Remaining work, in order:
 
-1. **Phase 7 — the static map site.** The only outstanding deliverable. A city runs in ~10 minutes;
-   `height_completeness` as a visible layer is the clearest illustration of the founding result.
+1. **Phase 7 — the static map site.** The only outstanding deliverable.
 2. **The paper.**
 3. **Cleanup** — docs, release.
 
@@ -1032,15 +988,34 @@ Remaining work, in order:
    because the central tendency is wrong, which it largely is not, but because the within-class
    spread on a grid is wider than the published bands can hold.
 
+Plus, as an unexplained regularity worth reporting rather than resolving: **the compactness lift and
+the enclosure A/B advantage split along the same seven-against-nine regional line, twice measured,
+mechanism unknown.**
+
 None required lczkit to score well. They required provenance tracking and sixteen cities, which
 nothing else in this space has done.
 
+#### One bounded exception, for the paper only — not a new diagnostic phase
+
+**LCZ 7 (lightweight low-rise / informal settlements) at 8.2% in range** — 0.417 against a published
+0.60–0.90, low on both tails across five non-European cities — is an Overture coverage limit on the
+class that matters most in exactly the cities the founding premise concerns. A paper arguing that
+open-data availability constrains LCZ mapping in the Global South cannot omit the informal-settlement
+result: it is where a reader will look first.
+
+Measure it from existing records — LCZ 7 coverage, BSF and agreement by region — and report it. One
+class, no lever hunt, no new phase.
+
+**Per-cell heterogeneity measure: future work, do not build.** It would say more than any
+recalibration and belongs in the discussion as a proposal. It is a new parameter carrying its own
+validation burden, and the argument does not need it.
+
 ---
 
-### Phase 7 — Static map site (~5 days, post-MVP)
+### Phase 7 — Static map site — NEXT, AND THE LAST DELIVERABLE
 
-Build **after** the MVP is complete. The deliverable is a self-contained, archivable directory
-that opens with no server and no network access — it is a paper supplement, not a dev tool.
+The deliverable is a self-contained, archivable directory that opens with no server and no network
+access — it is a paper supplement, not a dev tool.
 
 **Do not build a Python web app.** No Streamlit, no Dash, no Panel, no marimo, no kepler.gl
 embed. No live kernel, no callbacks, no CDN links, no basemap API keys. If the design starts
@@ -1069,14 +1044,22 @@ tippecanoe invocation in the manifest.
 switching is a client-side style expression over already-loaded tiles — never a refetch and
 never a re-render of the source.
 
-Layers:
-- LCZ primary class (default view, Demuzere colour table)
+Layers, in selector order:
+- **LCZ primary class** (default view, Demuzere colour table)
+- **`height_completeness` and `height_tier_fractions` — first-class layers, not diagnostics.**
+  They are the visible form of the project's central result: Cairo at 1% tier-1 coverage against
+  Berlin at 80% should be legible at a glance. These sit **second in the selector, above the UCP
+  choropleths.**
 - any single UCP as a choropleth, using the precomputed breaks from the manifest
 - `uniqueness`
-- `height_completeness`
 - buildings as MapLibre native `fill-extrusion` driven by the `height` attribute, optionally
   coloured by `height_source`. **Use `fill-extrusion`, not deck.gl** — no extra bundle is
   justified unless a requirement appears that MapLibre genuinely cannot meet.
+
+**Ship one site per city for a subset of the sixteen, not Berlin alone.** At minimum one
+high-coverage city and one low-coverage city outside Europe, side by side — that comparison is the
+paper's central figure and the site is the natural place for it. Hong Kong is the better
+morphological fixture (13 classes); pair it with a low-tier-1 city — Cairo, Nairobi or Mumbai.
 
 **Per-unit inspection.** Click a unit → sidebar showing `lcz_primary`, `lcz_secondary`,
 `uniqueness`, a small bar chart of the 17-way distance vector, every UCP with its unit of
@@ -1087,7 +1070,8 @@ a specific unit can be cited directly.
 
 *Acceptance:* the site directory opens correctly from `file://` with networking disabled, and
 serves correctly from `python -m http.server` behind an SSH tunnel; layer switching does not
-refetch tiles; the whole directory is portable to static hosting unchanged.
+refetch tiles; the whole directory is portable to static hosting unchanged; height provenance is
+present as a first-class layer; **at least two cities published.**
 
 ---
 
@@ -1111,7 +1095,7 @@ PDF and inferring it.
 | Stewart, Oke & Krayenhoff (2014), *Int. J. Climatol.* 34(4), 1062–1080 | `10.1002/joc.3746` | Phase 6 — refined per-class UCP values |
 | Bernard et al. (2024), *GMD* 17, 2077–2107 | `10.5194/gmd-17-2077-2024` | Phases 2, 5, 6 — RSU partitioning, the 14 UCPs, normalisation and distance-to-prototype classification. Open access. |
 | Bernard et al. (2022), *GMD* 15, 7505–7532 | `10.5194/gmd-15-7505-2022` | Phase 3 — missing building height estimation. Open access. |
-| Demuzere et al. (2022), *ESSD* 14, 3835–3873 | `10.5194/essd-14-3835-2022` | Phase 6 — integer coding convention, colour table, validation target |
+| Demuzere et al. (2022), *ESSD* 14, 3835–3873 | `10.5194/essd-14-3835-2022` | Phase 6 — integer coding convention, colour table, validation target. **Cite v3** — the map in use is `lcz_v3.tif`. |
 | Davenport et al. (2000), AMS 12th Conf. Applied Climatology | — | **Deferred** — terrain roughness class lookup. Requires z₀, which is deferred; not satisfiable in Phase 5. |
 
 ### Tier 2 — deferred algorithms, included ahead of need
@@ -1149,7 +1133,9 @@ Class definitions here become **config values**, so read them rather than assumi
 | ESA WorldCover v200 Product User Manual (Zanaga et al.) | Phase 4 — pervious / impervious / water class mapping |
 | Lang et al. (2023), *Nat. Ecol. Evol.* 7, 1778–1789, `10.1038/s41559-023-02206-6` | Phase 4 — ETH global canopy height |
 | GHSL GHS-BUILT-H technical documentation (Pesaresi et al., JRC) | Phase 3 — height fallback tier |
+| WSF-3D (DLR, TanDEM-X derived) product documentation | Phase 3 — height tier 3 |
 | Overture Maps schema reference (buildings, transportation, base) | Phase 1 — pin the schema version |
+| So2Sat LCZ42 v4 documentation | Phase 6+ — primary validation reference |
 
 ### Deferred-tier sources
 
@@ -1175,7 +1161,7 @@ reconcile silently.** That flagging behaviour is working; keep it.
 | Overture has no heavy/light industry split | Accepted limitation, documented, conservative threshold. Not solvable within Overture's schema. | 5, 6 |
 | `momepy.describe_agg` unused | Correct call — it requires numba (absent) and offers only one-building-to-one-unit semantics. | 5 |
 | `gpd.overlay` `keep_geom_type` warning | Correct not to silence package-wide, which would mask real geometry-type problems. If the noise becomes a problem, scope suppression to the specific call site with a comment explaining why it is benign there. | 3, 5 |
-| Confusion pairs 1↔4, 2↔5, 3↔6 labelled "height axis" | **Spec bug, corrected.** Those hold height fixed and vary compactness. The height axis is 1↔2↔3 and 4↔5↔6. Both are now reported, separately and correctly named. | 6 |
+| Confusion pairs 1↔4, 2↔5, 3↔6 labelled "height axis" | **Spec bug, corrected.** Those hold height fixed and vary compactness. The height axis is 1↔2↔3 and 4↔5↔6. Both are now reported, separately and correctly named. **Phase 3's copy of the same error was corrected later, in the Phase 13 consistency sweep.** | 3, 6 |
 | Bernard weights — do they apply to natural types? | **Resolved from the paper**, §2.5 p. 2085: built types only; natural types are a separate branch. Phase 4's rasters are the sole classifier for A–G. | 6 |
 | `bernard2024` preset only partially applicable | Renamed `bernard2024_partial`. 17 of 21.5 weight units applied; SVF and z₀ deferred; `FB` carries ~47% of the metric. Unapplied dimensions recorded in the manifest. | 6 |
 | LCZ 10 pair-gated rule measured inert on Rotterdam | Rule replaced. LCZ 10 removed from the distance metric per Bernard; assigned functionally with a threshold **calibrated by precision/recall against the Rotterdam reference**, not chosen a priori. | 6 |
@@ -1185,7 +1171,7 @@ reconcile silently.** That flagging behaviour is working; keep it.
 | Anti-pattern "don't commit anything from `docs/references/`" contradicting Phase 0 | **Spec bug, corrected** (third occurrence). PDFs are ignored; `tables/`, `README.md`, `references.bib` are committed. | 0 |
 | Stewart & Oke cannot classify the natural family | **Accepted for MVP.** A–D separate only on building-derived parameters; F and G differ in no published dimension. lczkit-defined `tree_fraction`/`water_fraction` ranges tagged `source="lczkit"`; C and F recorded unreachable in the manifest. Reading Bernard's natural branch (Figs. 2–3) and feeding canopy height as the natural roughness element is **deferred**, not rejected. | 6 |
 | Five of ten Stewart & Oke properties never reach the metric | Accepted and documented. Anthropogenic heat is the only published property separating LCZ 10 from 8 directly (300+ vs ≤50 W m⁻²) and is unmeasurable here — the standing justification for a functional attribute. | 6 |
-| Global LCZ map is `lcz_v3.tif`; Tier 1 citation describes an earlier version | Record both in the manifest. Update the references README to cite v3. | 6 |
+| Global LCZ map is `lcz_v3.tif`; Tier 1 citation describes an earlier version | Record both in the manifest. References README and Tier 1 row cite v3. | 6, 13 |
 | Stale Overture cache entry for a discarded bbox | Correct not to delete. Mark superseded entries with a `<name>.discarded` sidecar. | 1 |
 | Phase 1 cleaning destroyed 23.5% of footprint area | **Spec bug, corrected.** The cleaning pipeline was lifted from Majer & Fleischmann, where it serves tessellation and area loss is irrelevant; here BSF carries ~half the metric. Split into `buildings_topo` and `buildings_area`. | 1, 5 |
 | `absorb_small_buildings` deletes rather than dissolves | Bug, not policy. Must union the small footprint into its neighbour. | 1 |
@@ -1201,38 +1187,35 @@ reconcile silently.** That flagging behaviour is working; keep it.
 | Phase 6.5's rejection of the scale hypothesis | **No longer stands.** It was measured over a broken numerator. With footprints restored, arm B leads Berlin 28.4% vs 24.3%. Decision deferred to 6.7 pending the planarity fix and a real reference — not reversed, re-opened. | 6.5, 6.7 |
 | `buildings_area` — trim overlaps but do not merge | Confirmed. BSF sums overlay pieces, so overlaps double-count. Resolves the contradiction between the shared-operations sentence and the `buildings_area` list. | 1, 5 |
 | `street_profile` layer choice | Confirmed: `street_profile` reads `buildings_topo`; every area statistic reads `buildings_area`. | 5 |
-| Target of 50–60% agreement | **Wrong target.** `lcz_v3` itself reaches only 53.2% against So2Sat labels on the Berlin fixture. lczkit's 40.9% is 77% of the comparator, beating it on LCZ 5. Baseline accepted; agreement optimisation stopped. | 6.7 |
-| Height promoted to first candidate cause in 6.6 | **Reversed.** That evidence was taken against `lcz_v3`, whose own error inflated the height axis. Against labels: compactness 55.2%, height 17.0%. Order is now unit definition → SVF → height. | 6.6, 6.7 |
+| Target of 50–60% agreement | **Wrong target.** `lcz_v3` itself reaches only 53.2% against So2Sat labels on the 432-cell Berlin fixture. Baseline accepted; agreement optimisation stopped. Superseded by the 75.2% full-sample ceiling. | 6.7, 9 |
+| Height promoted to first candidate cause in 6.6 | **Reversed**, then the reversal itself superseded — both readings came from raw axis shares. See Phase 12. | 6.6, 6.7, 12 |
 | Rotterdam treated as a validation city | Dropped from quality reporting. 10.7% of its reference LCZ 8 cells contain no building; no So2Sat coverage. Retained as the industrial fixture for the LCZ 10 rule only. | 6.7 |
 | Enclosure-vs-grid BSF comparison on Berlin | Self-corrected: the two sets covered different ground (0.15 vs 0.29 km²). Covered area must be printed beside any such comparison. Rotterdam's comparable sets show enclosures moving LCZ 8 *further* out of range. | 6.7 |
 | `eps_m` as config | No — a floating-point tolerance is not a domain threshold. Module constant. | 1 |
-| `neatnet` superlinearity | **Existential, now the top priority.** 144 km² did not complete in 1h35m. Invisible for seven phases because the fixture is 9 km². Phase 8. | 1, 8 |
-| Whole-network `fix_topology` in `resolve_artifact_threshold` | Quadratic (exponent 2.0), ~8.6 h at metropolitan scale. Replaced by pooled per-tile distributions, **subject to an equivalence test** against the whole-network thresholds already measured at 64/144/256/484 km². | 8 |
-| Global `remove_interstitial_nodes` in `_stitch` | Quadratic, 6h50m without completing. Replaced by per-seam stitching, subject to equivalence testing at 64 km². | 8 |
-| `ProcessPoolExecutor` default `fork` context | Deadlocks after threaded native libs run in the parent. Use `forkserver`, and pin `OMP_NUM_THREADS=1` in workers to prevent thread oversubscription across 32 processes. | 8 |
+| `neatnet` superlinearity | **Existential when found.** 144 km² did not complete in 1h35m. Invisible for seven phases because the fixture is 9 km². Resolved by tiling in Phase 8. | 1, 8 |
+| Whole-network `fix_topology` in `resolve_artifact_threshold` | Quadratic (exponent 2.0), ~8.6 h at metropolitan scale. Replaced by pooled per-tile distributions after an equivalence test at 64/144/256/324/400/484 km². | 8 |
+| `ProcessPoolExecutor` default `fork` context | Deadlocks after threaded native libs run in the parent. Use `forkserver`, and pin `OMP_NUM_THREADS=1` in workers to prevent thread oversubscription. | 8 |
 | Building cleaning suspected as a scaling problem | **Wrong.** Near-linear: 76.2 s for 303k footprints at 400 km², ~4 min at 892k. | 1, 8 |
 | Pooled-threshold bar "must not move any classification" | **My bar was wrong, superseded.** It presumed the whole-network threshold is truth; both are estimators. Adopted on the corrected bar: no bias, deviation shrinking with extent, adjacent-class flips only, 0.023% rate, 440× cost. | 8 |
 | Per-seam stitching | Built, measured at the extent it was designed for, **reverted**. Global stitch is 17.4 s not 6h50m; per-seam was slower and less accurate. Premise was an unmeasured inference. | 8 |
 | 6h50m stall attributed to `_stitch` | Wrong by inference-from-adjacency. Real cause was `resolve_buildings_on_streets` intersecting every footprint against one unioned road geometry, ~75 h extrapolated. Index-bounding is exact: 39.3× faster, 0.0 m² symmetric difference. | 8 |
 | `forkserver` child re-executes the parent entry point | Like spawn. Hide `__main__`'s `__file__` and `__spec__` for the life of the pool. | 8 |
 | Pooled threshold at 891 km² | **Adoption confirmed.** 10 of 172 181 cells (0.0058%), four-fold below the 256 km² rate. Whole-network cost measured at 10h39m against ~70 s. | 8 |
-| `clean_vectors` at 4 469 s | **Outlier, not regression.** Two cold runs over the same extent gave 456 s and 551 s, bracketing the 585.6 s benchmark. Overlapped a 10-hour single-core job on a shared node — plausible cause, recorded as coincidence in time rather than measurement. | 8 |
-| Feature-count gap of 1.7% | **Wrong baseline.** 195 508 predates this phase's road-rule and threshold fixes. Post-fix runs give 198 698 / 198 804 / 198 879 — a 0.04% gap. | 8 |
+| `clean_vectors` at 4 469 s | **Outlier, not regression.** Two cold runs over the same extent gave 456 s and 551 s, bracketing the 585.6 s benchmark. Overlapped a 10-hour single-core job on a shared node — recorded as coincidence in time rather than measurement. | 8 |
+| Feature-count gap of 1.7% | **Wrong baseline.** 195 508 predates the road-rule and threshold fixes. Post-fix runs give 198 698 / 198 804 / 198 879 — a 0.04% gap. | 8 |
 | Cached and cold runs differ by 75 features | **Closed at `040be15`.** Not the cache (those runs shared none) and not stitch ordering (`pool.map` preserves job order) — both were inference from adjacency. `OvertureSource._fetch` scanned remote parquet with no `ORDER BY`, and `neatnet` re-nodes in receipt order. Layers now arrive sorted by GERS id. **A working-tree edit later reverted this record to "Open"; flagged in Phase 12 and restored.** | 8, 9, 12 |
 | Power-law extrapolation of runtime | Ran 24% optimistic (8.6 h projected, 10h39m measured). Treat such fits as lower bounds when deciding feasibility. | 8 |
-| Berlin's 53.2% ceiling | **Small-sample artefact of 432 cells. Real ceiling is 75.2% on 9 627.** The MVP-complete framing rested on it. Re-measure both lczkit and ceiling at full sample. | 6.7, 9 |
+| Berlin's 53.2% ceiling | **Small-sample artefact of 432 cells. Real ceiling is 75.2% on 9 627.** The MVP-complete framing rested on it. | 6.7, 9 |
 | "% of ceiling" as a metric | **Broken.** Vancouver: 41.8% against a 36.7% ceiling = 114%. The comparator is another estimator, not a bound. Report raw agreement and ceiling side by side. | 9 |
-| Phase 6.7's axis order (compactness → SVF → height) | **Reversed by Phase 9.** It came from 432 Berlin cells carrying two classes, both mid-rise, where the height axis was near-untestable by construction. Across 15 cities height dominates 15.5% vs 2.6%. | 6.7, 9 |
-| SVF as the next accuracy lever | **Dropped.** Weight 4 added to a metric that cannot fill its weight-6 `Hr` dimension across most of the world. Height tiers first. | 9, 10 |
-| Height cascade tiers 2–4 | **Specified in Phase 3, never built.** Phase 9 shows this is the binding constraint outside Europe. Now Phase 10. | 3, 10 |
-| A vs B | Split verdict: B ahead 9/15 on built classes (+2.4 pts) but 5/15 overall (−1.5). Enclosures smear large heterogeneous natural units. Not adopted; the one-class-one-city objection no longer applies. Revisit after height. | 9 |
+| SVF as the next accuracy lever | **Dropped.** Weight 4 added to a metric that could not fill its weight-6 `Hr` dimension across most of the world. Height tiers first; then Phase 12 named unit definition. | 9, 10, 12 |
+| Height cascade tiers 2–4 | **Specified in Phase 3, never built.** Phase 9 shows this is the binding constraint outside Europe. Built in Phase 10. | 3, 10 |
 | Height tier acceptance tested on per-building error | **Wrong test.** Open Buildings has the lowest per-building error and the only within-unit skill, and still degrades the map: `Hr` is a geometric mean and GOB's within-unit spread is 0.441 against reality's 0.195. Evaluate new height tiers on **within-unit dispersion**, not MAE. | 10 |
-| `full` cascade (with GOB 2.5D) as default | **Refuted.** `coarse→full` is −1.9 points, positive in only 4 of 9 cities. Default is `coarse`; GOB stays implemented and off. | 10 |
+| `full` cascade (with GOB 2.5D) as default | **Refuted.** `coarse→full` is −1.9 points, positive in only 4 of 9 cities. Default is `coarse`. | 10 |
 | `min_height_m` floor for Open Buildings | **Rejected.** Undocumented threshold tuned to stop one product hurting; would be copied and outlive its justification. Also treats the wrong thing — the problem is dispersion, not a low tail. | 10 |
 | P2: coarse products favour the grid over enclosures | **Refuted in the opposite direction.** B's built-class lead widens with heights filled (+1.7 → +4.1). Phase 9 handicapped enclosures by measuring them with `Hr` mostly null. | 10 |
 | Berlin baseline 40.9% / 53.2% ceiling | **Superseded.** Full-sample: 35.3% against 75.2% on 9 627 cells, independently reproduced. The gap is 40 points, not 12. | 6.7, 9, 10 |
-| Berlin as primary fixture | **Hong Kong is better** — 13 classes, the richest on disk, and the antidote to the two-mid-rise-class fixture that distorted Phase 6.7. | 10 |
-| A vs B, third measurement | Not adopted — built +3.8 (12/15) but overall −0.2 (8/15); the pre-registered rule required both. **Split is regional**: enclosures lead on both criteria outside Europe/N. America. Ruling: `unit_strategy` as config, default `grid`, **no auto-selection by region** — region is not the mechanism. | 11 |
+| Berlin as primary fixture | **Hong Kong is better** — 13 classes, the richest on disk, and the antidote to the two-mid-rise-class fixture that distorted Phase 6.7. Test strategy updated. | 10, 13 |
+| A vs B, three measurements | Not adopted, three times, same pre-registered rule (needs both overall and built). Phase 11's third pass: built +3.8 (12/15), overall −0.2 (8/15), **split regionally** — enclosures lead on both criteria outside Europe/N. America. Ruling: `unit_strategy` as config, default `grid`, **no auto-selection by region** — region is not the mechanism. | 9, 11 |
 | Cascade order as a blending knob | **Ill-posed.** Winner-takes-all per building; `full_reversed` is bit-identical to `coarse` in 6 of 8 cities. Order is a selection switch and no intermediate configuration is reachable by reordering. | 11 |
 | Open Buildings 2.5D | **Retired from the cascade.** Hurts first, claims 0.3–6.4% last. Code and tier interface kept, documented as measured-harmful. | 10, 11 |
 | Retention measured against summed raw footprint area | **Spec bug, corrected and implemented.** Sources self-overlap (Kowloon 7.52%, Berlin 0.61%), making ≥99%-of-sum and trim-not-merge jointly unsatisfiable. Measured against the **union**, one-sided; `FootprintCoverage` reports `raw_self_overlap_fraction` and a residual, since `union_retention` above 1.0 means the BSF numerator still double-counts. | 1, 11, 12 |
@@ -1245,31 +1228,33 @@ reconcile silently.** That flagging behaviour is working; keep it.
 | `unit_scale_experiment.show()` printed `lcz_v3` axes under an unlabelled heading | Fixed. It sat four lines below a table whose columns *are* labelled. Did not contaminate published figures, but the two references disagree by more than the quantity measured — Cairo 7.2% vs 24.7% compactness. | 12 |
 | `tiles.subset()` discarded the canonical row order | `sindex.query` is documented as unordered, and its result went straight to `neatnet` and to the pooled threshold that keys the tile cache. Sorted. **On the fixture the order-sensitivity that `test_simplification_depends_on_input_row_order` attributed to `neatnet` was `subset`'s own** — untiled, that network simplifies identically under a shuffle. | 8, 9, 12 |
 | Pooled-threshold thread environment asymmetric | The serial branch ran unpinned while the parallel branch ran pinned, and `n_workers` follows `os.sched_getaffinity` — so the same extent on a differently-sized node could land on a different cache key. Both branches now pinned. | 8, 12 |
-| Regional split, second independent sighting | Compactness lift 2.37 Europe/N. America vs 1.15 elsewhere; same seven-against-nine split as Phase 11's A/B. Finding in its own right; mechanism still unknown. | 11, 12 |
-| `unary_union` over city footprints | Superlinear, 711 s at 891 km². Component-wise union: 8.6 s, exact to 0.0000 m². | 12 |
+| Regional split, second independent sighting | Compactness lift 2.37 Europe/N. America vs 1.15 elsewhere; same seven-against-nine split as Phase 11's A/B. Finding in its own right; **mechanism still unknown, and the proposed street-area mechanism is refuted** (Phase 13). Report as an unexplained regularity. | 11, 12, 13 |
 | Row-order fix vs tile cache | Threshold bit-identical, but the cache would have served pre-fix tiles silently. `TILE_RESULT_VERSION` bumped. | 8, 12 |
-| Tiled order-sensitivity attributed to `neatnet` | Wrong cause — it was `subset`'s own on the fixture. The property is real (6 159-street Berlin fixture differs); the test recorded the wrong reason. | 12 |
 | Determinism / "stitch ordering" | **Closed in Phase 9 at `040be15`.** An external CLAUDE.md copy reverted this record to the disproved diagnosis; committed text restored. Residuals closed with deviation measured: ~1.2% of linework at different split points, total length unchanged to four decimal places. | 8, 9, 12 |
 | Externally-maintained CLAUDE.md copy | **Retired.** The committed file is canonical; rulings arrive as patches. If a supplied edit contradicts a committed record, flag and stop. | — |
-| `bsf_by_reference_class` grouped by `lcz_v3`, not by labels | **The second reference mix-up, in the instrument Phase 13 turns on.** `evaluate` built it from `fixture.reference`, whose own docstring says "a comparator, never the primary reference", while `fixture.ground_truth` went unused — 91 158 Berlin cells against 9 627 labelled. `RangeReport` now carries `reference_file`; `bsf_by_ground_truth_class` added, on the arm's own units. Class figures move up to 18.2 points; **the phase outcome does not.** | 6.5, 11, 13 |
+| `bsf_by_reference_class` grouped by `lcz_v3`, not by labels | **The second reference mix-up, in the instrument Phase 13 turns on.** `evaluate` built it from `fixture.reference`, whose own docstring says "a comparator, never the primary reference", while `fixture.ground_truth` went unused — 91 158 Berlin cells against 9 627 labelled. `RangeReport` now carries `reference_file`; `bsf_by_ground_truth_class` added, on the arm's own units. Class figures move up to 18.2 points; **the phase outcome does not.** Fix before any paper figure is generated. | 6.5, 11, 13 |
 | Phase 13 as "a re-analysis of stored records, seconds not hours" | **Not satisfiable.** Per-unit BSF is not persisted and the stored aggregate was against the wrong reference, so the sixteen cities were re-run at `coarse` — 5.09 h. The brief also said the test last ran on Berlin and Rotterdam pre-fixes; it ran on all sixteen in Phase 11, post-cleaning-fix and post-cascade. | 13 |
 | BSF against the published ranges | **Outcome 3 — the ranges do not transfer to 100 m cells.** One class of ten reaches, holding 11.9% of built cells. Medians are close (six of ten within 0.13 widths, LCZ 1 and 5 inside); **spread is what fails.** Published and empirical intervals reported side by side, empirical tagged `lczkit_empirical`. **Not recalibrated.** | 6.5, 13 |
 | "BSF depressed, worse in Europe" as the expected mechanism | **Refuted.** Europe trails on 2 of 9 classes and leads LCZ 2 by +35.4 points. Europe's BSF is the healthiest in the sample, so it cannot explain Europe's higher compactness lift. | 12, 13 |
 | Phase 6.5's patch-versus-cell hypothesis | **Returns, and is now supported** — from the opposite direction. 6.5 rejected it over a numerator losing 23.5% of footprints; with those restored the medians are right and the within-class variance is what the published bands cannot hold. | 6.5, 13 |
-| LCZ 7 at 8.2% in range | 0.417 against a published 0.60–0.90, low on both tails, five non-European cities. An **Overture coverage limit on informal settlements**, not evidence about the 100 m cell. Not opened — the stop rule applies. | 13 |
+| LCZ 7 at 8.2% in range | 0.417 against a published 0.60–0.90, low on both tails, five non-European cities. An **Overture coverage limit on informal settlements**, not evidence about the 100 m cell. **Opened as a bounded exception, paper scope only** — measured from existing records, no new phase. It is the class the founding premise is about. | 13 |
+| Per-cell heterogeneity measure | Future work, discussion section only. Do not build. | 13 |
 | Pooling a partial sweep against a complete stored record | Reported the difference between two city lists as a pipeline deviation (6.6%). Stability comparisons now intersect the city sets; restricted, the deviation is 0.0%. | 13 |
+| Superseded text left in concluded phase blocks | Phase 8's block opened with a nine-minute runtime and later asserted the package could not process a city; Phase 3 still carried the corrected-away axis pairing; deferred still listed SVF first. **Concluded phases keep measurements and rulings and drop imperatives.** | 3, 6, 8, 13 |
 
 ---
 
 ## Deferred — do not build unless asked
 
+**Priority order within deferred: unit definition and footprint coverage first** (Phase 12:
+normalised compactness lift 1.16 against height 0.86, leading 11 of 16 at `coarse`). **SVF is not
+the next lever** — it is weight 4 added to a metric whose weight-6 `Hr` dimension the cascade only
+recently filled. Standing caution: "adopt enclosures" is *not* the unit-definition answer, since
+arm B raises the compactness lift rather than lowering it.
+
 **Shrinkage of fine-resolution height products toward the unit mean** — the principled route to
 rescuing GOB 2.5D, attacking within-unit variance directly rather than trimming a tail. Speculative;
 only worth it if `Hr` dispersion becomes the binding residual.
-
-**Priority order within deferred: SVF first.** It carries weight 4 in Bernard's scheme and is
-the largest single missing dimension in the current metric; adding it materially reshuffles
-classification.
 
 Vector ray-cast sky view factor · roughness length and displacement height (Macdonald / Kanda)
 **and the Davenport terrain roughness class lookup, which depends on z₀** · Bernard's natural-type
@@ -1278,10 +1263,10 @@ trees as the roughness elements for A–D, so canopy height should recover A and
 push D toward near-zero canopy · additional height tiers (UT-GLOBUS, GlobalBuildingAtlas,
 EUBUCCO, morphology-based ML imputation) · ML classifier trained on So2Sat LCZ42 / DFC2017 ·
 fuzzy or continuous LCZ output · W2W / WRF export · OSM as an alternative `VectorSource` ·
-tessellation-based building-level units · dask-geopandas scaling · CLI · deck.gl overlay for buildings (only if MapLibre
-`fill-extrusion` proves insufficient) · run-comparison views in the site · OSM `industrial=*`
-subtags as supplementary heavy/light industry evidence (arrives with the deferred OSM source;
-the only realistic route to the distinction Overture discards)
+tessellation-based building-level units · dask-geopandas scaling · CLI · deck.gl overlay for
+buildings (only if MapLibre `fill-extrusion` proves insufficient) · run-comparison views in the
+site · OSM `industrial=*` subtags as supplementary heavy/light industry evidence (arrives with the
+deferred OSM source; the only realistic route to the distinction Overture discards)
 
 ---
 
@@ -1342,9 +1327,6 @@ the only realistic route to the distinction Overture discards)
 - **Don't assume a geometric set operation is cheap because its result is a scalar.** `unary_union`
   over a city's footprints is superlinear — 711 s at 891 km² against a 9.8-minute whole run.
   Component-wise union is sublinear and exact.
-- **Don't ship a correctness fix without bumping the cache version it invalidates.** The row-order
-  fix would have served pre-fix tiles silently, reintroducing the exact failure the Phase 8 entry
-  was opened for.
 - **Don't let "the reference" name a role instead of a file.** `lcz_v3` and the So2Sat labels can
   both fill it, they disagree by up to 18 points, and a table that does not record which one it
   used is indistinguishable from one that used the other. Both reference mix-ups this project
@@ -1353,3 +1335,7 @@ the only realistic route to the distinction Overture discards)
   compared against a complete one reports the difference between two city lists as a deviation —
   6.6% of it, until the comparison was restricted to the cities both records hold, where it is
   0.0%. Intersect the populations before differencing them.
+- **Don't leave superseded instructions in a concluded phase block.** Keep the measurements and the
+  rulings; delete the imperatives and acceptance criteria the phase was working from. Phase 8's
+  block ended up asserting both that Berlin runs in 9.8 minutes and that the package cannot process
+  a city.
