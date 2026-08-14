@@ -1065,6 +1065,19 @@ Berlin's 0.797 reproduces Phase 10's ~80% and Cairo's 0.010 its 1%. **83.5% of C
 takes its height from a 90 m TanDEM-X raster**, and that is now a selectable layer rather than a
 number in a table.
 
+**The default view never rendered until someone opened it.** tippecanoe's FlatGeobuf reader emits
+integer attributes as strings at every width, while floats pass through as numbers, so the LCZ
+`match` expression found no label and painted every cell `NODATA_COLOUR` — a field of blank grey
+squares in every published site, from `6ebaca2` onwards. `lcz_primary` is the only integer column the
+site renders, which is exactly why the choropleths looked fine and nothing seemed wrong. Fixed with
+`to-number` in the expression, keeping a class code an integer everywhere else it is read.
+
+**Thirty-seven tests could not see it**, because the style test asserted the expression carried the
+committed colours and the site test asserted the tileset was a valid archive: each half checked
+against its own assumption, and the defect lived in the gap. The test that closes it decodes the
+built tiles and evaluates the real paint expression against the real values, and fails 6 of 6
+without the fix.
+
 **Publishing a second city found a real defect.** The driver clipped ESA WorldCover from one
 hardcoded tile (`N51E012`, Berlin's). Hong Kong and Cairo each span two, so both raised
 `RasterioIOError: Attempt to create 0x0 dataset`. `clip_worldcover` already resolved and mosaicked
@@ -1245,6 +1258,8 @@ reconcile silently.** That flagging behaviour is working; keep it.
 | Phase 7 basemap as a Protomaps extract | **Not reachable here, replaced.** An extract needs a Go CLI or a ~120 GB download. Built from the run's own cleaned water and streets: already cached for the bbox, ODbL-attributable, and the same linework the classification used. | 7 |
 | tippecanoe at 256 cores | Fails with `745 shards not a power of 2` from its radix sort. Capped at `min(cpus, 32)`; output byte-identical across thread counts. Third defect invisible on a laptop and fatal on the deployment machine, after Phase 8's `fork` deadlock and thread oversubscription. | 7, 8 |
 | Selector order inherited from the manifest's `breaks` | Break order is DataFrame column order — incidental. It put `height_completeness` twelfth of thirteen and gave `height_tier_fractions` no entry at all, in the one place the spec names a position. Ordered deliberately; tier fractions reach the render set by prefix, since their columns are named after whichever cascade fired. **+2.12 MB, +7.5%** at 172 181 units, measured. | 7 |
+| The LCZ layer painted every cell as no-data | **The site's default view never rendered, from `6ebaca2` until it was looked at.** tippecanoe's FlatGeobuf reader emits integer attributes as *strings* — measured at int16, int32, int64 and uint8, while float64 survives as a number — so `["match", ["get", "lcz_primary"], 1, …]` found no label and fell through to `NODATA_COLOUR`. `lcz_primary` is the only integer column the site renders, which is why the choropleths were fine. Coerced with `to-number`. | 7 |
+| Style and tiles each tested against their own assumption | The style test asserted the expression carries the committed colours; the site test asserted the tileset is a valid archive. **Nothing asserted that the type in the tiles is a type the expression can match**, so a defect in the gap between them was invisible to 37 tests. A test now decodes the built tiles and evaluates the real paint expression against the real values — it fails 6 of 6 without the fix. | 7 |
 | WorldCover clipped from one hardcoded tile | Berlin's `N51E012`, inherited by the publish driver. Hong Kong and Cairo span two tiles each and both failed with `RasterioIOError: 0x0 dataset`. `clip_worldcover` already resolved and mosaicked correctly. **Found only by publishing a second city** — a city one tile-width away would have lost a quarter of its land cover silently. | 7 |
 | Pooling a partial sweep against a complete stored record | Reported the difference between two city lists as a pipeline deviation (6.6%). Stability comparisons now intersect the city sets; restricted, the deviation is 0.0%. | 13 |
 | Superseded text left in concluded phase blocks | Phase 8's block opened with a nine-minute runtime and later asserted the package could not process a city; Phase 3 still carried the corrected-away axis pairing; deferred still listed SVF first. **Concluded phases keep measurements and rulings and drop imperatives.** | 3, 6, 8, 13 |
@@ -1353,3 +1368,12 @@ deferred OSM source; the only realistic route to the distinction Overture discar
   land cover from a single hardcoded tile: correct for Berlin, a hard error for the next two cities,
   and — for a city one tile-width away — a quarter of the map silently missing. The second input is
   the one that tests the abstraction, which is why the spec asks for two cities and not one.
+- **Don't test a producer and a consumer only against their own assumptions.** The style test
+  asserted the paint expression was right and the tile test asserted the tileset was valid, and the
+  site's default view painted blank grey in every city because nothing asserted the *type in the
+  tiles* was a type the *expression* could match. Where two components agree by convention rather
+  than by a shared definition, the test has to span both — decode the artefact and run the real
+  consumer against it.
+- **Don't assume a format conversion preserves types.** tippecanoe's FlatGeobuf reader turns every
+  integer attribute into a string, at every width, while floats pass through. The GeoParquet was
+  right, the FlatGeobuf was right, and the tiles were wrong.

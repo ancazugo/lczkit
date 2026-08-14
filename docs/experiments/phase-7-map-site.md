@@ -327,7 +327,51 @@ second city would have found it.**
 Berlin's site is unaffected: `worldcover_tiles` resolves its window to `N51E012`, the same raster the
 hardcoded URL named.
 
-### 7.4 What the acceptance criteria now read against
+### 7.4 The default view had never rendered
+
+Reported on first opening a published site: the LCZ map was blank squares. It was not a regression
+from §7.1 or §7.2 — **the site's default layer had painted every cell as no-data since `6ebaca2`.**
+
+Diagnosed by decoding the tiles rather than reading the code. In one feature:
+
+```
+"unit_id": "grid_3794_58044"
+"lcz_primary": "12"          <- string
+"uniqueness": 1              <- number
+"tree_fraction": 0.224       <- number
+```
+
+`tippecanoe-decode` does not quote numbers, so `lcz_primary` genuinely *is* a string in the MVT. The
+GeoParquet has it as `Int8` and `pyogrio` writes it to FlatGeobuf as `int16`, both correct, so the
+conversion had to be tippecanoe's. Isolated on a three-feature probe:
+
+| written to FlatGeobuf | int16 | int32 | int64 | uint8 | float64 |
+|---|---|---|---|---|---|
+| read back from the MVT | `"1"` | `"1"` | `"1"` | `"1"` | `1` |
+
+**tippecanoe's FlatGeobuf reader stringifies every integer attribute, at every width.** The paint
+expression is `["match", ["get", "lcz_primary"], 1, "#8c0000", …]`, matching integer labels; a string
+matches none of them, so every cell took `NODATA_COLOUR` — `#3a3a3a`, a uniform dark grey.
+`lcz_primary` is the only integer column the site renders, which is why the fourteen float-valued
+choropleths were fine and nothing looked broken.
+
+Fixed by coercing in the expression: `["match", ["to-number", ["get", column]], …]`. Coercing there
+rather than casting the column to float in `write_flatgeobuf` keeps a class code an integer
+everywhere it is read, and confines the fix to the one place that depends on the tiler's type
+handling. A missing value coerces to 0, matches no label, and still takes `NODATA_COLOUR`.
+
+**Why thirty-seven tests missed it, which is the more useful finding.** `test_viz_style.py` asserted
+the expression carries exactly `classify.labels.legend()`. `test_viz_site.py` asserted every tileset
+is a valid PMTiles archive. Both passed, both were correct, and **neither asserted that the type in
+the tiles is a type the expression can match** — the producer and the consumer were each tested
+against their own assumption, and the defect lived in the gap between them.
+
+The closing test decodes the built `units.pmtiles`, collects the `lcz_primary` values as they appear
+in the MVT, and evaluates the real paint expression against them through the same coercion MapLibre
+would apply. It fails 6 of 6 values without the fix. All three published sites were rebuilt: 15
+classes painting real Demuzere colours each, zero no-data.
+
+### 7.5 What the acceptance criteria now read against
 
 | criterion | result |
 |---|---|

@@ -106,8 +106,18 @@ def lcz_colour_expression(column: str = "lcz_primary") -> list[Any]:
 
     Read from `classify.labels`, which a test already asserts equal to the committed reference
     table — so the map's colours and the output raster's colours cannot drift apart.
+
+    **`to-number` is load-bearing, not defensive.** tippecanoe's FlatGeobuf reader emits every
+    integer attribute as a *string* — measured at int16, int32, int64 and uint8, while float64 comes
+    through as a number. `lcz_primary` is the only integer column the site renders, so a `match` on
+    the raw value found no label, every cell fell through to `NODATA_COLOUR`, and the default view
+    of every published site was a field of blank grey squares. Coercing here rather than casting
+    the column to float in `write_flatgeobuf` keeps a class code an integer everywhere it is read,
+    and keeps the fix at the one place that depends on the type.
+
+    A missing value coerces to 0, which matches no label and so still takes `NODATA_COLOUR`.
     """
-    expression: list[Any] = ["match", ["get", column]]
+    expression: list[Any] = ["match", ["to-number", ["get", column]]]
     for entry in LCZ_CLASSES:
         expression += [entry.code, entry.colour]
     expression.append(NODATA_COLOUR)

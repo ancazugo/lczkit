@@ -90,7 +90,9 @@ def test_the_lcz_colours_are_the_committed_legend_and_nothing_else() -> None:
     expression = lcz_colour_expression()
 
     assert expression[0] == "match"
-    assert expression[1] == ["get", "lcz_primary"]
+    assert expression[1] == ["to-number", ["get", "lcz_primary"]], (
+        "the class code must be coerced: tippecanoe emits integer attributes as strings"
+    )
     pairs = dict(zip(expression[2:-1:2], expression[3:-1:2], strict=True))
     assert pairs == {entry.code: entry.colour for entry in LCZ_CLASSES}
     assert expression[-1] == NODATA_COLOUR, "an unclassified unit must not borrow a class colour"

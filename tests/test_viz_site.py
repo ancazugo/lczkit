@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 from pathlib import Path
 
 import geopandas as gpd
@@ -30,6 +31,7 @@ from lczkit.config import Settings, VizConfig
 from lczkit.output import write_run
 from lczkit.viz import build_site
 from lczkit.viz.site import _render_columns
+from lczkit.viz.style import NODATA_COLOUR
 from lczkit.viz.tiles import TIPPECANOE_EXTRA, TippecanoeMissingError, tippecanoe_available
 
 pytestmark = pytest.mark.skipif(
@@ -382,3 +384,59 @@ def test_an_empty_prefix_is_refused_rather_than_matching_every_column() -> None:
     measured to avoid."""
     with pytest.raises(ValidationError, match="must not contain an empty string"):
         VizConfig(render_column_prefixes=[""])
+
+
+def decode_units_tiles(site: Path) -> str:
+    """Decode `units.pmtiles` back to JSON with the tippecanoe the package already resolves."""
+    from lczkit.viz.tiles import tippecanoe_binary
+
+    decoder = tippecanoe_binary().with_name("tippecanoe-decode")
+    return subprocess.run(
+        [str(decoder), str(site / "tiles" / "units.pmtiles")],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+
+
+def test_the_lcz_paint_expression_matches_the_values_actually_in_the_tiles(run_dir: Path) -> None:
+    """The defect this exists for: the LCZ layer — the site's *default view* — painted every cell
+    `NODATA_COLOUR` in every published site, because tippecanoe's FlatGeobuf reader writes integer
+    attributes as strings and the `match` expression compared against integers.
+
+    Neither existing test could see it. `test_viz_style.py` asserts the expression carries the
+    committed colours; `test_the_site_directory_holds_what_claude_md_specifies` asserts the tileset
+    is a valid archive. Each half was checked against its own assumption and nothing checked that
+    the type in the tiles is a type the expression can match. So this test reads the built tiles and
+    evaluates the real expression against the real values.
+    """
+    build_site(run_dir)
+    site = run_dir / "site"
+    style = json.loads((site / "style.json").read_text(encoding="utf-8"))
+    lcz = next(v for v in style["metadata"]["lczkit"]["views"] if v["id"] == "lcz")
+
+    values = set(re.findall(r'"lcz_primary": (".*?"|[-\d.]+)', decode_units_tiles(site)))
+    assert values, "no unit in the tiles carries an LCZ class at all"
+
+    painted = {value: evaluate_match(lcz["paint"], json.loads(value)) for value in values}
+    unmatched = {value for value, colour in painted.items() if colour == NODATA_COLOUR}
+    assert not unmatched, (
+        f"{len(unmatched)} of {len(values)} LCZ values in the tiles paint as no-data: "
+        f"{sorted(unmatched)[:5]}"
+    )
+
+
+def evaluate_match(expression: list, value: object) -> str:
+    """Evaluate `["match", ["to-number", ["get", ...]], label, colour, ..., default]` on `value`.
+
+    Small enough to write out, and writing it out is the point: the assertion has to go through the
+    same coercion MapLibre would, or it tests something the browser does not do.
+    """
+    assert expression[0] == "match"
+    coerce = expression[1][0] == "to-number"
+    number = float(value) if coerce else value
+    labels, colours, default = expression[2:-1:2], expression[3:-1:2], expression[-1]
+    for label, colour in zip(labels, colours, strict=True):
+        if label == number:
+            return str(colour)
+    return str(default)
