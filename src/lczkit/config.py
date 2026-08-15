@@ -980,6 +980,24 @@ class VizConfig(BaseModel):
     """Above this many units the click-detail tileset is skipped and the sidebar falls back to the
     render attributes. A guard on the one part of the site whose size is unbounded in extent."""
 
+    online_basemap: str | None = None
+    """An optional remote raster basemap, by key from `lczkit.viz.basemaps.PROVIDERS`.
+
+    **`None` by default, and that default is load-bearing rather than cautious.** CLAUDE.md requires
+    a built site to open with no network and stay valid years from now, which is what makes one
+    archivable beside a paper; a remote tile source breaks all three of those at once, and outlives
+    the run only as long as the provider chooses to serve it. With this unset the emitted site
+    contains no external reference at all, and a test asserts it.
+
+    Set it and the site gains a selectable ground under the units, drawn beneath everything else,
+    with the provider's attribution shown and its tiles treated as fallible: a failure leaves every
+    other layer working and says so. The run's own Overture water and streets remain in the site and
+    remain the default, so an archived copy opened offline still shows the linework the
+    classification was computed from.
+
+    Selecting a provider takes on its tile usage policy — see each one's `terms`.
+    """
+
     @model_validator(mode="after")
     def _check(self) -> VizConfig:
         for low, high, name in (
@@ -1010,6 +1028,16 @@ class VizConfig(BaseModel):
                 f"unknown basemap layers {', '.join(unknown)}; "
                 f"choose from {', '.join(sorted(allowed))}"
             )
+        if self.online_basemap is not None:
+            # Imported here rather than at module scope: `lczkit.viz` pulls in the tile builder and
+            # the style module, and the config layer is imported by everything.
+            from lczkit.viz.basemaps import PROVIDERS
+
+            if self.online_basemap not in PROVIDERS:
+                raise ValueError(
+                    f"unknown basemap {self.online_basemap!r}; "
+                    f"choose from {', '.join(sorted(PROVIDERS))}"
+                )
         return self
 
 

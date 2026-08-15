@@ -30,6 +30,7 @@ from lczkit.classify import PrototypeClassifier
 from lczkit.config import Settings, VizConfig
 from lczkit.output import write_run
 from lczkit.viz import build_site
+from lczkit.viz.basemaps import external_hosts
 from lczkit.viz.site import _render_columns
 from lczkit.viz.style import NODATA_COLOUR
 from lczkit.viz.tiles import TIPPECANOE_EXTRA, TippecanoeMissingError, tippecanoe_available
@@ -196,6 +197,10 @@ def test_nothing_the_site_loads_comes_from_outside_the_directory(run_dir: Path) 
     inside the vendored bundles as licence text, documentation links in error messages, and the SVG
     XML namespace. What the vendored MapLibre actually requests is decided by the style document,
     and `test_viz_style.py` asserts that names no glyphs, no sprite and only relative sources.
+
+    **This is the default build, and the guarantee is unchanged.** A run may opt into an online
+    basemap; the test below pins where that is allowed to appear, so the exception is bounded rather
+    than the rule relaxed.
     """
     site = run_dir / "site"
     build_site(run_dir)
@@ -221,6 +226,61 @@ def test_nothing_the_site_loads_comes_from_outside_the_directory(run_dir: Path) 
             if not url.startswith(("http://{", "http://127.0.0.1", "http://localhost"))
         ]
         assert remote == [], f"{authored.name}: {remote}"
+
+
+def test_an_online_basemap_reaches_its_provider_and_nothing_else(run_dir: Path) -> None:
+    """The bounded exception to the rule above.
+
+    A run that opts into an online basemap has to name a remote host somewhere, and the question
+    worth pinning is *where*. It belongs in `style.json` — the one file that is generated from the
+    run's configuration and read by MapLibre as data — and nowhere else. If a provider URL ever
+    appears in `index.html`, `app.js`, `app.css` or `serve.py`, the page has stopped being a static
+    document that happens to fetch tiles and started being one that cannot work without them.
+    """
+    site = run_dir / "site"
+    build_site(run_dir, config=VizConfig(online_basemap="osm"))
+
+    style = json.loads((site / "style.json").read_text(encoding="utf-8"))
+    source = style["sources"]["basemap-raster"]
+    assert source["type"] == "raster"
+    assert all(url.startswith("https://") for url in source["tiles"])
+    assert "openstreetmap.org" in source["attribution"]
+
+    hosts = external_hosts()
+    for authored in (
+        site / "index.html",
+        site / "assets" / "app.js",
+        site / "assets" / "app.css",
+        site / "serve.py",
+    ):
+        text = authored.read_text(encoding="utf-8")
+        offending = [host for host in hosts if host in text]
+        assert offending == [], f"{authored.name} names a tile host: {offending}"
+
+
+def test_the_raster_basemap_is_hidden_until_a_reader_asks_for_it(run_dir: Path) -> None:
+    """An archived site opened offline must look the way it always did.
+
+    The run's own linework is the default ground; the raster is a layer the reader can switch to.
+    Starting with it visible would mean every offline open began with a failed fetch and a blank
+    band where the basemap should be.
+    """
+    build_site(run_dir, config=VizConfig(online_basemap="osm"))
+    style = json.loads((run_dir / "site" / "style.json").read_text(encoding="utf-8"))
+
+    raster = next(layer for layer in style["layers"] if layer["id"] == "basemap-raster")
+    assert raster["layout"]["visibility"] == "none"
+    # And it must be under everything, or it paints over the classification it is context for.
+    assert style["layers"].index(raster) == 1, "the raster must sit directly above the background"
+
+
+def test_a_site_without_an_online_basemap_declares_no_raster_source(run_dir: Path) -> None:
+    build_site(run_dir)
+    style = json.loads((run_dir / "site" / "style.json").read_text(encoding="utf-8"))
+
+    assert "basemap-raster" not in style["sources"]
+    assert [layer for layer in style["layers"] if layer["type"] == "raster"] == []
+    assert style["metadata"]["lczkit"]["basemap"]["raster_layer"] is None
 
 
 def test_the_manifest_is_the_runs_own_manifest_unchanged(run_dir: Path) -> None:

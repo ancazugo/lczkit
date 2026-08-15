@@ -1153,6 +1153,63 @@ lines" bar knowingly, on the user's choice of stack.
 
 ---
 
+### Phase 15 — Map site legibility and base layers — CONCLUDED (part 2 of 2)
+
+**The offline guarantee survives as the default, and the exception is bounded by a test rather than
+by a promise.** The request was for OSM-style base layers, which contradicts the committed
+anti-pattern that a site must open with no network — an anti-pattern that is also an *enforced test*,
+not just prose. Ruling: `VizConfig.online_basemap` defaults to `None`; with it unset the emitted site
+names no remote host anywhere, which is the guarantee unchanged. Set it and the site gains a
+selectable raster ground, hidden until chosen, degrading to a notice rather than a blank map.
+
+The test **split rather than relaxed**, and that is the part worth keeping:
+
+| test | asserts |
+|---|---|
+| `..._comes_from_outside_the_directory` | default build: no remote reference in `index.html`, CSS, `app.js`, `style.json`, `serve.py` |
+| `an_online_basemap_reaches_its_provider_and_nothing_else` | with `osm`: remote hosts appear in **`style.json` only** |
+| `the_raster_basemap_is_hidden_until_a_reader_asks_for_it` | `visibility: none`, and directly above the background |
+
+Providers: OpenStreetMap, Carto Positron, Carto Dark Matter. Each records its licence and its usage
+terms, and the CLI prints them when one is selected — the OSMF tile policy in particular is a
+donated resource, not a CDN, and a caller opting in takes that on.
+
+**Two defects found by measuring rather than reasoning, both in the seam between two components:**
+
+- **`run_layers` included the remote raster.** The offline layer set was collected by matching the
+  `basemap-` prefix, which `basemap-raster` also carries — so selecting "the run's own linework"
+  would have fetched the network, which is the single thing that choice exists to avoid. Collected
+  explicitly now. *A name prefix is not a category.*
+- **`app.js` invented the `label_route` vocabulary.** It mapped `distance`, `lcz10_rule` and
+  `lcz1_constraint`; the classifier emits `distance_built`, `distance_natural`, `industrial_rule`.
+  Every cell would have fallen through to printing its raw token. A consumer guessing at a
+  producer's enum fails exactly this quietly — the same shape as the tippecanoe type defect, one
+  layer up.
+
+**`app.js` had no test of any kind, and a syntax error there is silent.** The IIFE never runs, so the
+`catch` that prints "could not load the site" never installs either: a blank panel beside a blank
+map. `tests/test_viz_app_js.py` adds a delimiter-balance check (verified to discriminate), an
+assertion that every `el(id)` the script reaches for exists in the markup and vice versa, and one
+that the metadata keys it dereferences are the keys `style.py` emits. Deliberately weak — a balance
+check, not a parser — but it catches what an edit actually breaks. It is what found the route bug.
+
+**Legibility.** `ParameterSpec` gained a `label`, so the human name lives beside the definition
+rather than being reconstructed as `column.replace("_", " ")` in JavaScript — which is what produced
+"height of roughness elements m" and "industrial fraction of building area" on all three published
+maps. Non-parameter columns take theirs from `DISPLAY_LABELS`, and the height tier fractions from
+`HEIGHT_SOURCE_LABELS`, so `height_frac_wsf3d` reads "WSF-3D, 90 m raster" — the thing the package
+exists to report. Selector grouped by `selector_group`, which follows `selector_rank` rather than
+introducing a second ordering, so the committed order tests still pass unchanged.
+
+Also: a **"no value" legend row** on every continuous layer, because `NODATA_COLOUR` is otherwise
+indistinguishable from a low band and `aspect_ratio` is null across most of an industrial estate; a
+**hover readout**, since matching a shade to a band is what a sequential ramp is worst at; a
+**low-confidence badge** when `n_params_used` ≤ 2, since a cell classified on two dimensions and one
+classified on seven paint identically; a **layer-opacity slider**, which the raster ground requires;
+and an **"About this map"** block reading the cascade, weights and release out of the manifest.
+
+---
+
 ### STOP RULE — applies after Phase 13
 
 **No further diagnostic phases.** Thirteen phases in, the finding rate remains high but the returns
@@ -1164,8 +1221,9 @@ Remaining work, in order:
 1. ~~**Phase 7 — the static map site.**~~ **Concluded** — three cities published.
 2. ~~**Phase 14 — audit remediation.**~~ **Concluded** — four unapplied rulings closed, two live
    ruling violations fixed. Not a diagnostic phase; it opened no new question.
-3. **Phase 15 — command line and UI**, on explicit request, outside the diagnostic sequence.
-   Part 1 (CLI) concluded; part 2 (base layers and UI legibility) outstanding.
+3. ~~**Phase 15 — command line and UI.**~~ **Concluded**, both parts, on explicit request and
+   outside the diagnostic sequence. It opened no scientific question; it found four engineering
+   defects, two of them in seams no test spanned.
 4. **The paper.**
 5. **Cleanup** — docs, release.
 
@@ -1479,6 +1537,12 @@ reconcile silently.** That flagging behaviour is working; keep it.
 | Style and tiles each tested against their own assumption | The style test asserted the expression carries the committed colours; the site test asserted the tileset is a valid archive. **Nothing asserted that the type in the tiles is a type the expression can match**, so a defect in the gap between them was invisible to 37 tests. A test now decodes the built tiles and evaluates the real paint expression against the real values — it fails 6 of 6 without the fix. | 7 |
 | WorldCover clipped from one hardcoded tile | Berlin's `N51E012`, inherited by the publish driver. Hong Kong and Cairo span two tiles each and both failed with `RasterioIOError: 0x0 dataset`. `clip_worldcover` already resolved and mosaicked correctly. **Found only by publishing a second city** — a city one tile-width away would have lost a quarter of its land cover silently. | 7 |
 | Did the Phase 9–13 validation runs share that hardcoded path? | **No — checked against the persisted rasters, and clean.** `multi_city_validation` never imported `WORLDCOVER_URL`; `prepare` has always called the mosaicking `clip_worldcover`. All four stored runs verified: 15/9/16/16 cities, **worst shortfall 0.45 px**, no raster missing, nodata 0.000% bar a one-row clip edge on Cologne and Rome. **Six of sixteen cities span two tiles** — London, Cologne, Rome, Cairo, Hong Kong, Vancouver — so the mosaic path was exercised by real inputs, not merely present. No re-run needed. | 9–13 |
+| The site must reach no network, vs. a request for OSM base layers | **Both, by making the exception opt-in and bounded.** `VizConfig.online_basemap` defaults to `None` and the default build still names no remote host anywhere. The enforcing test **split rather than relaxed**: one asserts the default reaches nothing, a second asserts that a configured provider's URLs appear in `style.json` and in no other file. A site built with one is no longer archival and its own `README.md` says so. | 7, 15 |
+| `run_layers` collected by the `basemap-` prefix | The remote raster layer is `basemap-raster` and matched too, so "the run's own linework" — the choice that exists precisely to avoid the network — would have fetched it. Collected explicitly as the layers are appended. **A name prefix is not a category.** | 15 |
+| `app.js` mapped `label_route` values the classifier never emits | It explained `distance`, `lcz10_rule`, `lcz1_constraint`; `rules.ROUTES` is `distance_built`, `distance_natural`, `industrial_rule`. Every cell would have printed its raw token. Found by the first test ever written against `app.js`, not by reading. **A consumer that guesses at a producer's enum fails silently** — the tippecanoe type defect one layer up. | 7, 15 |
+| `app.js` had no test of any kind | Phase 7 argued assertions about it "would be claims about a string", which is right about behaviour and wrong about syntax: a syntax error means the IIFE never runs, so the `catch` that reports load failure never installs, and the page is blank with no message. `tests/test_viz_app_js.py` checks delimiter balance, that every `el(id)` exists in the markup and vice versa, and that the metadata keys it reads are the ones `style.py` writes. | 7, 15 |
+| Sidebar and selector labels built as `column.replace("_", " ")` | Produced "height of roughness elements m" and "industrial fraction of building area" on all three published maps. `ParameterSpec.label` puts the display name beside the definition; `DISPLAY_LABELS` covers the classification columns the registry does not describe, and `HEIGHT_SOURCE_LABELS` turns `height_frac_wsf3d` into "WSF-3D, 90 m raster". | 7, 15 |
+| `NODATA_COLOUR` indistinguishable from a low band | A null parameter is a reportable state — `aspect_ratio` is null wherever no street reaches a building, which is most of LCZ 8 — and every layer painted it the same grey with nothing saying what grey meant. Continuous legends now carry an explicit "no value" row; the categorical legend does not, since there the colour would name a class that does not exist. | 6, 15 |
 | No CLI, per MVP scope discipline | **Lifted by explicit request, Phase 15.** Removed from the Deferred list and from the scope bullet, both patched here rather than departed from silently. `lczkit run` and `lczkit site build\|serve`; the rest of that bullet — no web UI, no plotting helpers, no notebook tooling — stands. | 0, 15 |
 | The end-to-end pipeline lived in `scripts/` | **Moved to `lczkit.pipeline.run_pipeline` in Phase 15.** It was unimportable (no `__init__.py`, reached by `sys.path` insertion), outside `mypy src`, and pulled its config constants and land-cover fetcher from two *other* scripts, with three partial re-implementations beside it. A bbox was a module constant, so a new city meant editing a script. `run_and_publish` and `configure` keep their names and delegate, so `publish_sites.py` and the phase write-ups that cite these paths still hold. | 8, 15 |
 | Two `CleaningConfig` constants both named `CLEANING` | `berlin_metropolitan.py` carries the metropolitan values the published sites used (`max_area 100_000`, `merge_limit 50`, plus street tiling); `unit_scale_experiment.py` carries the 9 km² fixture values (`50_000` / `200`, no tiling). `configure()` took the former. `presets.PRESETS["published"]` therefore takes the former, and **a test asserts it still equals it** — taking the other would make `lczkit run` silently irreproducible against every published figure. | 8, 15 |
@@ -1652,3 +1716,17 @@ deferred OSM source; the only realistic route to the distinction Overture discar
   line configures a run by calling the same `apply_preset` the publish driver calls, rather than by
   listing the same settings again. Anything a CLI restates is a place two answers can diverge, and
   the divergence shows up as a map that disagrees with a published figure for no visible reason.
+- **A name prefix is not a category.** The offline basemap layers were collected by matching
+  `basemap-`, and the *remote* raster layer is `basemap-raster`, so the one choice that exists to
+  avoid the network contained it. When two sets are meaningfully different, build them from the
+  decision that separates them, not from what their names happen to share.
+- **Don't relax a guarantee to make room for an exception — split the test.** The site's
+  no-network property is enforced, not merely documented. An opt-in online basemap kept it by
+  leaving the default assertion untouched and adding a second that pins exactly where a remote host
+  is allowed to appear (`style.json`, and nowhere else). A guarantee with a bounded, tested
+  exception is still a guarantee; one loosened to accommodate a flag is not.
+- **Code nothing executes still needs a syntax check.** `app.js` went seven phases with no test on
+  the argument that assertions about it would be claims about a string. True of its behaviour, false
+  of its syntax: a syntax error stops the IIFE running, so the error handler that would have
+  reported it never installs, and the page is blank in silence. A delimiter balance and a
+  producer/consumer key check are weak, cheap, and caught a real defect the first time they ran.

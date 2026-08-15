@@ -36,6 +36,15 @@ class ParameterSpec:
     name: str
     """Column name in the table `compute_parameters()` returns."""
 
+    label: str
+    """Short human-readable name, for a legend or a sidebar row.
+
+    Here rather than in the front end because a display name is part of what a parameter *is*, and
+    the alternative — `column.replace("_", " ")` in JavaScript — produced "height of roughness
+    elements m" and "industrial fraction of building area" on every published map. Carries no unit;
+    `unit` is appended separately so the two cannot disagree.
+    """
+
     unit: str
     """Unit of measurement. One of `UNITS`."""
 
@@ -53,6 +62,7 @@ UNITS = ("m", "m2", "fraction", "count", "dimensionless", "category")
 PARAMETERS: tuple[ParameterSpec, ...] = (
     ParameterSpec(
         name="building_surface_fraction",
+        label="Building surface fraction",
         unit="fraction",
         description=(
             "Building footprint area within the unit, over unit area. Footprints are split at "
@@ -63,6 +73,7 @@ PARAMETERS: tuple[ParameterSpec, ...] = (
     ),
     ParameterSpec(
         name="impervious_surface_fraction",
+        label="Impervious surface fraction",
         unit="fraction",
         description=(
             "Impervious land-cover fraction with the building share removed, clipped at zero. "
@@ -73,6 +84,7 @@ PARAMETERS: tuple[ParameterSpec, ...] = (
     ),
     ParameterSpec(
         name="pervious_surface_fraction",
+        label="Pervious surface fraction",
         unit="fraction",
         description=(
             "Pervious land-cover fraction with tree cover and water folded back in. Stewart & "
@@ -83,6 +95,7 @@ PARAMETERS: tuple[ParameterSpec, ...] = (
     ),
     ParameterSpec(
         name="tree_fraction",
+        label="Tree cover fraction",
         unit="fraction",
         description=(
             "Tree-covered fraction of the unit, from the Phase 4 land-cover table. Also counted "
@@ -93,6 +106,7 @@ PARAMETERS: tuple[ParameterSpec, ...] = (
     ),
     ParameterSpec(
         name="water_fraction",
+        label="Water fraction",
         unit="fraction",
         description=(
             "Water-covered fraction of the unit, from the Phase 4 land-cover table. Also counted "
@@ -103,6 +117,7 @@ PARAMETERS: tuple[ParameterSpec, ...] = (
     ),
     ParameterSpec(
         name="height_of_roughness_elements_m",
+        label="Height of roughness elements",
         unit="m",
         description=(
             "Stewart & Oke's Hr: the unweighted GEOMETRIC mean of building height, exp(mean(log "
@@ -114,6 +129,7 @@ PARAMETERS: tuple[ParameterSpec, ...] = (
     ),
     ParameterSpec(
         name="h_geometric_area_weighted",
+        label="Height, geometric mean, area-weighted",
         unit="m",
         description=(
             "SECONDARY, not for classification. The same geometric mean as Hr, but weighted by "
@@ -128,6 +144,7 @@ PARAMETERS: tuple[ParameterSpec, ...] = (
     ),
     ParameterSpec(
         name="h_mean_area_weighted",
+        label="Height, arithmetic mean, area-weighted",
         unit="m",
         description=(
             "SECONDARY, not for classification. Arithmetic mean building height weighted by "
@@ -139,6 +156,7 @@ PARAMETERS: tuple[ParameterSpec, ...] = (
     ),
     ParameterSpec(
         name="h_std",
+        label="Height, standard deviation",
         unit="m",
         description=(
             "SECONDARY, not for classification. Area-weighted population standard deviation of "
@@ -150,6 +168,7 @@ PARAMETERS: tuple[ParameterSpec, ...] = (
     ),
     ParameterSpec(
         name="aspect_ratio",
+        label="Aspect ratio (H/W)",
         unit="dimensionless",
         description=(
             "Street canyon height-to-width ratio: the street-length-weighted mean of "
@@ -160,6 +179,7 @@ PARAMETERS: tuple[ParameterSpec, ...] = (
     ),
     ParameterSpec(
         name="street_openness",
+        label="Street openness",
         unit="fraction",
         description=(
             "Street-length-weighted mean of `momepy.street_profile()`'s `openness` — the share of "
@@ -170,6 +190,7 @@ PARAMETERS: tuple[ParameterSpec, ...] = (
     ),
     ParameterSpec(
         name="street_width_m",
+        label="Street width",
         unit="m",
         description=(
             "Street-length-weighted mean of `momepy.street_profile()`'s `width` — the mean "
@@ -180,6 +201,7 @@ PARAMETERS: tuple[ParameterSpec, ...] = (
     ),
     ParameterSpec(
         name="building_count",
+        label="Building count",
         unit="count",
         description=(
             "Buildings whose representative point falls inside the unit. Whole buildings, unlike "
@@ -190,6 +212,7 @@ PARAMETERS: tuple[ParameterSpec, ...] = (
     ),
     ParameterSpec(
         name="mean_building_area_m2",
+        label="Mean building area",
         unit="m2",
         description=(
             "Mean footprint area of the buildings counted by `building_count`, measured over the "
@@ -199,6 +222,7 @@ PARAMETERS: tuple[ParameterSpec, ...] = (
     ),
     ParameterSpec(
         name="industrial_fraction_of_building_area",
+        label="Industrial share of building area",
         unit="fraction",
         description=(
             "Share of the unit's BUILDING area that is industrial — footprint falling inside the "
@@ -211,6 +235,7 @@ PARAMETERS: tuple[ParameterSpec, ...] = (
     ),
     ParameterSpec(
         name="industrial_fraction_of_unit_area",
+        label="Industrial share of unit area",
         unit="fraction",
         description=(
             "Share of the unit's GROUND that is industrial: industrial building footprints or "
@@ -222,6 +247,7 @@ PARAMETERS: tuple[ParameterSpec, ...] = (
     ),
     ParameterSpec(
         name="industrial_fraction",
+        label="Industrial share (deprecated alias)",
         unit="fraction",
         description=(
             "DEPRECATED alias for `industrial_fraction_of_unit_area`, kept for one release. The "
@@ -232,18 +258,21 @@ PARAMETERS: tuple[ParameterSpec, ...] = (
     ),
     ParameterSpec(
         name="industrial_fraction_buildings",
+        label="Industrial share, from building class",
         unit="fraction",
         description="Unit area share covered by industrial building footprints alone.",
         reference=COMPUTED_HERE,
     ),
     ParameterSpec(
         name="industrial_fraction_land_use",
+        label="Industrial share, from land use",
         unit="fraction",
         description="Unit area share covered by industrial land-use parcels alone.",
         reference=COMPUTED_HERE,
     ),
     ParameterSpec(
         name="industrial_evidence",
+        label="Industrial evidence source",
         unit="category",
         description=(
             "Which sources contributed area to `industrial_fraction`: 'none', 'buildings', "

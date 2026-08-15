@@ -17,7 +17,14 @@
   const protocol = new pmtiles.Protocol();
   maplibregl.addProtocol("pmtiles", protocol.tile);
 
-  const state = { views: [], viewById: new Map(), activeView: null, selected: null, meta: null };
+  const state = {
+    views: [],
+    viewById: new Map(),
+    activeView: null,
+    selected: null,
+    meta: null,
+    base: "run",
+  };
 
   function el(id) {
     return document.getElementById(id);
@@ -58,16 +65,22 @@
 
   /* ------------------------------------------------------------------- legend */
 
-  function renderLegend(container, entries) {
+  function renderLegend(container, entries, unit) {
     container.replaceChildren();
     entries.forEach(function (entry) {
       const row = document.createElement("div");
-      row.className = "legend-row";
+      row.className = entry.nodata ? "legend-row nodata" : "legend-row";
       const swatch = document.createElement("span");
       swatch.className = "swatch";
       swatch.style.backgroundColor = entry.colour;
       const label = document.createElement("span");
-      label.textContent = entry.label;
+      /*
+       * The unit goes on the first band only. Repeating it down every row of a seven-band ramp is
+       * noise, and omitting it entirely leaves a column of bare numbers whose meaning is a scroll
+       * away in the description.
+       */
+      const first = container.childElementCount === 0;
+      label.textContent = unit && first && !entry.nodata ? entry.label + " " + unit : entry.label;
       row.append(swatch, label);
       container.append(row);
     });
@@ -81,8 +94,86 @@
     el("view-description").textContent = view.unit
       ? view.description + " (" + view.unit + ")"
       : view.description;
-    renderLegend(el("legend"), view.legend);
+    renderLegend(el("legend"), view.legend, view.unit);
+    el("hover-readout").textContent = "";
     writeHash(map);
+  }
+
+  /* --------------------------------------------------------------------- base */
+
+  /*
+   * The ground under the units. `run` is the layers the run itself persisted — its cleaned water
+   * and streets — and is the default precisely because it needs no network: an archived site opened
+   * years from now still draws it. `raster` exists only when the run was built with an online
+   * basemap, and is treated as fallible rather than assumed.
+   */
+  function setBase(map, choice) {
+    const base = state.meta.basemap || {};
+    const runLayers = base.run_layers || [];
+    state.base = choice;
+
+    runLayers.forEach(function (id) {
+      if (map.getLayer(id)) {
+        map.setLayoutProperty(id, "visibility", choice === "run" ? "visible" : "none");
+      }
+    });
+    if (base.raster_layer && map.getLayer(base.raster_layer)) {
+      map.setLayoutProperty(
+        base.raster_layer,
+        "visibility",
+        choice === "raster" ? "visible" : "none"
+      );
+    }
+    /*
+     * The LCZ palette was built for a light figure on a dark ground. Over a light raster the same
+     * fill at the same opacity washes out, so the floor rises with the basemap rather than leaving
+     * the reader to discover the problem and fix it with the slider.
+     */
+    if (choice === "raster" && base.raster_dark === false) {
+      const slider = el("opacity");
+      if (Number(slider.value) < 70) {
+        slider.value = "70";
+        setOpacity(map, 70);
+      }
+    }
+    Array.prototype.forEach.call(document.querySelectorAll("[name=base]"), function (input) {
+      input.checked = input.value === choice;
+    });
+  }
+
+  function setOpacity(map, percent) {
+    map.setPaintProperty(state.meta.fill_layer, "fill-opacity", percent / 100);
+    el("opacity-value").textContent = percent + "%";
+  }
+
+  function buildBaseOptions(map) {
+    const base = state.meta.basemap || {};
+    const container = el("base-options");
+    const choices = [{ value: "none", label: "None" }, { value: "run", label: "Run's own linework" }];
+    if (base.raster_layer) choices.push({ value: "raster", label: base.raster_label });
+
+    container.replaceChildren();
+    choices.forEach(function (choice) {
+      const row = document.createElement("label");
+      row.className = "checkbox";
+      const input = document.createElement("input");
+      input.type = "radio";
+      input.name = "base";
+      input.value = choice.value;
+      input.checked = choice.value === "run";
+      input.addEventListener("change", function () {
+        setBase(map, choice.value);
+      });
+      row.append(input, document.createTextNode(" " + choice.label));
+      container.append(row);
+    });
+
+    if (base.raster_layer) {
+      const note = el("base-note");
+      note.hidden = false;
+      note.textContent =
+        base.raster_label + " tiles are fetched from the network (" + base.raster_licence + ").";
+    }
   }
 
   /* --------------------------------------------------------------- unit panel */
@@ -156,6 +247,19 @@
     });
   }
 
+  /* The display name the run recorded for a column, falling back the way the style module does. */
+  function labelFor(column) {
+    const labels = state.meta.labels || {};
+    if (labels[column]) return labels[column];
+    const prefix = "height_frac_";
+    if (column.indexOf(prefix) === 0) {
+      const source = column.slice(prefix.length);
+      const sources = state.meta.height_source_labels || {};
+      return sources[source] || source.replace(/_/g, " ");
+    }
+    return column.replace(/_/g, " ");
+  }
+
   function showUnit(properties) {
     el("unit-empty").hidden = true;
     el("unit-detail").hidden = false;
@@ -164,12 +268,26 @@
     const primary = properties.lcz_primary;
     const secondary = properties.lcz_secondary;
     definitionList(el("unit-summary"), [
-      { label: "Primary", value: state.meta.class_names[primary] || "—" },
-      { label: "Secondary", value: state.meta.class_names[secondary] || "—" },
+      { label: "Class", value: state.meta.class_names[primary] || "—" },
+      { label: "Second nearest", value: state.meta.class_names[secondary] || "—" },
       { label: "Uniqueness", value: formatValue(properties.uniqueness, "") },
       { label: "Parameters used", value: formatValue(properties.n_params_used, "") },
-      { label: "Label route", value: formatValue(properties.label_route, "") },
+      { label: "Label route", value: routeLabel(properties.label_route) },
     ]);
+
+    /*
+     * A built cell has at most three metric dimensions and a natural one at most seven, so a low
+     * count is not a rounding detail — it is most of the evidence missing. `aspect_ratio` alone is
+     * null wherever no street reaches a building.
+     */
+    const used = Number(properties.n_params_used);
+    const badge = el("unit-confidence");
+    if (Number.isFinite(used) && used <= 2) {
+      badge.hidden = false;
+      badge.textContent = "Low confidence — only " + used + " parameter" + (used === 1 ? "" : "s");
+    } else {
+      badge.hidden = true;
+    }
 
     renderDistances(el("distance-chart"), properties);
 
@@ -186,7 +304,7 @@
       })
       .sort()
       .map(function (column) {
-        return { label: column.replace(/_/g, " "), value: formatValue(properties[column], "") };
+        return { label: labelFor(column), value: formatValue(properties[column], "") };
       });
     definitionList(el("unit-heights"), heightRows);
 
@@ -198,11 +316,26 @@
         })
         .map(function (parameter) {
           return {
-            label: parameter.name.replace(/_/g, " "),
+            label: parameter.label || labelFor(parameter.name),
             value: formatValue(properties[parameter.name], parameter.unit),
           };
         })
     );
+  }
+
+  /*
+   * `label_route` records whether a cell took the distance metric or the functional LCZ 10 rule.
+   * Printed raw it is a token; the point of showing it at all is that those are different claims.
+   */
+  function routeLabel(route) {
+    /* These keys are `lczkit.classify.rules.ROUTES`, and a test asserts the two agree. */
+    const routes = {
+      distance_built: "nearest built prototype",
+      distance_natural: "nearest natural prototype",
+      industrial_rule: "industrial rule (LCZ 10)",
+    };
+    if (route === null || route === undefined || route === "") return "—";
+    return routes[route] || String(route);
   }
 
   /*
@@ -242,6 +375,50 @@
     const detail = detailProperties(map, state.selected);
     showUnit(Object.assign({}, feature.properties, detail || {}));
     writeHash(map);
+  }
+
+  /* -------------------------------------------------------------------- about */
+
+  /*
+   * What this run was, read out of the manifest it already carries. It answers the questions a
+   * reader has to answer before trusting any of the rest — which cascade filled the heights, which
+   * weights the metric used, how much of the map rests on measured heights — without asking them to
+   * open a JSON file.
+   */
+  function renderAbout(manifest, meta) {
+    const config = manifest.config || {};
+    const rows = [{ label: "Run", value: meta.run_id || "—" }];
+
+    const units = config.viz ? "grid, 100 m" : null;
+    if (units) rows.push({ label: "Units", value: units });
+
+    const heights = config.heights || {};
+    const tiers = (heights.areal_tiers || [])
+      .filter(function (tier) {
+        return tier.enabled;
+      })
+      .map(function (tier) {
+        return tier.name;
+      });
+    rows.push({
+      label: "Height cascade",
+      value: tiers.length ? "Overture, then " + tiers.join(", ") : "Overture only",
+    });
+
+    if (config.classification && config.classification.weight_preset) {
+      rows.push({ label: "Weights", value: config.classification.weight_preset });
+    }
+    if (config.overture && config.overture.release) {
+      rows.push({ label: "Overture release", value: config.overture.release });
+    }
+    const base = meta.basemap || {};
+    rows.push({
+      label: "Base map",
+      value: base.raster_layer
+        ? "run's own linework, plus " + base.raster_label + " (network)"
+        : "run's own linework — this site needs no network",
+    });
+    definitionList(el("about"), rows);
   }
 
   /* --------------------------------------------------------------------- boot */
@@ -285,27 +462,74 @@
         zoom: initial ? initial.zoom : 10.5,
         maxZoom: 18,
         pitch: 0,
-        attributionControl: false,
+        /*
+         * Off when everything is local — the footer carries the attribution and a control would be
+         * a second copy of it. On when a run configured a remote basemap, because every provider
+         * requires attribution and MapLibre reads it off the source rather than from this page.
+         */
+        attributionControl: (meta.basemap && meta.basemap.raster_layer) ? {compact: true} : false,
       });
       map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-left");
       map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
 
+      /*
+       * Grouped rather than flat. The order inside each group is the one `style.selector_rank`
+       * decided and a test asserts; the groups only make that order visible, so that a reader
+       * scanning thirteen entries can see that height provenance is a category rather than one
+       * more parameter among the choropleths.
+       */
       const select_ = el("view");
+      const groups = new Map();
+      (meta.groups || []).forEach(function (name) {
+        groups.set(name, null);
+      });
       meta.views.forEach(function (view) {
+        const name = view.group || "";
+        if (!groups.get(name)) {
+          const group = document.createElement("optgroup");
+          group.label = name;
+          groups.set(name, group);
+          select_.append(group);
+        }
         const option = document.createElement("option");
         option.value = view.id;
         option.textContent = view.label;
-        select_.append(option);
+        groups.get(name).append(option);
       });
       const startView = (initial && state.viewById.get(initial.view)) || meta.views[0];
       select_.value = startView.id;
 
+      buildBaseOptions(map);
+      renderAbout(manifest, meta);
+
       map.on("load", function () {
         applyView(map, startView);
+        setBase(map, "run");
+        setOpacity(map, Number(el("opacity").value));
         if (!meta.buildings_layer) return;
         el("buildings-section").hidden = false;
         renderLegend(el("buildings-legend"), meta.building_colour_by.height_source_legend);
         el("buildings-legend").hidden = true;
+      });
+
+      el("opacity").addEventListener("input", function (event) {
+        setOpacity(map, Number(event.target.value));
+      });
+
+      /*
+       * A remote basemap is the one thing here that can fail, and it fails silently — MapLibre
+       * reports the tile error and carries on with a blank ground. Saying so keeps a network
+       * problem from reading as a broken map, which is the whole reason the offline default exists.
+       */
+      map.on("error", function (event) {
+        const source = event && event.sourceId;
+        if (!source || source !== "basemap-raster") return;
+        const note = el("base-note");
+        note.hidden = false;
+        note.className = "error";
+        note.textContent =
+          "Base map tiles could not be loaded — you may be offline. Everything else on this map " +
+          "is served from this directory; switch the base back to the run's own linework.";
       });
 
       select_.addEventListener("change", function () {
@@ -339,6 +563,25 @@
       });
       map.on("mouseleave", meta.fill_layer, function () {
         map.getCanvas().style.cursor = "";
+        el("hover-readout").textContent = "";
+      });
+
+      /*
+       * Reading a choropleth off a legend means matching a shade to a band by eye, which is exactly
+       * the comparison a sequential ramp is worst at. The value under the cursor removes the guess.
+       * It reads the feature already under the pointer, so it costs no request.
+       */
+      map.on("mousemove", meta.fill_layer, function (event) {
+        if (!event.features || !event.features.length || !state.activeView) return;
+        const view = state.activeView;
+        const raw = event.features[0].properties[view.column];
+        const readout = el("hover-readout");
+        if (view.kind === "categorical") {
+          readout.textContent = state.meta.class_names[Number(raw)] || "no value";
+          return;
+        }
+        readout.textContent =
+          view.label + ": " + formatValue(raw === undefined ? null : Number(raw), view.unit);
       });
       map.on("moveend", function () {
         writeHash(map);

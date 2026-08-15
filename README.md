@@ -487,7 +487,8 @@ as a tool. It needs the `viz` extra, which is one pinned wheel:
 ```sh
 uv add --active --optional viz tippecanoe
 lczkit site build <run_dir>
-lczkit site serve <run_dir>           # then open the address it prints
+lczkit site build <run_dir> --basemap osm   # optional online ground, off by default
+lczkit site serve <run_dir>                 # then open the address it prints
 ```
 
 `build_site(run_dir)` remains the library entry point, and `python <run_dir>/site/serve.py` still
@@ -525,6 +526,14 @@ Four things about it are worth knowing before relying on it:
   attributable, and show the reader the same linework the classification was computed from. Land use
   is available and off by default: at 9 km² it was 94% of the basemap's bytes, for a wash drawn
   under a translucent fill.
+- **The base map is the run's own linework by default, and an online provider is opt-in.**
+  `--basemap osm` (or `carto-positron`, `carto-dark`) adds a selectable raster ground with its
+  attribution, and it is the only thing in a built site that reaches outside the directory. It is
+  off unless asked for, hidden until selected, and it degrades to a notice rather than a blank map
+  when the tiles do not load — so the offline guarantee survives as the default rather than being
+  traded away. A site built with one is no longer fully archival, and its `README.md` says so.
+  A test asserts the default build names no remote host anywhere, and a second asserts that when a
+  provider *is* configured its URLs appear in `style.json` and in no other file.
 - **Height provenance is the second layer in the selector, above the urban canopy parameters.**
   `height_completeness` and the `height_frac_*` tier fractions are first-class layers rather than
   diagnostics — they are the visible form of the package's central result. The tier fractions reach

@@ -195,6 +195,7 @@ def build_site(run_dir: Path | str, *, config: VizConfig | None = None) -> SiteR
         has_detail=has_detail,
         basemap_layers=tuple(basemap),
         has_buildings=has_buildings,
+        online_basemap=config.online_basemap,
     )
 
     # `index.html` sits at the root because that is where a browser looks; everything it pulls in

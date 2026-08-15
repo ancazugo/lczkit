@@ -3,7 +3,14 @@
   lczkit static map site.
 
   Everything this page loads is a sibling file. There is no CDN link, no basemap API key, no
-  analytics, and no font endpoint — a grep of this directory for "http" is part of the test suite.
+  analytics, and no font endpoint — a test asserts that this file, app.js, app.css and serve.py
+  name no remote host at all.
+
+  The one exception a run can opt into is an online raster basemap, which reaches a tile server and
+  therefore appears only in style.json, never here. It is off by default, hidden when it is off, and
+  the run's own Overture linework stays the default ground either way, so an archived copy opened
+  offline still shows the geometry the classification was computed from.
+
   Serve it with the bundled server (`python serve.py`) and open the address it prints.
 -->
 <html lang="en">
@@ -27,7 +34,18 @@
         <label for="view">Layer</label>
         <select id="view"></select>
         <p id="view-description" class="muted"></p>
+        <p id="hover-readout" class="readout" aria-live="polite"></p>
         <div id="legend"></div>
+      </section>
+
+      <section id="base-section">
+        <fieldset>
+          <legend>Base map</legend>
+          <div id="base-options"></div>
+          <p id="base-note" class="muted" hidden></p>
+        </fieldset>
+        <label for="opacity">Layer opacity <span id="opacity-value" class="mono">82%</span></label>
+        <input type="range" id="opacity" min="20" max="100" step="2" value="82" />
       </section>
 
       <section id="buildings-section" hidden>
@@ -45,17 +63,45 @@
 
       <section id="unit-section">
         <h2>Unit</h2>
-        <p id="unit-empty" class="muted">Click a unit to inspect it.</p>
+        <p id="unit-empty" class="muted">Click a cell to inspect it.</p>
         <div id="unit-detail" hidden>
           <p id="unit-id" class="mono"></p>
+          <p id="unit-confidence" class="badge" hidden></p>
           <dl id="unit-summary"></dl>
-          <h3>Distance to each prototype</h3>
-          <div id="distance-chart"></div>
-          <h3>Height provenance</h3>
-          <dl id="unit-heights"></dl>
-          <h3>Urban canopy parameters</h3>
-          <dl id="unit-parameters"></dl>
+          <details>
+            <summary>Distance to each prototype</summary>
+            <p class="muted note">
+              The classification is the nearest prototype. A cell whose two nearest are close
+              together is a weak assignment — that is what <em>uniqueness</em> measures.
+            </p>
+            <div id="distance-chart"></div>
+          </details>
+          <details open>
+            <summary>Height provenance</summary>
+            <p class="muted note">
+              Which source each building's height came from, by share of building area. A measured
+              height and a 90 m raster mean produce the same LCZ label with very different
+              trustworthiness.
+            </p>
+            <dl id="unit-heights"></dl>
+          </details>
+          <details>
+            <summary>Urban canopy parameters</summary>
+            <dl id="unit-parameters"></dl>
+          </details>
         </div>
+      </section>
+
+      <section id="about-section">
+        <details>
+          <summary>About this map</summary>
+          <dl id="about"></dl>
+          <p class="muted note">
+            Every value here was computed by the run and read from its manifest — this page
+            calculates nothing. <a href="manifest.json">manifest.json</a> is the provenance record;
+            a figure taken from this map should cite it.
+          </p>
+        </details>
       </section>
 
       <footer>

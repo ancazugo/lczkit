@@ -42,8 +42,8 @@ the classifier weights, and the package versions. A figure taken from this map s
 
 ## Reading the map
 
-The layer selector runs LCZ classification first, then **height provenance**, then the urban canopy
-parameters, then `uniqueness`.
+The layer selector is grouped: **Classification** first, then **Height provenance**, then the urban
+canopy parameters, then **Confidence**.
 
 Height provenance is worth looking at before trusting any height-dependent class. It reports where
 each unit's building heights actually came from — measured heights from Overture, or a coarse areal
@@ -51,5 +51,28 @@ raster standing in for them. The two produce the same LCZ label with very differ
 the gap between cities is large: Berlin takes 79.7% of its building area from measured heights,
 Cairo 1.0%.
 
-Clicking a unit opens its full attribute table. The URL hash tracks the view, so a link shares the
-exact position, zoom and active layer.
+Two things the colours will not tell you on their own:
+
+- **Grey means "no value", not "low".** Every continuous layer's legend carries a row saying so.
+  `aspect_ratio` in particular is null wherever no street reaches a building, which is most of a
+  large-low-rise industrial estate.
+- **A cell classified on two parameters is a weaker claim than one classified on seven**, and the
+  map paints them identically. Clicking a cell shows how many were used and flags the low ones.
+
+Hovering reads the value under the cursor, which is easier than matching a shade to a legend band.
+Clicking opens the full attribute table. The URL hash tracks the view, so a link shares the exact
+position, zoom and active layer.
+
+## The base map
+
+Under the units is the **run's own linework** — the cleaned water and streets the classification was
+computed from, tiled into this directory. That is the default because it needs no network: this
+site works offline, now and in ten years.
+
+If the site was built with `--basemap`, the picker offers a second ground fetched from an online
+tile provider, with its attribution shown. That layer is the only thing here that reaches outside
+this directory, it is off until you select it, and if the tiles fail to load the map says so and
+keeps working. A site built that way is no longer fully archival — the provider outlives it only as
+long as it chooses to.
+
+The opacity slider fades the classification so you can read what is underneath.

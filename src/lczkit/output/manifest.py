@@ -179,6 +179,7 @@ def build_manifest(
         parameters=[
             {
                 "name": parameter.name,
+                "label": parameter.label,
                 "unit": parameter.unit,
                 "description": parameter.description,
                 "reference": parameter.reference,

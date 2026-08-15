@@ -19,6 +19,7 @@ from lczkit.pipeline import run_pipeline
 from lczkit.presets import DEFAULT_PRESET, PRESETS, apply_preset
 from lczkit.protocols import BBox
 from lczkit.viz import TippecanoeMissingError
+from lczkit.viz.basemaps import PROVIDERS
 
 
 def run(
@@ -72,6 +73,17 @@ def run(
             help="Tile building footprints for the 3D layer. Roughly triples the site.",
         ),
     ] = False,
+    basemap: Annotated[
+        str | None,
+        typer.Option(
+            "--basemap",
+            metavar="KEY",
+            help=(
+                f"Add a selectable online base map ({', '.join(sorted(PROVIDERS))}). "
+                "Off by default: the site otherwise reaches no network."
+            ),
+        ),
+    ] = None,
     dry_run: Annotated[
         bool,
         typer.Option("--dry-run", help="Resolve and print the configuration, then stop."),
@@ -102,6 +114,14 @@ def run(
     if config is not None:
         apply_config_file(settings, config)
     settings.viz.include_buildings = buildings
+    if basemap is not None:
+        if basemap not in PROVIDERS:
+            fail(f"unknown basemap {basemap!r}; choose from {', '.join(sorted(PROVIDERS))}")
+        settings.viz.online_basemap = basemap
+        chosen = PROVIDERS[basemap]
+        console.print(f"base map: [bold]{chosen.label}[/bold] — {chosen.licence}")
+        if chosen.terms:
+            console.print(f"[yellow]note[/yellow] {chosen.terms}")
 
     if bbox is not None:
         parsed = parse_bbox(bbox)

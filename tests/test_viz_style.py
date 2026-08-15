@@ -60,6 +60,7 @@ MANIFEST: dict[str, Any] = {
     "parameters": [
         {
             "name": "building_surface_fraction",
+            "label": "Building surface fraction",
             "unit": "fraction",
             "description": "share of unit area under building footprint",
             "reference": "10.1175/BAMS-D-11-00019.1",
@@ -334,3 +335,131 @@ def test_columns_of_equal_rank_keep_the_manifests_order() -> None:
     ids = view_ids(ORDERED_BREAKS, ORDERED_COLUMNS)
 
     assert ids.index("building_surface_fraction") < ids.index("aspect_ratio")
+
+
+# ------------------------------------------------------------------ labels and grouping
+
+
+def test_a_view_is_named_by_the_registry_and_not_by_its_column() -> None:
+    """`column.replace("_", " ")` produced "height of roughness elements m" on every published map.
+
+    The label belongs beside the definition in `ucp.registry`, so the name a reader sees and the
+    description they can read cannot disagree.
+    """
+    views = build_views(BREAKS, COLUMNS, MANIFEST["parameters"])
+    bsf = next(view for view in views if view["column"] == "building_surface_fraction")
+
+    assert bsf["label"] == "Building surface fraction"
+
+
+def test_a_column_the_registry_does_not_describe_still_gets_a_readable_label() -> None:
+    """A run may carry a column no version of this package describes. A slightly ugly label beats a
+    missing one, so the old behaviour survives as the fallback rather than as the rule."""
+    views = build_views(BREAKS, COLUMNS, MANIFEST["parameters"])
+    aspect = next(view for view in views if view["column"] == "aspect_ratio")
+
+    assert aspect["label"] == "aspect ratio"
+
+
+def test_height_tier_fractions_are_named_for_the_product_they_came_from() -> None:
+    """`height_frac_wsf3d` tells a reader nothing. "WSF-3D, 90 m raster" tells them the thing the
+    package exists to report — that this cell's heights are a coarse areal mean."""
+    breaks = [
+        {"column": "height_frac_wsf3d", "method": "quantile", "breaks": [0.0, 0.5, 1.0]},
+        {"column": "height_frac_ghsl", "method": "quantile", "breaks": [0.0, 0.5, 1.0]},
+    ]
+    columns = ["unit_id", "lcz_primary", "height_frac_wsf3d", "height_frac_ghsl"]
+    views = build_views(breaks, columns, [])
+
+    labels = {view["column"]: view["label"] for view in views if view["column"] != "lcz_primary"}
+    assert labels["height_frac_wsf3d"] == "WSF-3D, 90 m raster"
+    assert labels["height_frac_ghsl"] == "GHS-BUILT-H, 100 m raster"
+
+
+def test_every_view_declares_the_group_it_belongs_to() -> None:
+    """The selector groups exist to make `selector_rank`'s order visible, not to reorder it."""
+    breaks = [
+        {"column": "height_completeness", "method": "quantile", "breaks": [0.0, 0.5, 1.0]},
+        {"column": "building_surface_fraction", "method": "quantile", "breaks": [0.0, 0.5, 1.0]},
+        {"column": "uniqueness", "method": "quantile", "breaks": [0.0, 0.5, 1.0]},
+    ]
+    columns = [
+        "unit_id",
+        "lcz_primary",
+        "height_completeness",
+        "building_surface_fraction",
+        "uniqueness",
+    ]
+    views = build_views(breaks, columns, MANIFEST["parameters"])
+
+    groups = [view["group"] for view in views]
+    assert groups == [
+        "Classification",
+        "Height provenance",
+        "Urban canopy parameters",
+        "Confidence",
+    ], "groups must follow the committed selector order"
+
+
+def test_a_continuous_legend_says_what_grey_means() -> None:
+    """A null parameter is a reportable state — `aspect_ratio` is null wherever no street reaches a
+    building — and every layer paints it the same grey. Without a row for it, the reader has no way
+    to learn that grey is "no value" rather than "low"."""
+    views = build_views(BREAKS, COLUMNS, MANIFEST["parameters"])
+    bsf = next(view for view in views if view["column"] == "building_surface_fraction")
+
+    nodata = [entry for entry in bsf["legend"] if entry.get("nodata")]
+    assert len(nodata) == 1
+    assert nodata[0]["colour"] == NODATA_COLOUR
+    assert nodata[0]["label"] == "no value"
+
+
+def test_the_categorical_legend_has_no_nodata_row() -> None:
+    """The LCZ legend already names every class it can paint, and `NODATA_COLOUR` there would be a
+    class that does not exist rather than a value that is missing."""
+    views = build_views(BREAKS, COLUMNS, MANIFEST["parameters"])
+
+    assert [entry for entry in views[0]["legend"] if entry.get("nodata")] == []
+
+
+# ---------------------------------------------------------------------- online basemap
+
+
+def test_no_online_basemap_means_no_remote_source() -> None:
+    """The default. Everything the style names is a relative path."""
+    document = style()
+
+    for source in document["sources"].values():
+        assert source["type"] != "raster"
+        assert "tiles" not in source
+
+
+def test_an_online_basemap_carries_its_attribution_into_the_source() -> None:
+    """MapLibre reads attribution off the source, so a provider that requires it — all of them —
+    is only correctly used if it travels with the tiles rather than being written into the page."""
+    document = style(online_basemap="osm")
+    source = document["sources"]["basemap-raster"]
+
+    assert source["type"] == "raster"
+    assert "OpenStreetMap" in source["attribution"]
+    assert source["tiles"] == ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"]
+
+
+def test_an_unknown_basemap_is_refused_by_name() -> None:
+    with pytest.raises(KeyError, match="unknown basemap"):
+        style(online_basemap="not-a-provider")
+
+
+def test_the_run_basemap_choice_does_not_include_the_remote_raster() -> None:
+    """The base picker offers "the run's own linework" and "the provider's tiles" as alternatives.
+
+    Both the vector layers and the raster are named `basemap-*`, so collecting the offline set by
+    prefix silently put the remote tiles into the offline choice — selecting "run's own linework"
+    would then fetch the network, which is the one thing that choice exists to avoid.
+    """
+    document = style(online_basemap="osm", basemap_layers=("water", "streets"))
+    base = document["metadata"]["lczkit"]["basemap"]
+
+    assert base["run_layers"] == ["basemap-water", "basemap-streets"]
+    assert base["raster_layer"] == "basemap-raster"
+    assert base["raster_layer"] not in base["run_layers"]

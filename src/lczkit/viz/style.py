@@ -25,6 +25,7 @@ from typing import Any
 from lczkit.classify.classifier import DISTANCE_COLUMNS
 from lczkit.classify.labels import LCZ_CLASSES, NODATA_CODE
 from lczkit.heights.completeness import FRACTION_PREFIX
+from lczkit.viz import basemaps
 
 #: Nine-stop perceptually-uniform sequential ramp (a viridis subsample), used for every continuous
 #: choropleth. Colourblind-safe and monotone in lightness, so a reader can rank classes from a
@@ -64,6 +65,73 @@ view is a paint change over tiles already in memory, which is what CLAUDE.md ask
 
 HEIGHT_COMPLETENESS_COLUMN = "height_completeness"
 UNIQUENESS_COLUMN = "uniqueness"
+
+RASTER_BASEMAP_SOURCE = "basemap-raster"
+RASTER_BASEMAP_LAYER = "basemap-raster"
+
+GROUP_CLASSIFICATION = "Classification"
+GROUP_PROVENANCE = "Height provenance"
+GROUP_PARAMETERS = "Urban canopy parameters"
+GROUP_CONFIDENCE = "Confidence"
+"""Selector groups, in the order `selector_rank` already puts their members in.
+
+The groups are named here rather than derived in the front end for the same reason the labels are:
+the ordering is a decision this package made and a test asserts, and a second copy of it in
+JavaScript would be a second place for it to be wrong.
+"""
+
+#: Display names for the columns the parameter registry does not describe, because they are not
+#: urban canopy parameters — they are classification outputs and height provenance. Everything else
+#: takes its label from `ParameterSpec.label`, beside the definition.
+DISPLAY_LABELS: dict[str, str] = {
+    "lcz_primary": "LCZ class",
+    "lcz_secondary": "LCZ class, second nearest",
+    "uniqueness": "Uniqueness",
+    "n_params_used": "Parameters used",
+    "label_route": "How the label was assigned",
+    HEIGHT_COMPLETENESS_COLUMN: "Height completeness (tier 1)",
+}
+
+#: Height tier fractions are `height_frac_<source>` for whichever sources a run's cascade fired, so
+#: they cannot be named in a static list without naming a cascade. The *sources* can be, and saying
+#: what each one is — rather than printing "wsf3d" — is the difference between a layer a reader can
+#: interpret and one they cannot.
+HEIGHT_SOURCE_LABELS: dict[str, str] = {
+    "overture_height": "Overture height, measured",
+    "overture_num_floors": "Overture storeys × storey height",
+    "gob25d": "Open Buildings 2.5D, 4 m",
+    "wsf3d": "WSF-3D, 90 m raster",
+    "ghsl": "GHS-BUILT-H, 100 m raster",
+    "unresolved": "No height resolved",
+}
+
+
+def display_label(column: str, parameters: dict[str, str]) -> str:
+    """The human-readable name for `column`, or a readable fallback.
+
+    `parameters` maps a column to `ParameterSpec.label`. The fallback is the old behaviour —
+    underscores to spaces — kept because a run may carry a column no version of this package
+    describes, and a slightly ugly label beats a missing one.
+    """
+    if column in parameters:
+        return parameters[column]
+    if column in DISPLAY_LABELS:
+        return DISPLAY_LABELS[column]
+    if column.startswith(FRACTION_PREFIX):
+        source = column[len(FRACTION_PREFIX) :]
+        return HEIGHT_SOURCE_LABELS.get(source, source.replace("_", " "))
+    return column.replace("_", " ")
+
+
+def selector_group(column: str) -> str:
+    """Which selector group `column` belongs to. Follows `selector_rank`, not a second ordering."""
+    if column == "lcz_primary":
+        return GROUP_CLASSIFICATION
+    if column == HEIGHT_COMPLETENESS_COLUMN or column.startswith(FRACTION_PREFIX):
+        return GROUP_PROVENANCE
+    if column == UNIQUENESS_COLUMN:
+        return GROUP_CONFIDENCE
+    return GROUP_PARAMETERS
 
 
 def selector_rank(column: str) -> tuple[int, int]:
@@ -155,11 +223,13 @@ def build_views(
     """
     units = {entry["name"]: entry.get("unit", "") for entry in parameters}
     descriptions = {entry["name"]: entry.get("description", "") for entry in parameters}
+    labels = {entry["name"]: entry["label"] for entry in parameters if entry.get("label")}
     views: list[dict[str, Any]] = [
         {
             "id": "lcz",
             "column": "lcz_primary",
             "label": "LCZ class",
+            "group": GROUP_CLASSIFICATION,
             "unit": "",
             "description": "Primary Local Climate Zone, Demuzere et al. (2022) colours",
             "kind": "categorical",
@@ -183,20 +253,26 @@ def build_views(
         interior = boundaries[1:-1]
         colours = ramp_colours(len(interior) + 1)
         edges = [boundaries[0], *interior, boundaries[-1]]
+        legend: list[dict[str, Any]] = [
+            {"colour": colour, "label": f"{low:.3g} – {high:.3g}"}
+            for colour, low, high in zip(colours, edges[:-1], edges[1:], strict=True)
+        ]
+        # A null parameter is a reportable state, not an absence — `aspect_ratio` is null wherever
+        # no street reaches a building, which is most of LCZ 8. Without a row for it the reader
+        # sees grey cells in the same shade on every layer and no way to learn what grey means.
+        legend.append({"colour": NODATA_COLOUR, "label": "no value", "nodata": True})
         continuous.append(
             {
                 "id": column,
                 "column": column,
-                "label": column.replace("_", " "),
+                "label": display_label(column, labels),
+                "group": selector_group(column),
                 "unit": units.get(column, ""),
                 "description": descriptions.get(column, ""),
                 "kind": "continuous",
                 "method": entry.get("method", "quantile"),
                 "paint": choropleth_expression(column, boundaries),
-                "legend": [
-                    {"colour": colour, "label": f"{low:.3g} – {high:.3g}"}
-                    for colour, low, high in zip(colours, edges[:-1], edges[1:], strict=True)
-                ],
+                "legend": legend,
             }
         )
     # Stable, so columns of equal rank keep the manifest's order.
@@ -214,6 +290,7 @@ def build_style(
     has_detail: bool,
     basemap_layers: tuple[str, ...],
     has_buildings: bool,
+    online_basemap: str | None = None,
 ) -> dict[str, Any]:
     """The complete style document, ready to be written as `style.json`.
 
@@ -222,8 +299,13 @@ def build_style(
     `basemap_layers` is what the basemap tileset actually contains: a style layer naming a
     `source-layer` that is not in the tileset renders nothing and reports nothing, which is the
     hardest kind of blank map to diagnose.
+
+    `online_basemap`, when set, adds a remote raster ground beneath everything. It is the only thing
+    in this document that reaches outside the directory, and it is off unless a caller asks — see
+    `lczkit.viz.basemaps` for why that default is load-bearing rather than cautious.
     """
     has_basemap = bool(basemap_layers)
+    raster = basemaps.provider(online_basemap) if online_basemap else None
     views = build_views(manifest.get("breaks", []), columns, manifest.get("parameters", []))
 
     sources: dict[str, Any] = {
@@ -249,10 +331,35 @@ def build_style(
             "type": "vector",
             "url": "pmtiles://./tiles/buildings.pmtiles",
         }
+    if raster is not None:
+        sources[RASTER_BASEMAP_SOURCE] = {
+            "type": "raster",
+            "tiles": list(raster.tiles),
+            "tileSize": raster.tile_size,
+            "maxzoom": raster.max_zoom,
+            # MapLibre's attribution control reads this. Every provider here requires attribution,
+            # which is why configuring one also switches that control on in the front end.
+            "attribution": raster.attribution,
+        }
 
     layers: list[dict[str, Any]] = [
         {"id": "background", "type": "background", "paint": {"background-color": BACKGROUND_COLOUR}}
     ]
+    if raster is not None:
+        # Beneath everything, and hidden at first: the run's own linework is the default ground, so
+        # an archived site opened offline looks the way it always did until a reader asks for tiles.
+        layers.append(
+            {
+                "id": RASTER_BASEMAP_LAYER,
+                "type": "raster",
+                "source": RASTER_BASEMAP_SOURCE,
+                "layout": {"visibility": "none"},
+                "paint": {"raster-opacity": 1.0},
+            }
+        )
+    # The layers the *run* persisted, as opposed to the remote raster. The base picker switches
+    # between the two sets, so they have to be distinguishable by more than a name prefix.
+    run_basemap_layers: list[str] = []
     if "land_use" in basemap_layers:
         layers.append(
             {
@@ -263,6 +370,7 @@ def build_style(
                 "paint": {"fill-color": LAND_USE_COLOUR},
             }
         )
+        run_basemap_layers.append("basemap-land-use")
     if "water" in basemap_layers:
         layers.append(
             {
@@ -273,6 +381,7 @@ def build_style(
                 "paint": {"fill-color": WATER_COLOUR},
             }
         )
+        run_basemap_layers.append("basemap-water")
 
     layers.append(
         {
@@ -308,6 +417,7 @@ def build_style(
                 },
             }
         )
+        run_basemap_layers.append("basemap-streets")
 
     if has_buildings:
         layers.append(
@@ -368,6 +478,37 @@ def build_style(
                 "centre": list(centre),
                 "nodata_code": NODATA_CODE,
                 "nodata_colour": NODATA_COLOUR,
+                # Which grounds the reader can choose between. `run` is always present because the
+                # run persisted its own water and streets; `raster` appears only when a caller
+                # configured one, and the page shows no base picker at all without it.
+                "basemap": {
+                    # Collected as they were appended rather than matched on the "basemap-" prefix,
+                    # which the raster layer also carries — prefix-matching here put the remote
+                    # tiles into the offline choice and made "run's own linework" fetch the network.
+                    "run_layers": run_basemap_layers,
+                    "raster_layer": RASTER_BASEMAP_LAYER if raster is not None else None,
+                    "raster_label": raster.label if raster is not None else None,
+                    "raster_licence": raster.licence if raster is not None else None,
+                    "raster_dark": raster.dark if raster is not None else None,
+                },
+                # The sidebar renders one row per parameter and used to title each with its column
+                # name. These are `ParameterSpec.label`, plus the classification and provenance
+                # columns the registry does not describe.
+                "labels": {
+                    **{
+                        entry["name"]: entry["label"]
+                        for entry in manifest.get("parameters", [])
+                        if entry.get("label")
+                    },
+                    **DISPLAY_LABELS,
+                },
+                "height_source_labels": dict(HEIGHT_SOURCE_LABELS),
+                "groups": [
+                    GROUP_CLASSIFICATION,
+                    GROUP_PROVENANCE,
+                    GROUP_PARAMETERS,
+                    GROUP_CONFIDENCE,
+                ],
             }
         },
     }
