@@ -20,6 +20,17 @@ TABLES_DIR = Path(__file__).resolve().parent.parent / "docs" / "references" / "t
 STEWART_OKE_TABLE = TABLES_DIR / "stewart_oke_2012_properties.md"
 DEMUZERE_TABLE = TABLES_DIR / "demuzere_2022_lcz_codes.md"
 NATURAL_RANGES_TABLE = TABLES_DIR / "lczkit_natural_class_ranges.md"
+SIMILARITY_TABLE = TABLES_DIR / "lcz_class_similarity.md"
+
+SIMILARITY_HEADING = "## Similarity matrix of LCZ classes"
+"""The heading of the matrix `OA_w` uses.
+
+Selected by heading rather than by header row, which is what `rows()` does, because that file holds
+**two** matrices with an identical `| LCZ | 1 | 2 | ...` header — a similarity matrix and its
+complement. `rows()` would return whichever appears first, and the first is the dissimilarity one.
+Reading the wrong one does not fail: it inverts the metric, so a perfect map scores 0.00 and every
+cross-city comparison ranks backwards. See the table file for the worked values.
+"""
 
 #: Column header in `stewart_oke_2012_properties.md` -> property name in
 #: `lczkit.classify.prototypes.PROPERTIES`. Explicit rather than derived from the header text: a
@@ -78,6 +89,32 @@ def lczkit_natural_ranges() -> Ranges:
     header, *body = rows(NATURAL_RANGES_TABLE, first_column="LCZ")
     pairs = _paired_columns(header, {"tree": "tree_fraction", "water": "water_fraction"})
     return _read(body, pairs)
+
+
+def lcz_similarity() -> dict[tuple[str, str], float]:
+    """The Bechtel et al. (2020) similarity weights, keyed by `(reference label, predicted label)`.
+
+    Labels are the Stewart & Oke ones — `"1"`-`"10"`, `"A"`-`"G"` — not integer codes, so a reader
+    comparing a cell against the paper is comparing the same thing the paper prints.
+    """
+    lines = SIMILARITY_TABLE.read_text(encoding="utf-8").splitlines()
+    start = next(i for i, line in enumerate(lines) if line.strip() == SIMILARITY_HEADING)
+    # The contiguous run of table lines. The section also carries a worked-values table further
+    # down, which filtering on `startswith("|")` alone would run straight into.
+    body = lines[start:]
+    first = next(index for index, line in enumerate(body) if line.startswith("|"))
+    table: list[str] = []
+    for line in body[first:]:
+        if not line.startswith("|"):
+            break
+        table.append(line)
+    header = _cells(table[0])[1:]
+    weights: dict[tuple[str, str], float] = {}
+    for line in table[2:]:  # +2 skips the alignment row
+        cells = _cells(line)
+        for column, value in zip(header, cells[1:], strict=True):
+            weights[(cells[0], column)] = float(value)
+    return weights
 
 
 def demuzere_classes() -> list[dict[str, str]]:

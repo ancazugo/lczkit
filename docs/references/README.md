@@ -61,6 +61,7 @@ Read these directly. Do not infer their contents.
 | `bernard_2024_geoclimate_lcz.pdf` | Bernard et al. (2024), *GMD* 17, 2077–2107 | `10.5194/gmd-17-2077-2024` | **OA** | 2, 5, 6 | RSU partitioning rules; the 14 urban canopy parameters and their definitions; the normalisation scheme and distance-to-prototype classification producing primary, secondary and uniqueness. The core methodological reference. |
 | `bernard_2022_heights.pdf` | Bernard et al. (2022), *GMD* 15, 7505–7532 | `10.5194/gmd-15-7505-2022` | **OA** | 3 | Estimating missing building heights from morphology. Also the evidence for why height completeness must be reported. |
 | `demuzere_2022_global_lcz.pdf` | Demuzere et al. (2022), *ESSD* 14, 3835–3873 | `10.5194/essd-14-3835-2022` | **OA** | 6 | Integer coding convention (1–10 built, 11–17 for A–G), the standard colour table, and the validation target dataset. |
+| `bechtel_2020_weighted_accuracy.pdf` | Bechtel, Demuzere & Stewart (2020), *Remote Sens.* 12(11), 1769 | `10.3390/rs12111769` | **OA** | 6 | The weighted accuracy `OA_w` and the LCZ class-similarity matrix it weights the confusion matrix with. **Transcribed in `tables/`; use that.** The file holds the similarity matrix *and* its complement — `OA_w` uses the similarity one, and substituting the other inverts the measure without raising. |
 | `davenport_2000_roughness.pdf` | Davenport et al. (2000), AMS 12th Conf. Applied Climatology | — | conference paper | 5 | The terrain roughness class lookup. **Transcribed in `tables/`.** |
 
 ## Tier 2 — deferred algorithms
@@ -126,6 +127,7 @@ lookups**, not the PDFs.
 | `tables/stewart_oke_2012_properties.md` | Stewart & Oke (2012) | One row per LCZ class; explicit `min`/`max` columns; explicit null where a property is undefined for a class. Ranges deliberately overlap between adjacent classes — do not "fix" this. |
 | `tables/davenport_roughness_classes.md` | Davenport et al. (2000) | Eight roughness classes with z₀ values. |
 | `tables/esa_worldcover_classes.md` | ESA WorldCover v200 PUM | Class codes, plus this project's mapping to pervious / impervious / tree / water, **with the reasoning for each borderline decision recorded inline**. |
+| `tables/lcz_class_similarity.md` | Bechtel et al. (2020) | The 17x17 class similarity matrix, its complement, and the `OA_w` formula. Values are k/12 rounded to two decimals. **Two matrices with identical headers** — parse by section heading, not by header row. |
 | `tables/stewart_2014_ucp.md` | Stewart et al. (2014) | Only if the refined values are used in preference to the 2012 ranges. |
 
 The LCZ integer codes and colour table are **not transcribed** — they ship as data files with

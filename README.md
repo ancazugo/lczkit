@@ -373,10 +373,13 @@ assigns gets a row rather than vanishing. `OA_bu`, the built-versus-natural accu
 internal differentiation, separates "found the built fabric and misjudged its form" from "did not
 find it", which the headline charges alike.
 
-**`OA_w` is not implemented**, deliberately. Both Demuzere papers define it and attribute the
-class-similarity matrix to Bechtel et al. (2017, 2020) without printing it, and neither is in
-`docs/references/`. A plausible-looking invented weight matrix is the worst failure mode this
-package has, so the metric waits for the source.
+**`OA_w`, the weighted accuracy, is reported beside `OA` rather than instead of it.** Bechtel et
+al. (2020) weight the confusion matrix by class similarity, so an adjacent-class error scores most
+of a correct one and a cross-family error scores little — overall accuracy calls both equally wrong,
+which for a scheme whose classes lie on a continuum of built form is plainly false. It generalises
+`OA`: plain `OA` is the same sum with ones on the diagonal and zeros off it. The matrix is
+transcribed in `docs/references/tables/`, asserted against the code cell for cell, and reported with
+`OA`, `OA_u`, `OA_bu` and per-class F1 — the set published LCZ maps use.
 
 **Every figure is a point estimate over units that are not independent.** So2Sat patches are 320 m
 squares on a 100 m stride, so a city's labelled cells are one contiguous, correlated sheet and the

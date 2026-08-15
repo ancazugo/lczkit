@@ -1039,14 +1039,24 @@ in every dimension, so `d(F) >= d(D)` always and ties break to the lower code. T
 framed the exclusion as a policy choice, which would invite someone to "re-enable" F and get
 silence. The manifest now records *dominated* separately from *excluded*.
 
-#### Blocked, and reported rather than guessed
+#### `OA_w`: blocked, reported rather than guessed, then closed
 
-**`OA_w` — the LCZ-community weighted accuracy — is not implementable from what is on disk.**
-Demuzere et al. (2021) §2.4 and (2022) §2.4 both define it and both attribute the weight matrix to
-**Bechtel et al. (2017, 2020)**; neither prints the matrix, and neither paper is in
-`docs/references/papers/`. Per the standing anti-pattern, no matrix was inferred. `OA`, `OA_u`
-(built-class agreement) and `OA_bu` are all present; **`OA_w` needs Bechtel et al. (2017) or (2020)
-placed on disk and transcribed into `docs/references/tables/` before it can be built.**
+**It was not implementable from what was on disk.** Demuzere et al. (2021) §2.4 and (2022) §2.4 both
+define it and both attribute the weight matrix to **Bechtel et al. (2017, 2020)**; neither prints the
+matrix, and neither paper was in `docs/references/papers/`. Per the standing anti-pattern, no matrix
+was inferred and the metric was left unbuilt with the missing source named.
+
+**Closed once Bechtel et al. (2020) was supplied.** The 17×17 matrix is transcribed in
+`docs/references/tables/lcz_class_similarity.md` and asserted against the code cell for cell, and
+`OA_w` is reported beside `OA`, never instead of it.
+
+Two things about that table are load-bearing. It holds the similarity matrix **and its complement**,
+under identical headers, and `OA_w` uses the similarity one: substituting the other makes a perfect
+map score 0.00 and every cross-city comparison rank backwards, without raising. So the parse selects
+by section heading, `similarity._check()` refuses a matrix whose diagonal is not one, and a test
+asserts the direction. And the paper's framing supplies the consistency check for free — plain `OA`
+*is* `OA_w` with ones on the diagonal and zeros off it, so `OA_w` under an identity matrix must
+equal `OA`.
 
 #### What shipped
 
@@ -1227,11 +1237,11 @@ Remaining work, in order:
 4. **The paper.**
 5. **Cleanup** — docs, release.
 
-**One thing is blocked rather than done:** `OA_w`, the LCZ-community weighted accuracy, needs
-Bechtel et al. (2017) or (2020) on disk — both Demuzere papers define it and attribute the weight
-matrix to them without printing it. It is the metric that makes lczkit's per-class numbers directly
-comparable to published LCZ maps, so it is worth placing those PDFs before the paper's tables are
-generated. `OA`, `OA_u`, `OA_bu` and per-class F1 are all present.
+**`OA_w` was blocked and is now closed.** Bechtel, Demuzere & Stewart (2020) supplied both the
+class-similarity matrix and the definition; the matrix is transcribed in
+`docs/references/tables/lcz_class_similarity.md` and asserted against the code cell for cell. `OA`,
+`OA_u`, `OA_bu`, per-class F1 and `OA_w` are all present, so lczkit's per-class figures are now
+directly comparable to published LCZ maps.
 
 **The argument is already complete and does not depend on the next lever landing:**
 
@@ -1385,6 +1395,7 @@ PDF and inferring it.
 | Bernard et al. (2024), *GMD* 17, 2077–2107 | `10.5194/gmd-17-2077-2024` | Phases 2, 5, 6 — RSU partitioning, the 14 UCPs, normalisation and distance-to-prototype classification. Open access. |
 | Bernard et al. (2022), *GMD* 15, 7505–7532 | `10.5194/gmd-15-7505-2022` | Phase 3 — missing building height estimation. Open access. |
 | Demuzere et al. (2022), *ESSD* 14, 3835–3873 | `10.5194/essd-14-3835-2022` | Phase 6 — integer coding convention, colour table, validation target. **Cite v3** — the map in use is `lcz_v3.tif`. |
+| Bechtel, Demuzere & Stewart (2020), *Remote Sens.* 12(11), 1769 | `10.3390/rs12111769` | Phase 6 — the weighted accuracy `OA_w` and its class-similarity matrix, the metric that makes per-class figures comparable to published LCZ maps. Open access. |
 | Davenport et al. (2000), AMS 12th Conf. Applied Climatology | — | **Deferred** — terrain roughness class lookup. Requires z₀, which is deferred; not satisfiable in Phase 5. |
 
 ### Tier 2 — deferred algorithms, included ahead of need

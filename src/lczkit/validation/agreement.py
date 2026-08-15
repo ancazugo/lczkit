@@ -41,7 +41,7 @@ share alongside two corrections for exactly this - see its docstring.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 import numpy as np
 import pandas as pd
@@ -54,6 +54,7 @@ from lczkit.classify.labels import (
     lcz,
 )
 from lczkit.config import ValidationConfig
+from lczkit.validation.similarity import SIMILARITY
 
 AXIS_ELIGIBLE_CODES: frozenset[int] = frozenset(
     code for pair in HEIGHT_AXIS_PAIRS + COMPACTNESS_AXIS_PAIRS for code in pair
@@ -226,6 +227,24 @@ class AgreementReport(BaseModel):
     """Area share of the compared units the reference calls natural. Stated alongside the headline
     so a figure carried by water is recognisable as one."""
 
+    weighted_agreement: float = 0.0
+    """`OA_w`: overall accuracy with partial credit for a near-miss, per Bechtel et al. (2020).
+
+    Every other agreement figure here treats calling a compact midrise cell "open midrise" as
+    exactly as wrong as calling it "water". For a scheme whose classes lie on a near-continuum of
+    built form that is plainly false, and it is the reason this module reports the two confusion
+    axes apart in the first place. `OA_w` weights the confusion matrix by class similarity, so an
+    adjacent-class error scores most of a correct one and a cross-family error scores little.
+
+    A generalisation of `overall_agreement` rather than a rival to it: plain OA is the same sum with
+    a similarity matrix of ones on the diagonal and zeros off it, so the two coincide exactly when
+    the matrix is the identity. Reported beside it, never instead of it — and the LCZ literature
+    reports both, which is what makes lczkit's numbers comparable to a published map's.
+
+    Count-weighted, matching the confusion matrix it is computed from. `overall_agreement` is
+    area-weighted; on a grid the two coincide, on enclosures they do not.
+    """
+
     built_natural_agreement: float = 0.0
     """`OA_bu`: agreement on the built-versus-natural distinction alone, ignoring which built or
     which natural class.
@@ -329,6 +348,7 @@ def agreement(
 
     report.per_class = _per_class(compared)
     report.confusion = _confusion(compared)
+    report.weighted_agreement = weighted_agreement(report.confusion)
     report.height_axis = axis_pairs(report.confusion, HEIGHT_AXIS_PAIRS)
     report.compactness_axis = axis_pairs(report.confusion, COMPACTNESS_AXIS_PAIRS)
     report.height_axis_summary = axis_summary(report.confusion, HEIGHT_AXIS_PAIRS, axis="height")
@@ -385,6 +405,28 @@ def _per_class(compared: pd.DataFrame) -> list[ClassAgreement]:
             )
         )
     return rows
+
+
+def weighted_agreement(
+    confusion: Sequence[ConfusionCell],
+    weights: Mapping[tuple[int, int], float] | None = None,
+) -> float:
+    """`OA_w` — Bechtel et al. (2020) Eq. 1: `sum(w_ij * c_ij) / N`.
+
+    `w` is the **similarity** matrix from `docs/references/tables/lcz_class_similarity.md`, one on
+    the diagonal. Passing the complement would invert the measure without raising, which is why the
+    default is not a parameter a caller has to get right and why `similarity._check()` refuses a
+    matrix whose diagonal is not one.
+
+    Computed from the stored confusion list, so a manifest written before this existed can be
+    re-scored without re-running the pipeline.
+    """
+    table = SIMILARITY if weights is None else weights
+    total = sum(cell.n for cell in confusion)
+    if total == 0:
+        return 0.0
+    scored = sum(table.get((cell.reference, cell.predicted), 0.0) * cell.n for cell in confusion)
+    return float(scored / total)
 
 
 def _confusion(compared: pd.DataFrame) -> list[ConfusionCell]:

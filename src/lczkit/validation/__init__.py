@@ -24,10 +24,12 @@ from lczkit.validation.agreement import (
     ConfusionCell,
     Stratum,
     agreement,
+    weighted_agreement,
 )
 from lczkit.validation.labelled import LabelMatch, labelled_lcz
 from lczkit.validation.ranges import ClassRange, RangeReport, parameter_ranges
 from lczkit.validation.reference import reference_lcz
+from lczkit.validation.similarity import BECHTEL_2020, SIMILARITY
 from lczkit.validation.uncertainty import (
     BootstrapReport,
     Interval,
@@ -46,10 +48,13 @@ __all__ = [
     "LabelMatch",
     "RangeReport",
     "Stratum",
+    "BECHTEL_2020",
+    "SIMILARITY",
     "agreement",
     "bootstrap_agreement",
     "labelled_lcz",
     "parameter_ranges",
     "reference_lcz",
     "spatial_blocks",
+    "weighted_agreement",
 ]
