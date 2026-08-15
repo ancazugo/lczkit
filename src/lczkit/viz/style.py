@@ -25,6 +25,7 @@ from typing import Any
 from lczkit.classify.classifier import DISTANCE_COLUMNS
 from lczkit.classify.labels import LCZ_CLASSES, NODATA_CODE
 from lczkit.heights.completeness import FRACTION_PREFIX
+from lczkit.ucp.registry import PARAMETERS
 from lczkit.viz import basemaps
 
 #: Nine-stop perceptually-uniform sequential ramp (a viridis subsample), used for every continuous
@@ -105,16 +106,32 @@ HEIGHT_SOURCE_LABELS: dict[str, str] = {
     "unresolved": "No height resolved",
 }
 
+REGISTRY_LABELS: dict[str, str] = {spec.name: spec.label for spec in PARAMETERS}
+"""`ParameterSpec.label` for every parameter this version of the package knows about.
+
+Consulted when a run's own manifest carries no label, which every run written before Phase 15 does
+— including the three published ones. Without it, rebuilding an archived site with a newer lczkit
+would keep showing the labels the rebuild was meant to fix.
+"""
+
 
 def display_label(column: str, parameters: dict[str, str]) -> str:
     """The human-readable name for `column`, or a readable fallback.
 
-    `parameters` maps a column to `ParameterSpec.label`. The fallback is the old behaviour —
-    underscores to spaces — kept because a run may carry a column no version of this package
-    describes, and a slightly ugly label beats a missing one.
+    `parameters` maps a column to the `label` the *run* recorded. A run written before labels
+    existed carries none, so the packaged registry answers next — otherwise rebuilding an archived
+    run's site with a newer lczkit would still show "height of roughness elements m", and the three
+    published sites are exactly such runs.
+
+    That is not the site recomputing something the run decided. A display name is presentation, not
+    a measurement: the values, the breaks and the colours still come from the manifest, and
+    `DISPLAY_LABELS` and `HEIGHT_SOURCE_LABELS` below already answer from the package. The run's own
+    label still wins where it has one, so a manifest that named a column differently keeps its name.
     """
     if column in parameters:
         return parameters[column]
+    if column in REGISTRY_LABELS:
+        return REGISTRY_LABELS[column]
     if column in DISPLAY_LABELS:
         return DISPLAY_LABELS[column]
     if column.startswith(FRACTION_PREFIX):

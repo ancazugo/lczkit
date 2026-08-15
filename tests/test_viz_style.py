@@ -353,12 +353,27 @@ def test_a_view_is_named_by_the_registry_and_not_by_its_column() -> None:
 
 
 def test_a_column_the_registry_does_not_describe_still_gets_a_readable_label() -> None:
-    """A run may carry a column no version of this package describes. A slightly ugly label beats a
-    missing one, so the old behaviour survives as the fallback rather than as the rule."""
+    """A run may carry a column no version of this package describes — an experiment's own output,
+    or one added after the site code was written. A slightly ugly label beats a missing one, so
+    underscore-stripping survives as the last resort rather than as the rule.
+
+    Deliberately *not* `aspect_ratio`: that is a registered parameter, and using it here only
+    appeared to test the fallback because the manifest fixture happened to omit it.
+    """
+    breaks = [{"column": "some_future_column", "method": "quantile", "breaks": [0.0, 0.5, 1.0]}]
+    views = build_views(breaks, ["unit_id", "lcz_primary", "some_future_column"], [])
+
+    unknown = next(view for view in views if view["column"] == "some_future_column")
+    assert unknown["label"] == "some future column"
+
+
+def test_a_registered_parameter_is_named_even_when_the_manifest_omits_it() -> None:
+    """`aspect_ratio` is in the registry, so it gets its published name whether or not the run
+    that produced the map happened to list it."""
     views = build_views(BREAKS, COLUMNS, MANIFEST["parameters"])
     aspect = next(view for view in views if view["column"] == "aspect_ratio")
 
-    assert aspect["label"] == "aspect ratio"
+    assert aspect["label"] == "Aspect ratio (H/W)"
 
 
 def test_height_tier_fractions_are_named_for_the_product_they_came_from() -> None:
@@ -463,3 +478,37 @@ def test_the_run_basemap_choice_does_not_include_the_remote_raster() -> None:
     assert base["run_layers"] == ["basemap-water", "basemap-streets"]
     assert base["raster_layer"] == "basemap-raster"
     assert base["raster_layer"] not in base["run_layers"]
+
+
+def test_a_run_written_before_labels_existed_still_gets_them_on_rebuild() -> None:
+    """The three published sites are runs whose manifests predate `ParameterSpec.label`.
+
+    Rebuilding one with a newer lczkit is the natural way to pick up a front-end fix, and if the
+    label lookup stopped at the manifest those rebuilds would keep showing exactly the labels the
+    fix was for. The packaged registry answers when the run cannot.
+    """
+    old_manifest_parameters: list[dict[str, str]] = [
+        {
+            "name": "building_surface_fraction",
+            "unit": "fraction",
+            "description": "share of unit area under building footprint",
+            "reference": "10.1175/BAMS-D-11-00019.1",
+        }
+    ]
+
+    views = build_views(BREAKS, COLUMNS, old_manifest_parameters)
+    bsf = next(view for view in views if view["column"] == "building_surface_fraction")
+
+    assert bsf["label"] == "Building surface fraction"
+    assert bsf["unit"] == "fraction", "the run's own unit must still come from the manifest"
+
+
+def test_a_label_the_run_recorded_beats_the_packaged_one() -> None:
+    """The registry is a fallback, not an override. A manifest that named a column differently
+    described what that run actually computed, and the site reports the run."""
+    renamed = [{"name": "building_surface_fraction", "label": "BSF as this run defined it"}]
+
+    views = build_views(BREAKS, COLUMNS, renamed)
+    bsf = next(view for view in views if view["column"] == "building_surface_fraction")
+
+    assert bsf["label"] == "BSF as this run defined it"
