@@ -28,6 +28,7 @@ asserted by a test rather than trusted to a comment.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from lczkit.classify.labels import CODES, code_of, lcz
@@ -50,6 +51,22 @@ reproduce a classification."""
 SIMILARITY_HEADING = "## Similarity matrix of LCZ classes"
 
 
+def _heading_matches(line: str, heading: str) -> bool:
+    """Whether `line` is `heading`, ignoring a trailing parenthetical.
+
+    The table records where in the paper each matrix came from — "(Figure 3a)", "(Figure 3b)",
+    "(equation 1)" — and that provenance is exactly what a reference table is for. Matching the
+    heading verbatim made adding it break the parse, which is the wrong way round: a citation
+    should be addable without touching code.
+
+    Deliberately *not* a `startswith`. "Dissimilarity matrix of LCZ classes" does not begin with
+    "Similarity matrix…", so a prefix test happens to work here, but it would also match a future
+    "Similarity matrix of LCZ classes, complement" — and picking up the complement is the one
+    failure this whole module is arranged to prevent.
+    """
+    return re.sub(r"\s*\([^)]*\)\s*$", "", line.strip()) == heading
+
+
 def _parse(path: Path, heading: str) -> dict[tuple[int, int], float]:
     """Read one matrix out of the table file, keyed by integer LCZ code pairs.
 
@@ -58,7 +75,9 @@ def _parse(path: Path, heading: str) -> dict[tuple[int, int], float]:
     """
     lines = path.read_text(encoding="utf-8").splitlines()
     try:
-        start = next(index for index, line in enumerate(lines) if line.strip() == heading)
+        start = next(
+            index for index, line in enumerate(lines) if _heading_matches(line, heading)
+        )
     except StopIteration:  # pragma: no cover - a broken checkout, not a code path
         raise RuntimeError(f"{path} has no section {heading!r}") from None
 

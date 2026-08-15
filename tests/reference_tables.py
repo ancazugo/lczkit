@@ -13,6 +13,7 @@ whole point of the rule that exception exists for.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 TABLES_DIR = Path(__file__).resolve().parent.parent / "docs" / "references" / "tables"
@@ -98,7 +99,13 @@ def lcz_similarity() -> dict[tuple[str, str], float]:
     comparing a cell against the paper is comparing the same thing the paper prints.
     """
     lines = SIMILARITY_TABLE.read_text(encoding="utf-8").splitlines()
-    start = next(i for i, line in enumerate(lines) if line.strip() == SIMILARITY_HEADING)
+    # Trailing parenthetical stripped, so the table can record which figure of the paper each
+    # matrix came from — "(Figure 3b)" — without an added citation breaking the parse.
+    start = next(
+        i
+        for i, line in enumerate(lines)
+        if re.sub(r"\s*\([^)]*\)\s*$", "", line.strip()) == SIMILARITY_HEADING
+    )
     # The contiguous run of table lines. The section also carries a worked-values table further
     # down, which filtering on `startswith("|")` alone would run straight into.
     body = lines[start:]

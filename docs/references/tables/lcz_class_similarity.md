@@ -2,7 +2,7 @@
 
 Bechtel, B., Demuzere, M., & Stewart, I. D. (2020). "A Weighted Accuracy Measure for Land Cover Mapping: Comment on Johnson et al. …" Remote Sensing 12(11), 1769. 10.3390/rs12111769 — OA
 
-## Dissimilarity matrix of LCZ classes
+## Dissimilarity matrix of LCZ classes (Figure 3a)
 
 | LCZ | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | A | B | C | D | E | F | G |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -24,7 +24,7 @@ Bechtel, B., Demuzere, M., & Stewart, I. D. (2020). "A Weighted Accuracy Measure
 | F | 1.00 | 0.92 | 0.83 | 0.67 | 0.58 | 0.50 | 0.58 | 0.67 | 0.42 | 0.67 | 0.33 | 0.25 | 0.17 | 0.08 | 0.25 | 0.00 | 0.08 |
 | G | 1.00 | 0.92 | 0.83 | 0.67 | 0.58 | 0.50 | 0.58 | 0.67 | 0.42 | 0.67 | 0.33 | 0.25 | 0.17 | 0.08 | 0.25 | 0.08 | 0.00 |
 
-## Similarity matrix of LCZ classes
+## Similarity matrix of LCZ classes (Figure 3b)
 
 **This is the matrix the metric uses.** Element-wise `1 - dissimilarity`, verified cell for cell.
 
@@ -48,7 +48,7 @@ Bechtel, B., Demuzere, M., & Stewart, I. D. (2020). "A Weighted Accuracy Measure
 | F | 0.00 | 0.08 | 0.17 | 0.33 | 0.42 | 0.50 | 0.42 | 0.33 | 0.58 | 0.33 | 0.67 | 0.75 | 0.83 | 0.92 | 0.75 | 1.00 | 0.92 |
 | G | 0.00 | 0.08 | 0.17 | 0.33 | 0.42 | 0.50 | 0.42 | 0.33 | 0.58 | 0.33 | 0.67 | 0.75 | 0.83 | 0.92 | 0.75 | 0.92 | 1.00 |
 
-## OA_w formula
+## OA_w formula (equation 1)
 
 From the same paper. `w` is the **similarity** matrix above, never the dissimilarity one.
 

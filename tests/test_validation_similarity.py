@@ -123,3 +123,38 @@ def test_a_run_reports_it_beside_overall_accuracy_never_instead_of_it() -> None:
     assert report.overall_agreement == pytest.approx(0.5)
     assert report.weighted_agreement > report.overall_agreement
     assert report.weighted_agreement < 1.0
+
+
+def test_the_section_heading_may_carry_its_provenance_without_breaking_the_parse() -> None:
+    """The table records which figure of the paper each matrix came from — "(Figure 3a)" for the
+    dissimilarity one, "(Figure 3b)" for the similarity one, "(equation 1)" for the formula. That
+    is what a reference table is *for*, and adding it must not require touching code.
+
+    It did, once: the heading was matched verbatim, so the citation broke the parse. Loudly, which
+    is the only reason it is a footnote rather than a silent read of the wrong matrix — but the
+    right behaviour is to tolerate the annotation.
+    """
+    from lczkit.validation.similarity import SIMILARITY_HEADING, _heading_matches
+
+    assert _heading_matches(SIMILARITY_HEADING, SIMILARITY_HEADING)
+    assert _heading_matches(f"{SIMILARITY_HEADING} (Figure 3b)", SIMILARITY_HEADING)
+    assert _heading_matches(f"  {SIMILARITY_HEADING} (Fig. 3b, p. 4)  ", SIMILARITY_HEADING)
+
+    # And still refuses the complement, which is the whole point of matching by heading at all.
+    complement = "## Dissimilarity matrix of LCZ classes (Figure 3a)"
+    assert not _heading_matches(complement, SIMILARITY_HEADING)
+    assert not _heading_matches(f"{SIMILARITY_HEADING}, complement", SIMILARITY_HEADING)
+
+
+def test_the_committed_table_still_names_where_each_matrix_came_from() -> None:
+    """Provenance to the figure, not just to the paper — so a reader can re-check one cell without
+    re-reading the article. Asserted because it is easy to lose in an edit and nothing else would
+    notice."""
+    from lczkit.validation.similarity import SIMILARITY_TABLE
+
+    text = SIMILARITY_TABLE.read_text(encoding="utf-8")
+
+    assert "10.3390/rs12111769" in text
+    assert "## Dissimilarity matrix of LCZ classes (Figure 3a)" in text
+    assert "## Similarity matrix of LCZ classes (Figure 3b)" in text
+    assert "## OA_w formula (equation 1)" in text
