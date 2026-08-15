@@ -247,9 +247,7 @@ def test_a_table_that_is_not_a_phase_5_parameter_table_is_refused() -> None:
     with pytest.raises(ValueError, match="unit_id"):
         PrototypeClassifier().classify(frame.reset_index())
     with pytest.raises(ValueError, match="industrial_fraction"):
-        PrototypeClassifier().classify(
-            frame.drop(columns=["industrial_fraction_of_building_area"])
-        )
+        PrototypeClassifier().classify(frame.drop(columns=["industrial_fraction_of_building_area"]))
 
 
 def test_lcz_f_is_recorded_as_dominated_rather_than_merely_excluded() -> None:

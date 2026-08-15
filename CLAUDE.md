@@ -36,7 +36,8 @@ Read this section before writing any code. Violations here are expensive to unwi
 ### Scope discipline
 
 - Do not build features from the "Deferred" list without being asked.
-- Do not add a CLI, a web UI, plotting helpers, or notebook tooling in the MVP.
+- Do not add a web UI, plotting helpers, or notebook tooling in the MVP. **The CLI prohibition was
+  lifted by explicit request in Phase 15** and the CLI built; the rest of this bullet stands.
 - Do not add abstraction for plurality that does not yet exist. One implementation per
   protocol is correct for the MVP; the seam is the point, not the number of implementations.
 
@@ -1092,6 +1093,66 @@ is a measurement and not a remediation.)*
 
 ---
 
+### Phase 15 — Command line — CONCLUDED (part 1 of 2)
+
+**Not a diagnostic phase, and a deliberate departure from committed scope.** The MVP rule said "do
+not add a CLI" and the deferred list carried one; both were lifted by explicit user request. Recorded
+here as a patch rather than done silently, per the Canonical spec rule. The UI half of the same
+request — base layers and legibility — is part 2 and is **not** covered by this block.
+
+**The CLI is thin. What it cost was that the pipeline did not exist as a callable thing.** Before
+this phase the only end-to-end chain in the repository was `run_and_publish` in
+`scripts/berlin_metropolitan_run.py`: no `__init__.py`, reached by `sys.path` insertion, outside
+`mypy src` in CI, and importing its configuration constants and its land-cover fetcher from two
+*other* scripts. Three partial re-implementations sat beside it. A single-city run meant editing a
+module constant — the bbox was hardcoded and the only "pick a place" interface was a 16-entry tuple.
+
+What moved into the package, all verbatim so no measured behaviour changes:
+
+| now | was | why it had to move |
+|---|---|---|
+| `pipeline.run_pipeline` | `berlin_metropolitan_run.run_and_publish` | the chain itself |
+| `sources/worldcover.py` | `berlin_wide_validation.py` | a run's land cover cannot come from `scripts/` |
+| `raster_window.clip_raster`, `coverage_shortfall` | same | they are what `clip_worldcover` is built on |
+| `presets.py` | `berlin_metropolitan.py` + `unit_scale_experiment.py` | `Settings.load()` cannot produce a runnable config by design |
+| `cities.py` | `multi_city_validation.py` | `--city` resolves the same 30 km window every sweep used |
+
+`run_and_publish` and `configure` keep their names and signatures and now delegate, so
+`publish_sites.py` is untouched and the phase write-ups that cite these scripts by path still hold.
+`berlin_wide_validation.py` re-exports the moved helpers under their original names because
+`tests/test_multi_city_validation.py` loads it by path and calls them through it.
+
+**Two config defects the CLI exposed rather than introduced:**
+
+- `Settings.load()` created `run_dir` as a side effect, so any command whose purpose is *not* to act
+  would still leave a directory behind. Now `create_run_dir=True` by default, `False` for `--dry-run`.
+- `land_cover.gee_project` was assigned `os.environ.get("GEE_PROJECT_NAME")` **unconditionally**, so
+  an absent variable overwrote a configured value with `None`. A silent discard, not a precedence
+  rule. Now assigned only when the variable is present.
+
+**A `.env` subtlety worth knowing and not fixed here.** `Settings.load` calls `load_dotenv` with
+dotenv's upward search, so running anything from inside a checkout picks up the repository's `.env`
+regardless of the working directory. `override=False` means an already-set `DATA_DIR` still wins,
+which is why the test fixture sets the variable rather than writing a file — but a test for the
+*unset* path has to neutralise `load_dotenv` outright. Pre-existing behaviour; noted because it is
+invisible until something tries to test the failure branch.
+
+**Ruling: one preset, and it is guarded against the constants it came from.** `PRESETS["published"]`
+holds what the three published sites were built with — Phase 8's *metropolitan* cleaning values
+(`building_max_area_m2=100_000`, `merge_limit=50`, plus the street tiling), **not** the 9 km²
+fixture values of the same name in `unit_scale_experiment.py`. Two `CleaningConfig` constants called
+`CLEANING` exist with different numbers, and taking the wrong one would make `lczkit run` silently
+irreproducible against every published figure. `tests/test_cli.py` asserts the preset still equals
+`berlin_metropolitan.CLEANING`/`RELEASE` and that `AREAL_CONFIDENCE` still equals the experiments'.
+
+Dependencies added: **typer 0.27.1 (MIT)** and **rich 15.0.0 (MIT)**, pulling `annotated-doc` (MIT),
+`shellingham` (ISC), `markdown-it-py` (MIT), `mdurl` (MIT) and `pygments` (BSD-2-Clause). All
+permissive, none GPL/LGPL. Note typer 0.27 no longer depends on `click`; `click` remains present via
+`rasterio`/`cligj` independently. This crosses the "don't add a dependency to save fewer than ~50
+lines" bar knowingly, on the user's choice of stack.
+
+---
+
 ### STOP RULE — applies after Phase 13
 
 **No further diagnostic phases.** Thirteen phases in, the finding rate remains high but the returns
@@ -1103,8 +1164,10 @@ Remaining work, in order:
 1. ~~**Phase 7 — the static map site.**~~ **Concluded** — three cities published.
 2. ~~**Phase 14 — audit remediation.**~~ **Concluded** — four unapplied rulings closed, two live
    ruling violations fixed. Not a diagnostic phase; it opened no new question.
-3. **The paper.**
-4. **Cleanup** — docs, release.
+3. **Phase 15 — command line and UI**, on explicit request, outside the diagnostic sequence.
+   Part 1 (CLI) concluded; part 2 (base layers and UI legibility) outstanding.
+4. **The paper.**
+5. **Cleanup** — docs, release.
 
 **One thing is blocked rather than done:** `OA_w`, the LCZ-community weighted accuracy, needs
 Bechtel et al. (2017) or (2020) on disk — both Demuzere papers define it and attribute the weight
@@ -1416,6 +1479,12 @@ reconcile silently.** That flagging behaviour is working; keep it.
 | Style and tiles each tested against their own assumption | The style test asserted the expression carries the committed colours; the site test asserted the tileset is a valid archive. **Nothing asserted that the type in the tiles is a type the expression can match**, so a defect in the gap between them was invisible to 37 tests. A test now decodes the built tiles and evaluates the real paint expression against the real values — it fails 6 of 6 without the fix. | 7 |
 | WorldCover clipped from one hardcoded tile | Berlin's `N51E012`, inherited by the publish driver. Hong Kong and Cairo span two tiles each and both failed with `RasterioIOError: 0x0 dataset`. `clip_worldcover` already resolved and mosaicked correctly. **Found only by publishing a second city** — a city one tile-width away would have lost a quarter of its land cover silently. | 7 |
 | Did the Phase 9–13 validation runs share that hardcoded path? | **No — checked against the persisted rasters, and clean.** `multi_city_validation` never imported `WORLDCOVER_URL`; `prepare` has always called the mosaicking `clip_worldcover`. All four stored runs verified: 15/9/16/16 cities, **worst shortfall 0.45 px**, no raster missing, nodata 0.000% bar a one-row clip edge on Cologne and Rome. **Six of sixteen cities span two tiles** — London, Cologne, Rome, Cairo, Hong Kong, Vancouver — so the mosaic path was exercised by real inputs, not merely present. No re-run needed. | 9–13 |
+| No CLI, per MVP scope discipline | **Lifted by explicit request, Phase 15.** Removed from the Deferred list and from the scope bullet, both patched here rather than departed from silently. `lczkit run` and `lczkit site build\|serve`; the rest of that bullet — no web UI, no plotting helpers, no notebook tooling — stands. | 0, 15 |
+| The end-to-end pipeline lived in `scripts/` | **Moved to `lczkit.pipeline.run_pipeline` in Phase 15.** It was unimportable (no `__init__.py`, reached by `sys.path` insertion), outside `mypy src`, and pulled its config constants and land-cover fetcher from two *other* scripts, with three partial re-implementations beside it. A bbox was a module constant, so a new city meant editing a script. `run_and_publish` and `configure` keep their names and delegate, so `publish_sites.py` and the phase write-ups that cite these paths still hold. | 8, 15 |
+| Two `CleaningConfig` constants both named `CLEANING` | `berlin_metropolitan.py` carries the metropolitan values the published sites used (`max_area 100_000`, `merge_limit 50`, plus street tiling); `unit_scale_experiment.py` carries the 9 km² fixture values (`50_000` / `200`, no tiling). `configure()` took the former. `presets.PRESETS["published"]` therefore takes the former, and **a test asserts it still equals it** — taking the other would make `lczkit run` silently irreproducible against every published figure. | 8, 15 |
+| `Settings.load()` created `run_dir` as a side effect | Fine while every caller went on to run a pipeline; wrong as soon as a command exists whose purpose is *not* to act. `create_run_dir=True` by default, `False` for `--dry-run`. | 0, 15 |
+| `land_cover.gee_project` overwritten with `None` | `settings.land_cover.gee_project = os.environ.get("GEE_PROJECT_NAME")` ran unconditionally, so an absent variable discarded a configured value. A silent discard, not a precedence rule. Assigned only when the variable is present. Invisible until `--config` made it possible to configure the field. | 4, 15 |
+| `Settings.load` finds the repository `.env` from anywhere in a checkout | dotenv's upward search, not the working directory. `override=False` means an already-set `DATA_DIR` wins, so tests set the variable rather than writing a file — but a test of the *unset* branch must neutralise `load_dotenv` outright, since the repo's own `.env` would otherwise satisfy it. Pre-existing; recorded because it is invisible until something tests the failure path. | 0, 15 |
 | Nothing asserted that a clipped raster covers its window | The silent variant was one line away and would not have raised: `clip_raster` windows with `from_bounds` and `read(window=…)`, which **returns a smaller array** rather than erroring, and `LocalRasterSource.fractions` turns uncovered units into **all-`NaN`** by design. Two correct behaviours composing into a quarter-missing map. `clip_worldcover` now reopens what it wrote and raises, naming the short side; `coverage_shortfall` ignores sub-pixel gaps because every real clip has one. The last `WORLDCOVER_URL` call sites were retired — Berlin-only, so no stored result moves. | 4, 7, 13 |
 | Pooling a partial sweep against a complete stored record | Reported the difference between two city lists as a pipeline deviation (6.6%). Stability comparisons now intersect the city sets; restricted, the deviation is 0.0%. | 13 |
 | Superseded text left in concluded phase blocks | Phase 8's block opened with a nine-minute runtime and later asserted the package could not process a city; Phase 3 still carried the corrected-away axis pairing; deferred still listed SVF first. **Concluded phases keep measurements and rulings and drop imperatives.** | 3, 6, 8, 13 |
@@ -1441,10 +1510,13 @@ trees as the roughness elements for A–D, so canopy height should recover A and
 push D toward near-zero canopy · additional height tiers (UT-GLOBUS, GlobalBuildingAtlas,
 EUBUCCO, morphology-based ML imputation) · ML classifier trained on So2Sat LCZ42 / DFC2017 ·
 fuzzy or continuous LCZ output · W2W / WRF export · OSM as an alternative `VectorSource` ·
-tessellation-based building-level units · dask-geopandas scaling · CLI · deck.gl overlay for
+tessellation-based building-level units · dask-geopandas scaling · deck.gl overlay for
 buildings (only if MapLibre `fill-extrusion` proves insufficient) · run-comparison views in the
 site · OSM `industrial=*` subtags as supplementary heavy/light industry evidence (arrives with the
 deferred OSM source; the only realistic route to the distinction Overture discards)
+
+*(**CLI removed from this list in Phase 15**, built on explicit request. `lczkit run` and
+`lczkit site build|serve`.)*
 
 ---
 
@@ -1571,3 +1643,12 @@ deferred OSM source; the only realistic route to the distinction Overture discar
 - **Don't assume a format conversion preserves types.** tippecanoe's FlatGeobuf reader turns every
   integer attribute into a string, at every width, while floats pass through. The GeoParquet was
   right, the FlatGeobuf was right, and the tiles were wrong.
+- **Two constants with the same name and different values will eventually be confused.** `CLEANING`
+  existed twice — metropolitan values in one script, 9 km² fixture values in another — and only one
+  of them is what the published sites went through. Nothing about either name says which. When a
+  value is promoted out of a script, assert it still equals the constant it came from; the assertion
+  is the only thing that notices when one of the two moves.
+- **A convenience wrapper must not become a second definition of the thing it wraps.** The command
+  line configures a run by calling the same `apply_preset` the publish driver calls, rather than by
+  listing the same settings again. Anything a CLI restates is a place two answers can diverge, and
+  the divergence shows up as a map that disagrees with a published figure for no visible reason.

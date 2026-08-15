@@ -18,13 +18,18 @@ dependencies = [
     "pypdf>=6.15.0",
     "python-dotenv>=1.2.2",
     "rasterio>=1.5.0",
+    "rich>=15.0.0",
     "scipy>=1.18.0",
+    "typer>=0.27.1",
 ]
 
 [project.optional-dependencies]
 viz = [
     "tippecanoe==2.72.0",
 ]
+
+[project.scripts]
+lczkit = "lczkit.cli:main"
 
 [build-system]
 requires = ["hatchling"]

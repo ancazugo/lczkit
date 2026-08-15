@@ -1163,12 +1163,25 @@ class Settings(BaseModel):
         return self.input_dir / name
 
     @classmethod
-    def load(cls, *, run_id: str | None = None, dotenv_path: Path | str | None = None) -> Settings:
+    def load(
+        cls,
+        *,
+        run_id: str | None = None,
+        dotenv_path: Path | str | None = None,
+        create_run_dir: bool = True,
+    ) -> Settings:
         """Load `.env`, resolve `DATA_DIR`, and create `output/lczkit/<run_id>/` if absent.
 
         Also picks up `GEE_PROJECT_NAME` into `land_cover.gee_project`. Unlike `DATA_DIR` it is
         optional — only the Earth Engine backend needs it, and that backend raises its own message
-        when it is missing — so an absent value is not an error here.
+        when it is missing — so an absent value is not an error here. **An absent variable leaves
+        whatever is already configured alone**: assigning `os.environ.get(...)` unconditionally
+        would overwrite a value supplied by a config file with `None`, which is a silent discard
+        rather than a precedence rule.
+
+        `create_run_dir=False` resolves everything and touches nothing, for callers that only want
+        to *read* the resolved configuration — `lczkit run --dry-run`. The default creates it,
+        because every caller that goes on to run a pipeline needs it to exist.
 
         Never creates or modifies anything under `input/`. Raises `ValueError` with a clear
         message if `DATA_DIR` is unset; raises a `pydantic.ValidationError` (also with a
@@ -1186,6 +1199,9 @@ class Settings(BaseModel):
             if run_id is not None
             else cls(data_dir=Path(raw_data_dir))
         )
-        settings.land_cover.gee_project = os.environ.get("GEE_PROJECT_NAME")
-        settings.run_dir.mkdir(parents=True, exist_ok=True)
+        gee_project = os.environ.get("GEE_PROJECT_NAME")
+        if gee_project is not None:
+            settings.land_cover.gee_project = gee_project
+        if create_run_dir:
+            settings.run_dir.mkdir(parents=True, exist_ok=True)
         return settings

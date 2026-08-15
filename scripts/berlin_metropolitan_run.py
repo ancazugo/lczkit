@@ -25,28 +25,14 @@ import sys
 import time
 from pathlib import Path
 
-from lczkit.classify import PrototypeClassifier
-from lczkit.cleaning.pipeline import clean_vectors
 from lczkit.config import Settings
-from lczkit.heights.cascade import cascade_height_sources, fill_heights
-from lczkit.heights.completeness import height_metrics
-from lczkit.heights.diagnostic import source_availability
-from lczkit.heights.inherit import inherit_heights
-from lczkit.heights.tiers import build_cascade
-from lczkit.landcover.local import LocalRasterSource
-from lczkit.output import write_run
+from lczkit.pipeline import run_pipeline
+from lczkit.presets import apply_preset
 from lczkit.protocols import BBox
-from lczkit.sources.height_products import resolve_areal_tiers
-from lczkit.sources.overture import OvertureSource
-from lczkit.ucp.parameters import compute_parameters
-from lczkit.units.grid import GridUnits
-from lczkit.viz import build_site
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from berlin_metropolitan import BERLIN, CLEANING, RELEASE, _shrink  # noqa: E402 - sibling script
-from multi_city_validation import clip_worldcover  # noqa: E402 - sibling script
-from unit_scale_experiment import HEIGHTS, LAND_COVER, UCP  # noqa: E402 - sibling script
+from berlin_metropolitan import BERLIN, _shrink  # noqa: E402 - sibling script
 
 
 class Timer:
@@ -75,12 +61,12 @@ def configure(settings: Settings, *, buildings: bool = False) -> Settings:
     One function rather than a copy per driver: the sites are meant to be read side by side, so a
     difference between two cities must come from the cities and not from a setting that drifted
     between two scripts.
+
+    The values themselves moved into `lczkit.presets` in Phase 15, so `lczkit run` and this driver
+    configure a run identically by construction rather than by two lists agreeing. A test asserts
+    the two paths still produce the same `Settings`.
     """
-    settings.overture.release = RELEASE
-    settings.cleaning = CLEANING.model_copy()
-    settings.heights = HEIGHTS.model_copy()
-    settings.land_cover = LAND_COVER.model_copy()
-    settings.ucp = UCP.model_copy()
+    apply_preset(settings, "published")
     settings.viz.include_buildings = buildings
     return settings
 
@@ -93,89 +79,22 @@ def run_and_publish(settings: Settings, bbox: BBox, *, build_site_after: bool = 
     Split out of `main` so `publish_sites.py` can run this chain over another city without
     copying it. A second copy of these stages would be a second thing to keep in step, and the
     comparison the site exists to support only holds if every city went through one pipeline.
+
+    Phase 15 moved the stages themselves into `lczkit.pipeline.run_pipeline`, where a command line
+    and a test can reach them. This function is now the printing around that call, kept because the
+    Phase 8 timings in the write-ups are quoted from its output and `publish_sites.py` calls it by
+    name. `Timer` satisfies the `StageObserver` protocol structurally, so the per-stage lines are
+    the same lines.
     """
     print(f"run {settings.run_id} over {bbox}", flush=True)
     timer = Timer()
 
-    with timer.stage("clean_vectors"):
-        cleaned = clean_vectors(
-            OvertureSource(settings),
-            bbox,
-            settings.cleaning,
-            cache_dir=settings.tile_cache_dir,
-        )
+    result = run_pipeline(settings, bbox, build_site_after=build_site_after, observer=timer)
+    print(f"  height products: {result.height_products}", flush=True)
+    print(f"  wrote {result.run_dir}", flush=True)
 
-    with timer.stage("heights"):
-        # Places the products the configured cascade needs, and returns the config with each
-        # tier's file resolved. Without this step `build_cascade` finds every areal tier's
-        # `filename` unset and silently runs tier 1 alone — which is what every run before
-        # Phase 11 did, and why the default cascade needs a step that actually fetches.
-        heights, placed = resolve_areal_tiers(settings, bbox)
-        print(f"  height products: {placed}", flush=True)
-        tiers = build_cascade(heights, settings.source_dir)
-        buildings_area, height_fill = fill_heights(cleaned.buildings_area, tiers)
-        buildings_topo = inherit_heights(cleaned.buildings_topo, buildings_area)
-        availability = source_availability(cleaned.buildings_area)
-
-    with timer.stage("units"):
-        units = GridUnits().generate(bbox)
-
-    with timer.stage("land_cover"):
-        # `clip_worldcover` resolves the tiles the bbox actually spans and mosaics them. The
-        # Berlin-only `WORLDCOVER_URL` this used to pass is a single hardcoded tile: correct for
-        # Berlin, and a 0x0 window — `RasterioIOError` — for any city outside it.
-        worldcover = clip_worldcover(bbox, settings.run_dir / "worldcover.tif")
-        fractions = LocalRasterSource(
-            settings.land_cover.dataset(settings.ucp.land_cover_dataset), worldcover
-        ).fractions(units)
-
-    with timer.stage("provenance"):
-        # The column set comes from the configured cascade, not from which tiers happened to fire,
-        # so a run with no areal product still reports its tier fractions as zeros rather than
-        # omitting the columns and changing the output schema.
-        provenance = height_metrics(buildings_area, units, cascade_height_sources(tiers))
-
-    with timer.stage("parameters"):
-        parameters = compute_parameters(
-            units,
-            buildings_area,
-            buildings_topo,
-            cleaned.streets,
-            cleaned.land_use,
-            fractions,
-            config=settings.ucp,
-            land_cover_config=settings.land_cover,
-        )
-
-    with timer.stage("classify"):
-        classifier = PrototypeClassifier(config=settings.classification)
-        classification = classifier.classify(parameters)
-
-    with timer.stage("write_run"):
-        outputs = write_run(
-            settings,
-            units,
-            parameters,
-            classification,
-            classifier,
-            extras=fractions.join(provenance),
-            cleaning=cleaned.report,
-            height_fill=height_fill,
-            height_source_availability=availability,
-            # The site draws its basemap and its extrusions from these, so that an archived run
-            # directory rebuilds its own map with no access to `input/`.
-            layers={
-                "streets": cleaned.streets,
-                "water": cleaned.waterbodies,
-                "land_use": cleaned.land_use,
-                "buildings": buildings_area,
-            },
-        )
-    print(f"  wrote {outputs.run_dir}", flush=True)
-
-    if build_site_after:
-        with timer.stage("build_site"):
-            report = build_site(outputs.run_dir, config=settings.viz)
+    report = result.site
+    if report is not None:
         for tileset in report.tilesets:
             print(
                 f"    {tileset.name:14s} {tileset.size_bytes / 1e6:8.2f} MB  "
@@ -189,8 +108,8 @@ def run_and_publish(settings: Settings, bbox: BBox, *, build_site_after: bool = 
             print(f"    skipped {name}: {reason}", flush=True)
         print(f"  serve it: python {report.site_dir / 'serve.py'}", flush=True)
 
-    print(f"\ntotal {sum(timer.stages.values()) / 60:.1f} min", flush=True)
-    return outputs.run_dir
+    print(f"\ntotal {result.seconds / 60:.1f} min", flush=True)
+    return result.run_dir
 
 
 def main() -> None:

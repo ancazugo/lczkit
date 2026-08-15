@@ -12,6 +12,37 @@ package, not a diagnostic.
 
 See `CLAUDE.md` for the full project specification and phase plan.
 
+## Command line
+
+```sh
+lczkit run --bbox 13.29,52.45,13.52,52.59      # any window, needs nothing on disk
+lczkit run --city berlin --extent-km 4         # a So2Sat city, shrunk to try it out
+lczkit site build <run_dir>                    # rebuild the map site from a finished run
+lczkit site serve <run_dir>                    # then open the address it prints
+```
+
+`lczkit run` writes `$DATA_DIR/output/lczkit/<run_id>/` and builds its map site. It is the same
+chain the published sites went through — `lczkit.pipeline.run_pipeline`, which
+`scripts/berlin_metropolitan_run.py` and `scripts/publish_sites.py` also call, so a run from the
+command line and a published run cannot be configured differently by accident. A test asserts that.
+
+Three things worth knowing:
+
+- **`--city` needs So2Sat on disk; `--bbox` needs nothing.** A city key resolves to the same 30 km
+  window every validation sweep since Phase 9 has used, which is what makes a run comparable with
+  the agreement figures already recorded for it. `--extent-km` shrinks either locator concentrically,
+  because a full window is a multi-hour run and the first thing anyone does with a new command is
+  try it on something small.
+- **`--dry-run` resolves everything and writes nothing**, including the run directory. Use it to see
+  the configuration a run would use before spending the download.
+- **`--config` takes a JSON file overriding any settings section, and a run manifest works**, since
+  a manifest nests its settings under `config`. So a run can be reproduced from its own output.
+  `data_dir` and `run_id` are refused there — they come from the environment and `--run-id`, and a
+  file that could move either would make the same command write to two different places.
+
+The library API is unchanged and the command line is not privileged: everything it does is a call
+into `lczkit.pipeline` or `lczkit.viz` that any caller can make.
+
 ## Status
 
 Phase 0 (skeleton) — project layout, the five pluggable-source `Protocol`s, the CRS
@@ -455,9 +486,12 @@ as a tool. It needs the `viz` extra, which is one pinned wheel:
 
 ```sh
 uv add --active --optional viz tippecanoe
-python -c "from lczkit.viz import build_site; build_site('<run_dir>')"
-python <run_dir>/site/serve.py        # then open the address it prints
+lczkit site build <run_dir>
+lczkit site serve <run_dir>           # then open the address it prints
 ```
+
+`build_site(run_dir)` remains the library entry point, and `python <run_dir>/site/serve.py` still
+works — the site ships its own server precisely so a recipient needs nothing installed.
 
 ```
 site/

@@ -182,9 +182,7 @@ def _industrial_share_of_building_area(
     # each piece against a dissolved industrial geometry is the same answer at whole-city cost: it
     # unions every industrial feature and then runs 892k intersections against the result. The
     # subset is a few hundred features on the fixtures and a few thousand at metropolitan scale.
-    covering = gpd.GeoDataFrame(
-        geometry=industrial_buildings.reset_index(drop=True), crs=units.crs
-    )
+    covering = gpd.GeoDataFrame(geometry=industrial_buildings.reset_index(drop=True), crs=units.crs)
     pieces = gpd.overlay(units[["geometry"]].reset_index(), covering, how="intersection")
     if pieces.empty:
         return pd.Series(0.0, index=index, dtype="float64").where(total > 0)

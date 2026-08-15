@@ -303,9 +303,7 @@ def test_the_cascade_tag_names_the_tiers_that_actually_fired() -> None:
     )
     assert (
         MULTI_CITY._cascade_tag(
-            _provenance(
-                ("overture_height", 900), ("gob25d", 50), ("wsf3d", 400), ("ghsl", 100)
-            )
+            _provenance(("overture_height", 900), ("gob25d", 50), ("wsf3d", 400), ("ghsl", 100))
         )
         == "full"
     )
@@ -315,9 +313,7 @@ def test_a_configured_tier_that_filled_nothing_is_not_counted_as_having_run() ->
     """The whole point of deriving the tag from the fill rather than the config. A tier whose raster
     is absent is skipped in silence, and a record tagged `coarse` that ran at `none` is exactly the
     mislabelling this function exists to prevent."""
-    tag = MULTI_CITY._cascade_tag(
-        _provenance(("overture_height", 900), ("wsf3d", 0), ("ghsl", 0))
-    )
+    tag = MULTI_CITY._cascade_tag(_provenance(("overture_height", 900), ("wsf3d", 0), ("ghsl", 0)))
 
     assert tag == "none"
 
