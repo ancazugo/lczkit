@@ -118,6 +118,11 @@ Berlin, by contrast, is near-diagonal: 2→2 1 019/1 019, 4→4 417/418, 6→6 2
 
 ## 3. The seven-against-nine split, a third time — and this time it is in the reference
 
+> **Superseded in part by the addendum at the end of this file.** North America here is Vancouver
+> alone. Extended to four North American cities the grouping reorganises: North America lands with
+> "everywhere else", and the line becomes Europe against everything. The measurement below stands
+> over the sixteen cities it was taken on; the *grouping* it is read through does not generalise.
+
 | | label reproducibility (mean) | (median) |
 |---|---:|---:|
 | Europe + N. America (7) | **89.1%** | 91.6% |
@@ -250,3 +255,67 @@ The figures bear that out: Vancouver 86.8% and Cologne 80.5% against those citie
    contributor-drawn exemplars against a designed sample. Where both exist, both are reported, and
    `reference_file` names which produced which figure — the standing anti-pattern, and the reason
    this phase could measure anything at all.
+
+---
+
+## Addendum — re-measured over twenty cities, and the grouping reorganised
+
+Added after the fact, on request, and kept separate from the sections above because **those figures
+stand over the original sixteen** and must not be quietly restated over a different population.
+
+Section 3 read the seven-against-nine split off a "Europe + N. America" group in which North America
+was **Vancouver alone**. A group of one cannot separate a regional effect from one city, so every
+So2Sat city in the Americas was screened: **Los Angeles, New York, Washington D.C. and Santiago**
+pass the 500-patch / 4-class screen and carry both references, and were added. New York was added
+*because* it reproduces badly — keeping the North American city that agrees and dropping the ones
+that do not is how a split gets manufactured rather than tested.
+
+Seven more American cities were refused, and not for a windowing reason: So2Sat barely covers them.
+Chicago has 48 patches of a single class, Philadelphia 2, Salvador 1, Buenos Aires 5, Bogotá 8,
+Caracas 12, Lima 48 — all one class each, which reads as targeted single-class supplements rather
+than mapped cities. All seven carry substantial WUDAPT (59–296 polygons, 12–17 classes), so they are
+now runnable as **WUDAPT-only** cities with no ceiling and no reproducibility figure. That is new
+reach this phase bought, and any record using it has to say which reference it had.
+
+### The headline does not move; the grouping does
+
+Median 79.9% and range 26.3%–96.3% are unchanged at twenty.
+
+| | n | mean | median | above baseline | mean ceiling |
+|---|---:|---:|---:|---:|---:|
+| Europe | 6 | **91.0%** | 92.5% | 0.87 | 72.2% |
+| South America | 3 | 85.6% | 85.3% | 0.77 | 73.5% |
+| North America | 4 | **70.8%** | 74.9% | 0.55 | 51.4% |
+| "Europe + N. America", as claimed | 10 | 82.9% | 86.2% | 0.74 | 63.9% |
+| "everywhere else", as claimed | 10 | 70.9% | 78.4% | 0.52 | 53.9% |
+| Europe against everything else | 6 / 14 | 91.0% / 70.9% | 92.5% / 77.5% | 0.87 / 0.53 | 72.2% / 53.2% |
+
+**North America at 70.8% is indistinguishable from "everywhere else" at 70.9%, and South America at
+85.6% sits nearer Europe than North America does.** On this quantity the line is **Europe against
+everywhere else** — not Global North against Global South, and not the seven-against-nine grouping
+this project has used three times. Vancouver, the city the grouping rested on, is now second of four:
+
+| city | agree | above baseline | ceiling |
+|---|---:|---:|---:|
+| washington_dc | 82.6% | 0.74 | 64.6% |
+| vancouver | 77.3% | 0.62 | 36.7% |
+| los_angeles | 72.5% | 0.54 | 51.1% |
+| new_york | 50.8% | 0.32 | 53.0% |
+
+### What this does and does not settle
+
+It re-measures **one of the four sightings**. Phase 11's enclosure A/B advantage, Phase 12's
+compactness lift and Phase 18's tag coverage were all measured over the original sixteen, all with
+North America at n = 1, and none is re-measured here — the Overture extracts for the four new cities
+are not on disk, so it is a fetch and a sweep rather than a re-analysis.
+
+So the honest statement is narrower than the one above and should be the one that travels: **the
+label-reproducibility instance of the regional regularity reorganises when its smallest cell grows
+from one city to four.** The other three are untested at n = 4 and should be described as measured
+over sixteen, not as confirmed.
+
+It is also a property of the *references*, not of lczkit: it says which cities two expert teams
+agree about, not which cities the package maps well.
+
+**Ruling: a regional grouping measured at n = 1 in one of its halves is not a finding.** Check the
+smallest cell before a grouping carries an argument.

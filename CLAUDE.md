@@ -1303,6 +1303,32 @@ Other measurements worth keeping:
 - **`lcz_v3` vs WUDAPT is not a ceiling and carries `independent: False` in the record.** These
   polygons are that map's training data. Vancouver reads 86.8% against a real ceiling of 36.7%.
 
+**Re-measured over twenty cities, and the regional grouping does not survive.** Los Angeles, New
+York, Washington D.C. and Santiago were added afterwards (see the Phase 18 registry note), because
+North America was **n = 1** — Vancouver alone — in a grouping this file leans on three times. On the
+enlarged set the headline figures do not move (median 79.9%, range 26.3%–96.3%) and the grouping
+does:
+
+| | n | mean | median | above baseline |
+|---|---:|---:|---:|---:|
+| Europe | 6 | **91.0%** | 92.5% | 0.87 |
+| South America | 3 | 85.6% | 85.3% | 0.77 |
+| North America | 4 | **70.8%** | 74.9% | 0.55 |
+| "Europe + N. America" as claimed | 10 | 82.9% | 86.2% | 0.74 |
+| "everywhere else" as claimed | 10 | 70.9% | 78.4% | 0.52 |
+
+**North America (70.8%) is indistinguishable from "everywhere else" (70.9%), and South America
+(85.6%) sits nearer Europe than North America does.** So on this quantity the line is **Europe
+against everywhere else**, not Global North against Global South, and Vancouver was carrying a
+continent: it is now the *second best* of four, behind Washington D.C., with New York at 50.8%.
+
+**This re-measures one of the four sightings, not all four.** Phase 11's A/B advantage, Phase 12's
+compactness lift and Phase 18's tag coverage were all measured over the original sixteen with North
+America still n = 1, and none is re-measured here — the Overture extracts for the four new cities are
+not on disk. Until they are, "the seven-against-nine split" is a claim about sixteen cities, and the
+one quantity extended past it reorganised. Treat the other three as untested at n = 4 rather than as
+confirmed.
+
 **Rulings:**
 
 1. **A reference's own quality metrics are not a validation filter.** WUDAPT's QC flags and `oa`
@@ -1442,6 +1468,28 @@ that rule's cited firing count does not change meaning.
 **No sweep, so no rule fires and no accuracy claim is made.** For LCZ 7 the sweep needs a city where
 the class exists *and* is tagged, which the coverage table suggests may not exist — itself the
 finding, since the rule's value then lies in making that measurable rather than in firing.
+
+**The city registry went from sixteen to twenty**, on request, after the reference comparison showed
+North America was **n = 1** in a grouping this file leans on three times. Added: Los Angeles, New
+York, Washington D.C. (North America) and Santiago (South America) — every So2Sat city in the
+Americas that passes the 500-patch / 4-class screen and carries both references. **New York was added
+*because* it reproduces badly** (50.8%): keeping the North American city that agrees and dropping the
+ones that do not is how a regional split gets manufactured rather than tested. Seven American cities
+were refused because So2Sat barely covers them — Chicago 48 patches of one class, Salvador 1, Buenos
+Aires 5 — though all seven carry real WUDAPT, so they are now reachable as WUDAPT-only cities with no
+ceiling and no reproducibility figure, and a record would have to say so.
+
+> **Every stored figure predates the last four cities.** Anything comparing a new sweep against a
+> stored record must intersect the city sets first. Phase 13 already reported 6.6% of deviation that
+> was 0.0% once the populations were restricted to what both records held.
+
+**And the registry was defined twice.** `scripts/multi_city_validation.py` carried its own `City`,
+`CITIES`, `BY_KEY`, `WINDOW_KM` and `densest_window` — Phase 15 lifted them into `lczkit.cities` for
+the CLI and left the originals in place. The same "two constants with the same name" failure recorded
+for `CLEANING`, and worse-placed: adding four cities to the package would have left **the sweep, which
+is the half that produces every published figure, still running sixteen**. Found by needing it, not by
+auditing. The script now imports them, and a test asserts identity rather than equality — two tuples
+that happen to match today is exactly the state it exists to rule out.
 
 ---
 
@@ -1777,6 +1825,8 @@ reconcile silently.** That flagging behaviour is working; keep it.
 | `unit_scale_experiment.show()` printed `lcz_v3` axes under an unlabelled heading | Fixed. It sat four lines below a table whose columns *are* labelled. Did not contaminate published figures, but the two references disagree by more than the quantity measured — Cairo 7.2% vs 24.7% compactness. | 12 |
 | `tiles.subset()` discarded the canonical row order | `sindex.query` is documented as unordered, and its result went straight to `neatnet` and to the pooled threshold that keys the tile cache. Sorted. **On the fixture the order-sensitivity that `test_simplification_depends_on_input_row_order` attributed to `neatnet` was `subset`'s own** — untiled, that network simplifies identically under a shuffle. | 8, 9, 12 |
 | Pooled-threshold thread environment asymmetric | The serial branch ran unpinned while the parallel branch ran pinned, and `n_workers` follows `os.sched_getaffinity` — so the same extent on a differently-sized node could land on a different cache key. Both branches now pinned. | 8, 12 |
+| "Europe + N. America" as a grouping | **Does not survive n > 1 in its North American half.** It carried three phases on Vancouver alone. Extended to four North American cities, label reproducibility gives Europe 91.0%, South America 85.6%, **North America 70.8% against "everywhere else" 70.9%** — the line is Europe against everywhere else, not Global North against Global South, and Vancouver is now second of four. **Re-measured for one of the four sightings only**; Phase 11's A/B, Phase 12's compactness lift and Phase 18's tag coverage were all measured at n = 1 and are untested at n = 4. Ruling: check the smallest cell before a grouping carries an argument. | 11, 12, 16, 18 |
+| Two city registries, one in the package and one in the sweep | Phase 15 lifted `City`/`CITIES`/`BY_KEY`/`WINDOW_KM`/`densest_window` into `lczkit.cities` for the CLI and left the originals in `scripts/multi_city_validation.py`. They agreed until someone edited one — and the one that produces every published figure is the *script*, so adding four cities to the package would have left the sweep running sixteen. Same failure as `CLEANING`. The script imports them now and a test asserts **identity**, since equality passes right up until the moment it matters. | 15, 18 |
 | Regional split, second independent sighting | Compactness lift 2.37 Europe/N. America vs 1.15 elsewhere; same seven-against-nine split as Phase 11's A/B. Finding in its own right; **mechanism still unknown, and the proposed street-area mechanism is refuted** (Phase 13). Report as an unexplained regularity. | 11, 12, 13 |
 | Row-order fix vs tile cache | Threshold bit-identical, but the cache would have served pre-fix tiles silently. `TILE_RESULT_VERSION` bumped. | 8, 12 |
 | Determinism / "stitch ordering" | **Closed in Phase 9 at `040be15`.** An external CLAUDE.md copy reverted this record to the disproved diagnosis; committed text restored. Residuals closed with deviation measured: ~1.2% of linework at different split points, total length unchanged to four decimal places. | 8, 9, 12 |

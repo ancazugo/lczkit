@@ -326,3 +326,46 @@ def test_the_tag_reads_the_structure_build_arms_actually_returns() -> None:
 
     assert MULTI_CITY._cascade_tag(shallow) == "none"
     assert MULTI_CITY._cascade_tag(_provenance(("wsf3d", 400), ("ghsl", 100))) == "coarse"
+
+
+def test_the_sweep_and_the_package_share_one_city_registry() -> None:
+    """`City`, `CITIES`, `BY_KEY`, `WINDOW_KM` and `densest_window` were defined **twice** between
+    Phase 15 and Phase 18 — lifted into `lczkit.cities` so the CLI could resolve `--city`, and left
+    behind in the sweep unchanged.
+
+    Two registries of the same sixteen cities is the failure CLAUDE.md records for `CLEANING`: the
+    two agree until one is edited, and then the sweep — the half that produces every published
+    figure — is quietly running a different population from the command line. It was found by
+    adding four cities, not by reading. Identity, not equality: two tuples that happen to match
+    today is exactly the state this is here to rule out.
+    """
+    from lczkit import cities as package
+
+    sweep = MULTI_CITY
+
+    assert sweep.CITIES is package.CITIES
+    assert sweep.BY_KEY is package.BY_KEY
+    assert sweep.City is package.City
+    assert sweep.densest_window is package.densest_window
+    assert sweep.WINDOW_KM == package.WINDOW_KM
+
+
+def test_the_four_cities_added_after_the_recorded_sweeps_are_marked_as_such() -> None:
+    """Every stored figure in `docs/experiments/` is over the original sixteen. Los Angeles, New
+    York, Washington D.C. and Santiago came later, so any comparison against a stored record has to
+    intersect the city sets first — CLAUDE.md records pooling two populations as a mistake this
+    project has already made, and reported 6.6% of deviation that was 0.0% once restricted.
+
+    Pinned as a list rather than asserted by count, so that adding a seventeenth city is a
+    deliberate edit here rather than a silently passing test.
+    """
+    from lczkit.cities import BY_KEY, CITIES
+
+    added_after_the_recorded_sweeps = {"los_angeles", "new_york", "washington_dc", "santiago"}
+    original_sixteen = {city.key for city in CITIES} - added_after_the_recorded_sweeps
+
+    assert len(original_sixteen) == 16
+    assert added_after_the_recorded_sweeps <= set(BY_KEY)
+    # North America was n=1 before, which cannot separate a regional effect from one city.
+    north_america = {city.key for city in CITIES if city.region == "North America"}
+    assert len(north_america) == 4

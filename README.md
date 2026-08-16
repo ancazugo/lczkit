@@ -371,10 +371,13 @@ against them:
   agreement is inflated by construction and is *not* a ceiling. The record carries
   `independent: False` and a written reason so nobody recomputes it and reads it as one.
 - **The labels do not reproduce each other.** WUDAPT and So2Sat agree at a median 79.9% over the
-  sixteen cities, ranging 26.3% (Cairo — *below* its own 52.1% majority-class baseline) to 96.3%
-  (Paris), and 89.1% mean across Europe and North America against 69.3% elsewhere. Where two expert
-  label sets disagree, no classifier can agree with both: that is a **floor under every residual
-  this package reports**, and it belongs beside any per-city figure.
+  twenty cities, ranging 26.3% (Cairo — *below* its own 52.1% majority-class baseline) to 96.3%
+  (Paris). Where two expert label sets disagree, no classifier can agree with both: that is a
+  **floor under every residual this package reports**, and it belongs beside any per-city figure.
+  By region it is Europe 91.0%, South America 85.6%, North America 70.8% — so the line is Europe
+  against everywhere else, not Global North against Global South. That grouping previously read
+  "Europe + N. America" and rested on Vancouver alone; it reorganised as soon as North America grew
+  past one city.
 
 Everything is reported lczexplore-style — per-class agreement and a confusion matrix, never a
 single accuracy figure — plus built-class agreement separately from overall with the natural-class

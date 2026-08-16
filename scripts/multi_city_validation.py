@@ -52,19 +52,17 @@ under `input/` is modified or removed. The rasters are clipped into the run dire
 from __future__ import annotations
 
 import json
-import math
 import sys
 import time
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import geopandas as gpd
 import numpy as np
 
+from lczkit.cities import BY_KEY, CITIES, WINDOW_KM, City, densest_window
 from lczkit.classify import PrototypeClassifier
 from lczkit.config import Settings
-from lczkit.protocols import BBox
 from lczkit.sources.overture import OvertureSource
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -94,9 +92,6 @@ from unit_scale_experiment import (  # noqa: E402 - sibling script
     show,
 )
 
-WINDOW_KM = 30.0
-"""Side of the square window, in kilometres. ~900 km2, matching the measured Berlin extent."""
-
 SO2SAT_CITIES = Path("v4") / "cities"
 
 MIN_PATCHES = 500
@@ -107,74 +102,13 @@ so it cannot answer any of the three questions and its agreement figure is arith
 than evidence. Screened on the window actually run, not on the city's full extent."""
 
 
-@dataclass(frozen=True)
-class City:
-    """One So2Sat city: where its labels live and which continent it speaks for."""
-
-    key: str
-    so2sat: str
-    """Directory name under `input/So2Sat-LCZ42/v4/cities/`."""
-
-    region: str
-
-
-#: Chosen by measuring labelled-patch density inside a 30 km window across all 51 cities on disk,
-#: not by picking recognisable names. São Paulo is required by CLAUDE.md; Jakarta, Islamabad and
-#: Mumbai are the viable South/Southeast Asian options, the obvious candidates having failed the
-#: screen above. Europe is over-represented because that is where So2Sat's dense coverage is, and
-#: the per-region breakdown in the report says so rather than averaging it away.
-CITIES = (
-    City("berlin", "Berlin", "Europe"),
-    City("london", "London", "Europe"),
-    City("paris", "Paris", "Europe"),
-    City("cologne", "Cologne", "Europe"),
-    City("rome", "Rome", "Europe"),
-    City("milan", "Milan", "Europe"),
-    City("sao_paulo", "Sao_Paulo", "South America"),
-    City("rio_de_janeiro", "Rio_De_Janeiro", "South America"),
-    City("cairo", "Cairo", "Africa"),
-    City("nairobi", "Nairobi", "Africa"),
-    City("cape_town", "Cape_Town", "Africa"),
-    City("islamabad", "Rawalpindi_[Islamabad]", "South Asia"),
-    City("mumbai", "Mumbai", "South Asia"),
-    City("jakarta", "Jakarta", "Southeast Asia"),
-    City("hong_kong", "Hong_Kong", "East Asia"),
-    City("vancouver", "Vancouver", "North America"),
-)
-
-BY_KEY = {city.key: city for city in CITIES}
-
-
-def densest_window(patches: gpd.GeoDataFrame, side_km: float = WINDOW_KM) -> BBox:
-    """The `side_km` square holding the most labelled patch centres, as a lon/lat bbox.
-
-    Searched over a quantile grid of candidate centres rather than optimised: the objective is
-    piecewise constant and this is deterministic, which matters more here than optimality — a
-    window that moved between runs would make two runs of the same city incomparable.
-
-    Centres, not areas. So2Sat patches are 320 m squares on a 100 m stride and overlap about
-    sevenfold, so counting area would measure the sampling density rather than the city; the same
-    reason `lczkit.validation.labelled` anchors each label on its patch centre.
-    """
-    utm = patches.estimate_utm_crs()
-    centres = patches.to_crs(utm).geometry.centroid
-    x, y = centres.x.to_numpy(), centres.y.to_numpy()
-    half = side_km * 1000.0 / 2.0
-
-    best = (-1, float(np.median(x)), float(np.median(y)))
-    grid = np.linspace(0.05, 0.95, 19)
-    for cx in np.quantile(x, grid):
-        for cy in np.quantile(y, grid):
-            n = int(((np.abs(x - cx) <= half) & (np.abs(y - cy) <= half)).sum())
-            if n > best[0]:
-                best = (n, float(cx), float(cy))
-    _, cx, cy = best
-
-    centre = gpd.GeoSeries(gpd.points_from_xy([cx], [cy]), crs=utm).to_crs("EPSG:4326")
-    lon, lat = float(centre.x.iloc[0]), float(centre.y.iloc[0])
-    half_lat = side_km / 2.0 / 111.0
-    half_lon = half_lat / max(math.cos(math.radians(lat)), 0.01)
-    return (lon - half_lon, lat - half_lat, lon + half_lon, lat + half_lat)
+# `City`, `CITIES`, `BY_KEY`, `WINDOW_KM` and `densest_window` are imported, not defined here.
+# They were defined *twice* between Phase 15 and Phase 18 — lifted into `lczkit.cities` so the CLI
+# could resolve `--city`, and left behind here unchanged. Two registries of the same sixteen cities
+# and two copies of the window search, which is the "two constants with the same name" failure
+# CLAUDE.md records for `CLEANING`: adding a city to one leaves the other sweeping a different
+# population, and the sweep is the half that produces the figures. Found when four cities were
+# added and this file would have gone on running sixteen.
 
 
 def prepare(city: City, settings: Settings) -> tuple[Fixture, dict[str, Any]] | None:

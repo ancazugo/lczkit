@@ -8,13 +8,13 @@ helpers rather than restating them, so there is one definition of "which feature
 "how much of a unit they cover" — and adds the two columns that make the result honest.
 
 **The two coverage columns are the point, not a diagnostic.** Measured over the sixteen study
-cities, **48.6% of building area carries an attribute across Europe and North America against
-13.6% elsewhere** — the same collapse Phase 9 measured for tier-1 height, on a second and
-independent attribute, with the same seven-against-nine shape. Rio is at 3.1%. So a `lightweight`
-fraction of 0.0 there is not evidence that there is no informal settlement; it is 97% of building
-area carrying no tag. Without `building_tag_coverage` beside it the two states are
-indistinguishable, exactly as "90% real heights" and "90% coarse raster fallback" are without
-`height_tier_fractions`.
+cities the registry held at the time - the four added afterwards have no Overture extract on disk
+and are **not** in this figure - **48.6% of building area carries an attribute across Europe and
+North America against 13.6% elsewhere** — the same collapse Phase 9 measured for tier-1 height, on
+a second and independent attribute. Rio is at 3.1%, so a `lightweight` fraction of 0.0 there is not
+evidence that there is no informal settlement; it is 97% of building area carrying no tag. Without
+`building_tag_coverage` beside it the two states are indistinguishable, exactly as "90% real
+heights" and "90% coarse raster fallback" are without `height_tier_fractions`.
 
 **Land-use parcels are the evidence that generalises.** They cover 30-65% of the same cities where
 building tags are near-absent (Rio 64.5%, Jakarta 55.8%, Cairo 37.6%, Nairobi 35.6%, Mumbai 30.5%),

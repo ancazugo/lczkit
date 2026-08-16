@@ -2,9 +2,11 @@
 
 The third reference, and the only one that reaches every city this package has been run on.
 CLAUDE.md names it "the secondary validation reference and the first if So2Sat doesn't have
-sufficient labels for a ROI"; measured over the sixteen study windows it carries 119-2374 polygons
-each, 11-18 classes, and **63-996 km2 of labelled ground against So2Sat's 7.1 km2 union on
-Berlin** - one to two orders of magnitude more labelled area, at neighbourhood scale.
+sufficient labels for a ROI"; measured over the sixteen study windows that existed when this was
+built, it carries 119-2374 polygons each, 11-18 classes, and **63-996 km2 of labelled ground against
+So2Sat's 7.1 km2 union on Berlin** - one to two orders of magnitude more labelled area, at
+neighbourhood scale. (`lczkit.cities` now holds twenty; the four added afterwards are not in that
+range, and every figure quoted in this module is over the original sixteen.)
 
 **Why the reduction is areal here and not centroid-anchored.** `labelled_lcz` anchors each So2Sat
 label on its patch centre, and that rule is justified by a property WUDAPT does not have: So2Sat

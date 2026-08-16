@@ -46,6 +46,20 @@ class City:
 #: 500-patch / 4-class screen `scripts/multi_city_validation.py` applies. Europe is over-represented
 #: because that is where So2Sat's dense coverage is, and the per-region breakdown in the report says
 #: so rather than averaging it away.
+#:
+#: **Sixteen until Phase 18, twenty after it, and every recorded figure predates the last four.**
+#: Los Angeles, New York, Washington D.C. and Santiago were added because North America was n=1 —
+#: Vancouver alone — in a "Europe + N. America" grouping the argument leans on three separate times,
+#: and a group of one cannot distinguish a regional effect from that city. Anything comparing a new
+#: sweep against a stored one must **intersect the city sets first**: pooling twenty against sixteen
+#: reports the difference between two populations as a deviation, which CLAUDE.md records as a
+#: mistake this project has already made once.
+#:
+#: All four pass the same screen and carry both references. Their label reproducibility — WUDAPT
+#: against So2Sat, measured before they were added — is Santiago 85.3%, Washington D.C. 82.6%,
+#: Los Angeles 72.5%, New York 50.8%, against the original sixteen's 79.9% median. **New York was
+#: added *because* it reproduces badly**: keeping the North American city that agrees well and
+#: dropping the ones that do not is how the regional split would be manufactured rather than tested.
 CITIES = (
     City("berlin", "Berlin", "Europe"),
     City("london", "London", "Europe"),
@@ -55,6 +69,7 @@ CITIES = (
     City("milan", "Milan", "Europe"),
     City("sao_paulo", "Sao_Paulo", "South America"),
     City("rio_de_janeiro", "Rio_De_Janeiro", "South America"),
+    City("santiago", "Santiago", "South America"),
     City("cairo", "Cairo", "Africa"),
     City("nairobi", "Nairobi", "Africa"),
     City("cape_town", "Cape_Town", "Africa"),
@@ -63,6 +78,9 @@ CITIES = (
     City("jakarta", "Jakarta", "Southeast Asia"),
     City("hong_kong", "Hong_Kong", "East Asia"),
     City("vancouver", "Vancouver", "North America"),
+    City("los_angeles", "Los_Angeles", "North America"),
+    City("new_york", "New_York", "North America"),
+    City("washington_dc", "Washington_D.C.", "North America"),
 )
 
 BY_KEY = {city.key: city for city in CITIES}
