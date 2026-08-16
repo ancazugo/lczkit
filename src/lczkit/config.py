@@ -653,6 +653,94 @@ class LandCoverConfig(BaseModel):
         raise KeyError(f"no land-cover dataset named {name!r}; configured: {available}")
 
 
+class SemanticGroupConfig(BaseModel):
+    """One functional group of Overture attribute values, and which LCZ class it is evidence for.
+
+    Transcribed from `docs/references/tables/overture_lcz_semantic_mapping.md`, which
+    `tests/test_ucp_semantics.py` parses and asserts against cell for cell, in the same way the
+    Stewart & Oke property table and the Bechtel similarity matrix are. Every value in it was taken
+    from what is present in the pinned release rather than from the schema documentation.
+
+    A group matches a building on `subtype` **or** `class` — the two are independently nullable and
+    a feature carrying only one is still classifiable. Groups are not a partition and their
+    fractions do not sum to one: `retail` is genuinely evidence for both large-low-rise form and
+    commercial function, and appears in both.
+    """
+
+    name: str
+    lcz_hint: str = ""
+    """Which LCZ class this group is evidence for, for the manifest and the docs. Documentation
+    only — nothing keys behaviour off it, because a group is evidence and not a label."""
+
+    building_subtypes: list[str] = Field(default_factory=list)
+    building_classes: list[str] = Field(default_factory=list)
+    land_use_subtypes: list[str] = Field(default_factory=list)
+    land_use_classes: list[str] = Field(default_factory=list)
+
+
+def _default_semantic_groups() -> list[SemanticGroupConfig]:
+    """The committed crosswalk. See that table for why each value is where it is."""
+    return [
+        SemanticGroupConfig(
+            name="lightweight",
+            lcz_hint="7",
+            building_subtypes=["outbuilding"],
+            building_classes=["hut", "shed", "cabin", "roof", "kiosk", "carport", "guardhouse"],
+        ),
+        SemanticGroupConfig(
+            name="large_lowrise",
+            lcz_hint="8",
+            building_classes=[
+                "warehouse",
+                "retail",
+                "supermarket",
+                "hangar",
+                "stadium",
+                "train_station",
+                "transportation",
+                "parking",
+                "sports_centre",
+                "sports_hall",
+                "service",
+            ],
+            land_use_classes=["retail"],
+        ),
+        SemanticGroupConfig(
+            name="heavy_industry",
+            lcz_hint="10",
+            building_subtypes=["industrial"],
+            building_classes=["industrial", "storage_tank", "silo"],
+            land_use_classes=["industrial", "works"],
+        ),
+        SemanticGroupConfig(
+            name="residential",
+            lcz_hint="1-6 context",
+            building_subtypes=["residential"],
+            building_classes=[
+                "apartments",
+                "house",
+                "detached",
+                "semidetached_house",
+                "terrace",
+                "bungalow",
+                "residential",
+                "dormitory",
+                "allotment_house",
+            ],
+            land_use_subtypes=["residential"],
+            land_use_classes=["residential"],
+        ),
+        SemanticGroupConfig(
+            name="commercial",
+            lcz_hint="1-3, 8 context",
+            building_subtypes=["commercial"],
+            building_classes=["commercial", "office", "retail", "hotel", "supermarket"],
+            land_use_subtypes=["developed"],
+            land_use_classes=["commercial", "retail"],
+        ),
+    ]
+
+
 class UcpConfig(BaseModel):
     """Configuration for the Phase 5 urban canopy parameters.
 
@@ -727,6 +815,96 @@ class UcpConfig(BaseModel):
     industry is still the dominant surface.
     """
 
+    semantic_groups: list[SemanticGroupConfig] = Field(default_factory=_default_semantic_groups)
+    """Functional groups read out of Overture's `subtype` and `class`, added in Phase 18.
+
+    The four `industrial_*` vocabularies above are **not** replaced by this and are not derived from
+    it. They feed `industrial_fraction_of_building_area`, which is the column the calibrated LCZ 10
+    threshold of 0.45 was swept against, and repointing that at a differently-scoped group would
+    silently invalidate the calibration. `heavy_industry` here is the same idea with a slightly
+    wider vocabulary (`storage_tank`, `silo`, land-use `works`) and it is reported beside the
+    original rather than in place of it.
+
+    Set to `[]` to skip the semantic layer entirely, which costs one overlay per group.
+    """
+
+
+class SemanticRuleConfig(BaseModel):
+    """One functional assignment rule keyed on a Phase 18 semantic column.
+
+    The same mechanism as the LCZ 10 rule, generalised: a unit over `min_fraction` takes `lcz`
+    whatever the distance metric said, and the displaced answer is kept as `lcz_secondary`.
+
+    **All of these ship disabled, and that is a ruling rather than caution.** CLAUDE.md requires a
+    threshold to be *calibrated* against a reference and chosen at an operating point, never picked
+    — the LCZ 10 threshold went through nineteen settings against Rotterdam and Phase 14 found the
+    threshold was not even the binding constraint there. The values below are placeholders marking
+    where a swept number goes, and enabling one before its sweep would put an invented number into
+    a published label.
+    """
+
+    name: str
+    lcz: int
+    column: str
+    """The parameter column to threshold, e.g. `sem_lightweight_buildings_of_building_area`."""
+
+    min_fraction: float = 0.5
+    enabled: bool = False
+
+    min_mean_building_area_m2: float | None = None
+    max_mean_building_area_m2: float | None = None
+    """Optional gates on `mean_building_area_m2`.
+
+    Available to a *rule* although it is not a metric dimension — Phase 14 established that
+    `mean_building_area_m2` never reaches the distance metric, so the stated reason for keeping
+    LCZ 8 in that metric described a parameter that could not act. A rule is not the metric, and
+    "large low-rise" is a claim about building size that the semantic evidence alone cannot make.
+    """
+
+    reason: str = ""
+    """Why this rule exists, for the manifest. A rule with no recorded reason is one nobody can
+    audit later."""
+
+
+def _default_semantic_rules() -> list[SemanticRuleConfig]:
+    """The candidate rules, all disabled pending calibration."""
+    return [
+        SemanticRuleConfig(
+            name="large_lowrise",
+            lcz=8,
+            column="sem_large_lowrise_buildings_of_building_area",
+            min_fraction=0.5,
+            min_mean_building_area_m2=1000.0,
+            enabled=False,
+            reason=(
+                "LCZ 8 fails by construction, not by tuning (Phase 14): its building-surface band "
+                "overlaps LCZ 3 and 6, its Hr band is identical to LCZ 3, 6 and 9, so aspect ratio "
+                "is its only separator in the metric — and aspect ratio is null exactly where "
+                "large setbacks stop streets reaching buildings, which is most of an LCZ 8 unit. "
+                "Measured 0.0% agreement over 224 Rotterdam cells. A functional route is the only "
+                "evidence available that does not depend on a parameter the class nullifies."
+            ),
+        ),
+        SemanticRuleConfig(
+            name="lightweight",
+            lcz=7,
+            column="sem_lightweight_buildings_of_building_area",
+            min_fraction=0.5,
+            max_mean_building_area_m2=100.0,
+            enabled=False,
+            reason=(
+                "LCZ 7 reaches its published building-surface range in 8.2% of cells (Phase 13), "
+                "low on both tails across five non-European cities, and it is the class the "
+                "founding premise is most about. **This rule will mostly not fire where it "
+                "matters**: Overture has no slum/shanty/ger/tent value, and tagged building area "
+                "runs 13.6% outside Europe and North America against 48.6% inside — Rio at 3.1%. "
+                "That is a result to report, not a reason to omit the rule, and "
+                "`building_tag_coverage` is what makes the non-firing legible rather than "
+                "invisible."
+            ),
+        ),
+    ]
+
 
 class ClassificationConfig(BaseModel):
     """Configuration for the Phase 6 prototype-distance classifier.
@@ -789,6 +967,10 @@ class ClassificationConfig(BaseModel):
     natural_dominant_fraction: float = 0.50
     """Tree or water cover at which a unit reads as LCZ A or LCZ G. See
     `docs/references/tables/lczkit_natural_class_ranges.md` - lczkit's own, not Tier 1."""
+
+    semantic_rules: list[SemanticRuleConfig] = Field(default_factory=_default_semantic_rules)
+    """Phase 18 functional rules, all shipped disabled pending calibration. See
+    `SemanticRuleConfig`, and `lczkit.classify.rules.apply_semantic_rules` for what one does."""
 
     natural_negligible_fraction: float = 0.10
     """Tree or water cover a natural class treats as absent. Reuses the 10% boundary Stewart &
@@ -1072,6 +1254,159 @@ def _default_reference_dataset() -> LandCoverDatasetConfig:
     )
 
 
+UnitStrategy = Literal["grid", "enclosure", "patch"]
+
+
+class UnitsConfig(BaseModel):
+    """Which spatial units the pipeline computes on.
+
+    **This closes a ruling that sat unapplied for six phases.** Phase 11 concluded "expose
+    `unit_strategy` as config, default `grid`, no auto-selection", and nothing was exposed:
+    `pipeline.run_pipeline` constructed `GridUnits()` as a literal and never assembled barriers at
+    all, so enclosures were reachable only by importing from `scripts/`. Same shape as the four
+    rulings Phase 14 found, and the same reason nothing noticed — nothing checked the spec against
+    the code in either direction.
+
+    **No auto-selection, and in particular none by region.** Phase 11 measured enclosures leading
+    on both criteria outside Europe and N. America and losing inside it, and ruled explicitly that
+    region is not the mechanism — natural-class share and patch heterogeneity are — so a rule keyed
+    on continent is wrong at every boundary and indefensible in a paper. The trade-off is documented
+    and the choice is the user's, recorded in the manifest.
+    """
+
+    strategy: UnitStrategy = "grid"
+    """`grid` (default), `enclosure`, or `patch`.
+
+    - **`grid`** — 100 m cells. What every published LCZ map, validation dataset and WRF workflow
+      uses, and what every figure this project has recorded is measured on.
+    - **`enclosure`** — street-, rail- and water-bounded blocks. Measured three times against the
+      grid (Phases 9, 10, 11) and not adopted three times on the same pre-registered rule, which
+      required a lead on both overall and built-class agreement: Phase 11's fifteen cities gave
+      built +3.8 (12/15) and overall −0.2 (8/15).
+    - **`patch`** — enclosure seeds merged to LCZ-patch scale. See `lczkit.units.patches`; the
+      block is a much smaller object than a patch (median 0.04 ha against WUDAPT's 2.2–52 ha), and
+      this is the strategy that addresses that rather than assuming a thinner barrier set will.
+    """
+
+    cell_size_m: float = 100.0
+    """Grid cell side. 100 m is not arbitrary — it is what the validation references and the
+    downstream WRF tooling assume — so moving it makes a run incomparable to every stored figure."""
+
+    patch_min_area_m2: float = 50_000.0
+    """`strategy="patch"` only. A floor, not a centre: the median lands near twice it."""
+
+    patch_max_area_m2: float | None = 500_000.0
+    """`strategy="patch"` only. `None` removes the ceiling, which lets a merge chain swallow a whole
+    estate into one unit."""
+
+    patch_merge_on_morphology: bool = True
+    """Whether the patch merge compares neighbours on building surface fraction and height, or
+    merges on size alone. On costs one overlay against the building layer and is what makes a patch
+    homogeneous rather than merely large; off is supported and worse, and needs no buildings."""
+
+    drop_pedestrian_barriers: bool = True
+    """Exclude footway/steps/path/cycleway/bridleway from the barrier set for `enclosure` and
+    `patch`. On by default: these are 50–73% of the mapped network in Berlin, Hong Kong and Milan
+    and 3.5–7.5% elsewhere, so leaving them in makes the partition largely a measure of how
+    thoroughly a city's footpaths have been surveyed. Ignored by `grid`, which takes no barriers."""
+
+    @model_validator(mode="after")
+    def _check(self) -> UnitsConfig:
+        if self.cell_size_m <= 0:
+            raise ValueError(f"cell_size_m must be positive, got {self.cell_size_m}")
+        if self.patch_min_area_m2 <= 0:
+            raise ValueError(f"patch_min_area_m2 must be positive, got {self.patch_min_area_m2}")
+        if self.patch_max_area_m2 is not None and self.patch_max_area_m2 < self.patch_min_area_m2:
+            raise ValueError(
+                f"patch_max_area_m2 ({self.patch_max_area_m2}) must be at least "
+                f"patch_min_area_m2 ({self.patch_min_area_m2}); a ceiling below the floor would "
+                "block every merge"
+            )
+        return self
+
+
+class WudaptConfig(BaseModel):
+    """The WUDAPT LCZ training areas, the third reference and the only globally available one.
+
+    A vector product rather than a raster, so unlike `_default_reference_dataset` it is not a
+    `LandCoverDatasetConfig` — there is no `exactextract` path to reuse. See
+    `lczkit.validation.wudapt` for what each of these gates costs.
+    """
+
+    source_dir_name: str = "WUDAPT"
+    """`input/<name>/`, per CLAUDE.md's data layout."""
+
+    filename: str | None = None
+    """The LCZ Generator export, e.g. `LCZ-Generator_training_areas_2024-10-01.gpkg`.
+
+    Unset by default and deliberately not defaulted to whatever is on disk, for the same reason
+    `OvertureConfig.release` refuses to track "latest": the export is dated, contributors keep
+    adding to it, and a validation figure that does not name the export it was measured against
+    cannot be reproduced. A caller pins it.
+    """
+
+    layer: str | None = None
+    """GeoPackage layer. `None` takes the first, which is correct for the published export — its
+    only other layer is a QGIS `layer_styles` table carrying no geometry."""
+
+    class_column: str = "class"
+    """WUDAPT's own LCZ column. Integer, agreeing with Demuzere's coding over 1-17."""
+
+    require_qc: bool = False
+    """Keep only polygons passing all three LCZ Generator QC flags.
+
+    Off by default, and **measured rather than assumed**. The gate is expensive — over 200 000
+    polygons the three flags pass individually at 62.3% / 84.0% / 81.5% and jointly at 48.2%, so it
+    halves the reference — and Phase 16 measured what it buys, against So2Sat labels on the 30 km
+    windows: Cairo 26.3% → 26.7%, Mumbai 47.4% → 50.3%, Jakarta 70.7% → **68.8%**. Inert on two
+    cities and harmful on the third, for half the labelled ground.
+
+    `WudaptSelection.qc_pass_fraction` reports the rate whether or not the gate is on, so the cost
+    of changing this is visible without a second run.
+    """
+
+    min_oa: float | None = None
+    """Minimum LCZ Generator overall accuracy for the polygon's *submission*. `None` disables.
+
+    A property of the submission, not of the polygon — see `wudapt.priority_order` — and Phase 16
+    found it does not select for what a validation reference needs. Gating at 0.7 moves agreement
+    with So2Sat by Cairo 26.3% → **19.1%**, Mumbai 47.4% → 47.3%, Jakarta 70.7% → 69.6%: worse on
+    all three, and much worse on the city that needed help most. The LCZ Generator's cross-validated
+    accuracy scores a submission against *itself*, so a high `oa` means a self-consistent
+    contributor rather than one who agrees with an independent expert.
+    """
+
+    min_area_m2: float = 0.0
+    """Drop polygons below this. 4.7% of the file is under 1000 m², smaller than a 100 m cell,
+    and five features have exactly zero area."""
+
+    max_area_m2: float | None = None
+    """Drop polygons above this. The largest in the file is 18 680 km² — a whole sea digitised as
+    one LCZ G polygon — which is a legitimate label and a poor reference for a city window."""
+
+    citation: str = "10.3390/ijgi4010199"
+    """Bechtel et al. (2015), *IJGI* 4(1), 199-219 — the WUDAPT Level 0 protocol.
+
+    Recorded apart from `reference_citation` and `ground_truth_citation` for the reason Phase 6.7
+    established and Phase 13 had to re-establish: which file filled the reference role is part of
+    the measurement. **WUDAPT is additionally not independent of `lcz_v3`** — these training areas
+    are the training data behind the Demuzere global map — so agreement between the two is not a
+    ceiling in the sense So2Sat gives one.
+    """
+
+    @model_validator(mode="after")
+    def _check(self) -> WudaptConfig:
+        if self.min_oa is not None and not 0.0 <= self.min_oa <= 1.0:
+            raise ValueError(f"min_oa must be in [0, 1], got {self.min_oa}")
+        if self.min_area_m2 < 0.0:
+            raise ValueError(f"min_area_m2 must be non-negative, got {self.min_area_m2}")
+        if self.max_area_m2 is not None and self.max_area_m2 <= self.min_area_m2:
+            raise ValueError(
+                f"max_area_m2 ({self.max_area_m2}) must exceed min_area_m2 ({self.min_area_m2})"
+            )
+        return self
+
+
 class ValidationConfig(BaseModel):
     """Configuration for agreement against a reference LCZ map.
 
@@ -1094,6 +1429,11 @@ class ValidationConfig(BaseModel):
     Phase 6.7 exists because they were treated as if they were: `lcz_v3` is a model output with
     its own error, these are human labels. Where both are available the labels are primary and
     `lcz_v3` is a comparator whose agreement with them is the ceiling on any score against it."""
+
+    wudapt: WudaptConfig = Field(default_factory=WudaptConfig)
+    """The WUDAPT training areas — hand labels too, but a different kind of object from So2Sat:
+    irregular, overlapping, spanning four decades, and covering every city this package has been
+    run on rather than the 51 So2Sat sampled. See `WudaptConfig` and `lczkit.validation.wudapt`."""
 
     min_reference_coverage: float = 0.5
     """Fraction of a unit the reference map must actually cover for that unit to enter the
@@ -1132,6 +1472,7 @@ class Settings(BaseModel):
     heights: HeightConfig = Field(default_factory=HeightConfig)
     height_products: HeightProductsConfig = Field(default_factory=HeightProductsConfig)
     land_cover: LandCoverConfig = Field(default_factory=LandCoverConfig)
+    units: UnitsConfig = Field(default_factory=UnitsConfig)
     ucp: UcpConfig = Field(default_factory=UcpConfig)
     classification: ClassificationConfig = Field(default_factory=ClassificationConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)

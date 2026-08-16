@@ -26,9 +26,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
+import geopandas as gpd
+
 from lczkit.classify import PrototypeClassifier
 from lczkit.cleaning.pipeline import clean_vectors
-from lczkit.config import Settings
+from lczkit.config import Settings, UnitsConfig
 from lczkit.heights.cascade import cascade_height_sources, fill_heights
 from lczkit.heights.completeness import height_metrics
 from lczkit.heights.diagnostic import source_availability
@@ -36,12 +38,15 @@ from lczkit.heights.inherit import inherit_heights
 from lczkit.heights.tiers import build_cascade
 from lczkit.landcover.local import LocalRasterSource
 from lczkit.output import RunOutputs, write_run
-from lczkit.protocols import BBox
+from lczkit.protocols import BBox, SpatialUnitStrategy
 from lczkit.sources.height_products import resolve_areal_tiers
 from lczkit.sources.overture import OvertureSource
 from lczkit.sources.worldcover import clip_worldcover
 from lczkit.ucp.parameters import compute_parameters
+from lczkit.ucp.tag_diagnostic import tag_availability
+from lczkit.units.enclosures import EnclosureUnits, assemble_barriers
 from lczkit.units.grid import GridUnits
+from lczkit.units.patches import PatchUnits, filter_street_barriers
 from lczkit.viz import SiteReport, build_site
 
 STAGES = (
@@ -81,6 +86,27 @@ class _NullObserver:
 
     def stage(self, name: str) -> AbstractContextManager[None]:
         return _untimed(name)
+
+
+def build_strategy(
+    config: UnitsConfig, *, buildings: gpd.GeoDataFrame | None = None
+) -> SpatialUnitStrategy:
+    """The configured `SpatialUnitStrategy`.
+
+    `buildings` is only read by `patch`, and only when `patch_merge_on_morphology` is on. It is
+    passed at construction rather than to `generate` because the protocol's signature is
+    `(bbox, barriers)`, and widening that for one strategy would put a building layer into an
+    interface the other two have no use for.
+    """
+    if config.strategy == "grid":
+        return GridUnits(cell_size_m=config.cell_size_m)
+    if config.strategy == "enclosure":
+        return EnclosureUnits()
+    return PatchUnits(
+        min_area_m2=config.patch_min_area_m2,
+        max_area_m2=config.patch_max_area_m2,
+        buildings=buildings if config.patch_merge_on_morphology else None,
+    )
 
 
 @dataclass(frozen=True)
@@ -140,9 +166,10 @@ def run_pipeline(
             yield
         stages[name] = time.perf_counter() - started
 
+    source = OvertureSource(settings)
     with timed("clean_vectors"):
         cleaned = clean_vectors(
-            OvertureSource(settings),
+            source,
             bbox,
             settings.cleaning,
             cache_dir=settings.tile_cache_dir,
@@ -158,9 +185,27 @@ def run_pipeline(
         buildings_area, height_fill = fill_heights(cleaned.buildings_area, tiers)
         buildings_topo = inherit_heights(cleaned.buildings_topo, buildings_area)
         availability = source_availability(cleaned.buildings_area)
+        tags = tag_availability(cleaned.buildings_area, cleaned.land_use)
 
     with timed("units"):
-        units = GridUnits().generate(bbox)
+        # Was a literal `GridUnits()` until Phase 17, which is why Phase 11's `unit_strategy`
+        # ruling had no effect for six phases: the chain not only defaulted to the grid, it could
+        # not reach anything else, because it never assembled barriers either.
+        strategy = build_strategy(settings.units, buildings=buildings_area)
+        barriers = None
+        if settings.units.strategy != "grid":
+            # `clean_vectors` does not carry rail — it is a barrier layer, not something the
+            # cleaning pipeline has a rule for — so it comes straight off the source, exactly as
+            # `scripts/unit_scale_experiment.build_arms` has fetched it since Phase 2.
+            streets = (
+                filter_street_barriers(cleaned.streets)
+                if settings.units.drop_pedestrian_barriers
+                else cleaned.streets
+            )
+            barriers = assemble_barriers(
+                streets, cleaned.waterbodies, rail=source.rail(bbox).to_crs(cleaned.crs)
+            )
+        units = strategy.generate(bbox, barriers)
 
     with timed("land_cover"):
         # `clip_worldcover` resolves the tiles the bbox actually spans and mosaics them. A single
@@ -202,8 +247,10 @@ def run_pipeline(
             classifier,
             extras=fractions.join(provenance),
             cleaning=cleaned.report,
+            units_report=getattr(strategy, "report", None),
             height_fill=height_fill,
             height_source_availability=availability,
+            tag_availability=tags,
             # The site draws its basemap and its extrusions from these, so that an archived run
             # directory rebuilds its own map with no access to `input/`.
             layers={

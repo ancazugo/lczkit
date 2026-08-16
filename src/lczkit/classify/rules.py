@@ -39,10 +39,13 @@ in the metric. Excluding it would leave it assignable only functionally, which i
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
+
+from lczkit.config import SemanticRuleConfig
 
 Family = str
 """`"built"` or `"natural"`."""
@@ -53,8 +56,15 @@ NATURAL = "natural"
 ROUTE_BUILT = "distance_built"
 ROUTE_NATURAL = "distance_natural"
 ROUTE_INDUSTRIAL = "industrial_rule"
+ROUTE_SEMANTIC = "semantic_rule"
+"""A label assigned by a Phase 18 functional rule other than the industrial one.
 
-ROUTES: tuple[str, ...] = (ROUTE_BUILT, ROUTE_NATURAL, ROUTE_INDUSTRIAL)
+Distinct from `industrial_rule` rather than folded into it: that rule's threshold is calibrated
+against the Rotterdam reference and its firing count is a figure phase write-ups cite, so a second
+rule sharing its route value would silently change what that count means. Which rule fired is in
+`semantic_rule_applied`."""
+
+ROUTES: tuple[str, ...] = (ROUTE_BUILT, ROUTE_NATURAL, ROUTE_INDUSTRIAL, ROUTE_SEMANTIC)
 """Every value `label_route` can take. A fixed vocabulary so the column is a stable category."""
 
 
@@ -129,6 +139,71 @@ def apply_lcz10_rule(
         ),
         fired,
     )
+
+
+def apply_semantic_rules(
+    ranked: Ranked,
+    parameters: pd.DataFrame,
+    rules: Sequence[SemanticRuleConfig],
+) -> tuple[Ranked, pd.Series, dict[str, int]]:
+    """Apply the configured functional rules in order, returning what each one fired on.
+
+    Mechanically identical to `apply_lcz10_rule` — a unit over the threshold takes the rule's class
+    whatever the morphology said, the displaced answer is kept as `secondary`, and `closest` goes
+    null because the assigned class was not reached by distance. Generalised rather than copied so
+    there is one definition of what a functional assignment does to a `Ranked`.
+
+    **Order matters and is the config's order.** A later rule overrides an earlier one on a unit
+    both would fire on, so the list reads most-general to most-specific. The per-rule counts are of
+    units where that rule fired *and survived*, so they sum to the number of relabelled units and a
+    rule shadowed by a later one is visible as a count of zero rather than by inference.
+
+    **A rule that never fires must be distinguishable from one never configured** — CLAUDE.md's
+    requirement for the LCZ 10 rule, and the reason every configured rule appears in the returned
+    mapping whether or not it fired.
+
+    Every threshold here is **uncalibrated**, which is why they all ship disabled. CLAUDE.md's
+    standing ruling is that a threshold is swept against a reference and chosen at an operating
+    point, never picked; enabling one of these before that sweep would put an invented number into
+    a published label.
+    """
+    # Which rule *last* fired on each unit. Counting from this rather than from the resulting
+    # labels is the difference between "this rule placed 40 units" and "40 units carry LCZ 8",
+    # which are the same number only for a class the metric can never assign — true of LCZ 10 and
+    # false of LCZ 7 and 8, both of which are in the prototype set.
+    winner = pd.Series("", index=ranked.primary.index, dtype="object")
+    counts: dict[str, int] = {}
+    for rule in rules:
+        if not rule.enabled:
+            counts[rule.name] = 0
+            continue
+        if rule.column not in parameters.columns:
+            raise ValueError(
+                f"semantic rule {rule.name!r} reads {rule.column!r}, which the parameter table "
+                f"does not carry. Configure `ucp.semantic_groups` so that column is emitted, or "
+                "disable the rule."
+            )
+        fires = (parameters[rule.column] > rule.min_fraction).fillna(False)
+        if rule.max_mean_building_area_m2 is not None:
+            fires &= (parameters["mean_building_area_m2"] <= rule.max_mean_building_area_m2).fillna(
+                False
+            )
+        if rule.min_mean_building_area_m2 is not None:
+            fires &= (parameters["mean_building_area_m2"] >= rule.min_mean_building_area_m2).fillna(
+                False
+            )
+        ranked = Ranked(
+            primary=ranked.primary.where(~fires, rule.lcz),
+            secondary=ranked.secondary.where(~fires, ranked.primary),
+            closest=ranked.closest.where(~fires),
+            runner_up=ranked.runner_up.where(~fires, ranked.closest),
+        )
+        counts[rule.name] = 0
+        winner = winner.where(~fires, rule.name)
+
+    for name in counts:
+        counts[name] = int((winner == name).sum())
+    return ranked, winner.ne(""), counts
 
 
 def drop_lcz1_below_height(

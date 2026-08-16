@@ -29,7 +29,9 @@ from lczkit.config import Settings
 from lczkit.heights.cascade import HeightFillReport
 from lczkit.heights.diagnostic import SourceAvailability
 from lczkit.output.breaks import VariableBreaks
-from lczkit.ucp.registry import LIMITATIONS, NOT_COMPUTED, PARAMETERS
+from lczkit.ucp.registry import LIMITATIONS, NOT_COMPUTED, PARAMETERS, semantic_specs
+from lczkit.ucp.tag_diagnostic import TagAvailability
+from lczkit.units.patches import PatchReport
 from lczkit.validation.agreement import AgreementReport
 
 TRACKED_PACKAGES: tuple[str, ...] = (
@@ -125,8 +127,25 @@ class RunManifest(BaseModel):
     """Precomputed classification breaks. Phase 7 reads these and never recomputes a quantile."""
 
     cleaning: CleaningReport | None = None
+    units: PatchReport | None = None
+    """What the patch merge did, where `units.strategy` is `"patch"`.
+
+    The *choice* of strategy already reaches the manifest through `config`; this is the outcome,
+    and the two are different things. A run recording `patch_min_area_m2=50000` says what was asked
+    for, and `seed_area_quantiles` beside `patch_area_quantiles` says what was got — which is the
+    only way to tell a city where the merge worked from one where isolates or the area ceiling
+    stopped it."""
+
     height_fill: HeightFillReport | None = None
     height_source_availability: SourceAvailability | None = None
+    tag_availability: TagAvailability | None = None
+    """Overture attribute availability by upstream dataset — the Phase 18 counterpart of
+    `height_source_availability`, and the same finding on a second attribute: building tags are
+    48.6% of building area is tagged across Europe and North America against 13.6% elsewhere.
+
+    Read every `sem_*` column against `tagged_area_fraction`. Without it a semantic fraction of 0.0
+    cannot be told from an untagged city, which is the same mistake `height_tier_fractions` exists
+    to prevent for the cascade."""
     validation: AgreementReport | None = None
     """Agreement against the Demuzere global map. A comparator, not ground truth - read it against
     `reference_ceiling`."""
@@ -153,8 +172,10 @@ def build_manifest(
     breaks: list[VariableBreaks] | None = None,
     classification_summary: dict[str, Any] | None = None,
     cleaning: CleaningReport | None = None,
+    units: PatchReport | None = None,
     height_fill: HeightFillReport | None = None,
     height_source_availability: SourceAvailability | None = None,
+    tag_availability: TagAvailability | None = None,
     validation: AgreementReport | None = None,
     validation_ground_truth: AgreementReport | None = None,
     reference_ceiling: AgreementReport | None = None,
@@ -184,7 +205,10 @@ def build_manifest(
                 "description": parameter.description,
                 "reference": parameter.reference,
             }
-            for parameter in PARAMETERS
+            # The semantic specs come from the configured groups, not from a static
+            # list, so a group added in config documents itself here rather than
+            # appearing in the output with no unit and no reference.
+            for parameter in (*PARAMETERS, *semantic_specs(settings.ucp.semantic_groups))
         ],
         not_computed=dict(NOT_COMPUTED),
         limitations=dict(LIMITATIONS),
@@ -200,8 +224,10 @@ def build_manifest(
         legend=legend(),
         breaks=breaks or [],
         cleaning=cleaning,
+        units=units,
         height_fill=height_fill,
         height_source_availability=height_source_availability,
+        tag_availability=tag_availability,
         validation=validation,
         validation_ground_truth=validation_ground_truth,
         reference_ceiling=reference_ceiling,

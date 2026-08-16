@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from lczkit.classify import rules
 from lczkit.classify.rules import (
     BUILT,
     NATURAL,
@@ -20,6 +21,7 @@ from lczkit.classify.rules import (
     drop_lcz1_below_height,
     family_of,
 )
+from lczkit.config import ClassificationConfig, SemanticRuleConfig
 
 
 def series(*values: float) -> pd.Series:
@@ -124,3 +126,130 @@ def test_the_lcz1_height_constraint_drops_only_the_short_units() -> None:
     # A null height is not evidence of shortness, so it is not evidence for dropping LCZ 1.
     assert result.loc["u2", 1] == 0.1
     assert result[8].equals(distances[8])
+
+
+# --------------------------------------------------------------------------------------------
+# Phase 18: the generalised functional rules
+# --------------------------------------------------------------------------------------------
+
+
+def _ranked(primary: list[int], secondary: list[int]) -> rules.Ranked:
+    index = pd.Index([f"u{i}" for i in range(len(primary))], name="unit_id")
+    return rules.Ranked(
+        primary=pd.Series(primary, index=index, dtype="float64"),
+        secondary=pd.Series(secondary, index=index, dtype="float64"),
+        closest=pd.Series(0.5, index=index, dtype="float64"),
+        runner_up=pd.Series(0.9, index=index, dtype="float64"),
+    )
+
+
+def _params(**columns: list[float]) -> pd.DataFrame:
+    length = len(next(iter(columns.values())))
+    return pd.DataFrame(columns, index=pd.Index([f"u{i}" for i in range(length)], name="unit_id"))
+
+
+def test_a_disabled_rule_is_reported_as_zero_rather_than_omitted() -> None:
+    """CLAUDE.md's requirement, first written for the LCZ 10 rule: a rule that never fires must be
+    distinguishable from one never configured. Every shipped semantic rule is disabled, so without
+    this the manifest would say nothing at all about them."""
+    rule = SemanticRuleConfig(name="lightweight", lcz=7, column="sem_x", enabled=False)
+
+    ranked, fired, counts = rules.apply_semantic_rules(
+        _ranked([2, 3], [5, 6]), _params(sem_x=[0.9, 0.9]), [rule]
+    )
+
+    assert counts == {"lightweight": 0}
+    assert not fired.any()
+    assert list(ranked.primary) == [2.0, 3.0]
+
+
+def test_an_enabled_rule_overrides_the_metric_and_keeps_the_displaced_answer() -> None:
+    """Same contract as `apply_lcz10_rule`: the label the morphology would have produced is not
+    lost, it becomes `secondary`, and `closest` goes null because the assigned class was not
+    reached by distance."""
+    rule = SemanticRuleConfig(
+        name="large_lowrise", lcz=8, column="sem_x", min_fraction=0.5, enabled=True
+    )
+
+    ranked, fired, counts = rules.apply_semantic_rules(
+        _ranked([3, 3], [6, 6]), _params(sem_x=[0.9, 0.1]), [rule]
+    )
+
+    assert list(ranked.primary) == [8.0, 3.0]
+    assert list(ranked.secondary) == [3.0, 6.0]
+    assert pd.isna(ranked.closest.iloc[0]) and ranked.closest.iloc[1] == 0.5
+    assert list(fired) == [True, False]
+    assert counts == {"large_lowrise": 1}
+
+
+def test_a_building_size_gate_narrows_a_rule_the_metric_cannot_express() -> None:
+    """`mean_building_area_m2` is not a metric dimension — Phase 14 established that, and that the
+    stated reason for keeping LCZ 8 in the metric therefore described a parameter that never
+    reached it. A rule is not the metric, so it may read it."""
+    rule = SemanticRuleConfig(
+        name="large_lowrise",
+        lcz=8,
+        column="sem_x",
+        min_fraction=0.5,
+        min_mean_building_area_m2=1000.0,
+        enabled=True,
+    )
+
+    _, fired, _ = rules.apply_semantic_rules(
+        _ranked([3, 3], [6, 6]),
+        _params(sem_x=[0.9, 0.9], mean_building_area_m2=[2000.0, 100.0]),
+        [rule],
+    )
+
+    assert list(fired) == [True, False]
+
+
+def test_a_null_fraction_never_fires_a_rule() -> None:
+    """Null means "no buildings to judge", which is not grounds for asserting a class."""
+    rule = SemanticRuleConfig(name="lightweight", lcz=7, column="sem_x", enabled=True)
+
+    _, fired, counts = rules.apply_semantic_rules(
+        _ranked([3], [6]), _params(sem_x=[float("nan")]), [rule]
+    )
+
+    assert not fired.any()
+    assert counts == {"lightweight": 0}
+
+
+def test_a_later_rule_wins_and_the_counts_say_so() -> None:
+    """Order is the config's order, and the counts are of units each rule *holds* at the end — not
+    of units it fired on — so a rule shadowed by a later one reads zero rather than double-counting.
+    LCZ 7 and 8 are both in the prototype set, so counting the resulting labels instead would also
+    sweep up every unit the metric assigned."""
+    first = SemanticRuleConfig(name="large_lowrise", lcz=8, column="sem_a", enabled=True)
+    second = SemanticRuleConfig(name="lightweight", lcz=7, column="sem_b", enabled=True)
+
+    ranked, fired, counts = rules.apply_semantic_rules(
+        _ranked([3, 3], [6, 6]),
+        _params(sem_a=[0.9, 0.9], sem_b=[0.9, 0.1]),
+        [first, second],
+    )
+
+    assert list(ranked.primary) == [7.0, 8.0]
+    assert counts == {"large_lowrise": 1, "lightweight": 1}
+    assert fired.all()
+
+
+def test_a_rule_reading_an_absent_column_is_refused_by_name() -> None:
+    """Silently skipping would make a misconfigured rule indistinguishable from one that never
+    fired, which is the state the whole reporting contract exists to rule out."""
+    rule = SemanticRuleConfig(name="lightweight", lcz=7, column="sem_missing", enabled=True)
+
+    with pytest.raises(ValueError, match="sem_missing"):
+        rules.apply_semantic_rules(_ranked([3], [6]), _params(sem_x=[0.9]), [rule])
+
+
+def test_every_shipped_semantic_rule_is_disabled_pending_calibration() -> None:
+    """CLAUDE.md's standing ruling: a threshold is swept against a reference and chosen at an
+    operating point, never picked. These have not been swept, so shipping one enabled would put an
+    invented number into a published label."""
+    shipped = ClassificationConfig().semantic_rules
+
+    assert shipped, "the rules should exist and be off, not be absent"
+    assert not any(rule.enabled for rule in shipped)
+    assert all(rule.reason for rule in shipped)

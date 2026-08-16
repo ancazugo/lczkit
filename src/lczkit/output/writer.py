@@ -31,7 +31,9 @@ from lczkit.heights.cascade import HeightFillReport
 from lczkit.heights.diagnostic import SourceAvailability
 from lczkit.output.breaks import breaks_for
 from lczkit.output.manifest import RunManifest, build_manifest
+from lczkit.ucp.tag_diagnostic import TagAvailability
 from lczkit.units import check_units
+from lczkit.units.patches import PatchReport
 from lczkit.validation.agreement import AgreementReport
 
 UNITS_FILE = "units.parquet"
@@ -72,8 +74,10 @@ def write_run(
     *,
     extras: pd.DataFrame | None = None,
     cleaning: CleaningReport | None = None,
+    units_report: PatchReport | None = None,
     height_fill: HeightFillReport | None = None,
     height_source_availability: SourceAvailability | None = None,
+    tag_availability: TagAvailability | None = None,
     validation: AgreementReport | None = None,
     layers: Mapping[str, gpd.GeoDataFrame] | None = None,
 ) -> RunOutputs:
@@ -128,8 +132,10 @@ def write_run(
         breaks=breaks_for(attributes, continuous, settings.output.break_count),
         classification_summary=classification_summary(classification),
         cleaning=cleaning,
+        units=units_report,
         height_fill=height_fill,
         height_source_availability=height_source_availability,
+        tag_availability=tag_availability,
         validation=validation,
         outputs=[
             UNITS_FILE,

@@ -14,6 +14,7 @@ from lczkit.config import LandCoverConfig, UcpConfig
 from lczkit.ucp.buildings import building_metrics
 from lczkit.ucp.industrial import industrial_metrics
 from lczkit.ucp.registry import PARAMETER_COLUMNS
+from lczkit.ucp.semantics import group_columns, semantic_metrics
 from lczkit.ucp.streets import street_metrics
 from lczkit.ucp.surface import surface_fractions
 
@@ -66,6 +67,11 @@ def compute_parameters(
             industrial_metrics(
                 buildings_area, land_use, units, config, building_area_m2=building_area_m2
             ),
+            # Phase 18. Shares the same handed-down denominator, so every semantic building share
+            # is on the same base as `building_surface_fraction` and as `FIND/B`.
+            semantic_metrics(
+                buildings_area, land_use, units, config, building_area_m2=building_area_m2
+            ),
         ],
         axis=1,
     )
@@ -73,6 +79,6 @@ def compute_parameters(
     missing = [column for column in PARAMETER_COLUMNS if column not in table.columns]
     if missing:  # pragma: no cover - a registry/implementation mismatch, caught by its own test
         raise RuntimeError(f"parameter blocks did not produce: {', '.join(missing)}")
-    result = table[list(PARAMETER_COLUMNS)]
+    result = table[[*PARAMETER_COLUMNS, *group_columns(config.semantic_groups)]]
     result.index.name = "unit_id"
     return result

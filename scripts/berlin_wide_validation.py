@@ -51,6 +51,8 @@ from lczkit.sources.worldcover import (  # noqa: F401 - re-exported, see above
     clip_worldcover,
     worldcover_tiles,
 )
+from lczkit.validation.wudapt import READ_COLUMNS as WUDAPT_READ_COLUMNS
+from lczkit.validation.wudapt import WUDAPT_SOURCE_DIR_NAME
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -87,6 +89,10 @@ LCZ_SOURCE_FILENAME = "lcz_v3.tif"
 SO2SAT_SOURCE_DIR_NAME = "So2Sat-LCZ42"
 SO2SAT_RELATIVE = Path("v4") / "cities" / "Berlin" / "patches_reference_Berlin.gpkg"
 
+WUDAPT_SOURCE_FILENAME = "LCZ-Generator_training_areas_2024-10-01.gpkg"
+"""The dated LCZ Generator export, pinned here for the same reason `RELEASE` is: contributors keep
+adding to it, so "whichever gpkg is in that directory" would silently change the reference."""
+
 
 def clip_patches(source: Path, destination: Path, bbox: BBox) -> Path:
     """So2Sat patches intersecting `bbox`, geometries **unclipped**.
@@ -98,6 +104,31 @@ def clip_patches(source: Path, destination: Path, bbox: BBox) -> Path:
 
     patches = gpd.read_file(source, bbox=bbox)
     patches.to_parquet(destination)
+    return destination
+
+
+def clip_wudapt(source: Path, destination: Path, bbox: BBox) -> Path | None:
+    """WUDAPT training areas intersecting `bbox`, geometries whole and **uncleaned**.
+
+    Uncleaned because `lczkit.validation.wudapt.prepare_wudapt` owns the repair, the gating and the
+    overlap resolution, and a clip that pre-cleaned would make a stored run's selection record a
+    description of the clip rather than of the reference.
+
+    Whole rather than clipped to the window for the same reason the So2Sat clip is: a polygon
+    truncated at the window edge would have its area, and hence its priority against an overlapping
+    neighbour, decided by where the window happened to fall.
+
+    `None` when the export is absent — a city with no WUDAPT reference is a legitimate state and
+    must be visible as one rather than as a crash.
+    """
+    import geopandas as gpd
+
+    if not source.is_file():
+        return None
+    polygons = gpd.read_file(source, bbox=bbox, columns=list(WUDAPT_READ_COLUMNS))
+    if polygons.empty:
+        return None
+    polygons.to_parquet(destination)
     return destination
 
 
@@ -123,6 +154,11 @@ def main() -> None:
         settings.run_dir / f"so2sat_{name}.parquet",
         bbox,
     )
+    wudapt = clip_wudapt(
+        settings.source_dir(WUDAPT_SOURCE_DIR_NAME) / WUDAPT_SOURCE_FILENAME,
+        settings.run_dir / f"wudapt_{name}.parquet",
+        bbox,
+    )
 
     fixture = Fixture(
         name=name,
@@ -131,6 +167,7 @@ def main() -> None:
         worldcover=worldcover,
         reference=reference,
         ground_truth=ground_truth,
+        wudapt=wudapt,
     )
 
     print(f"running the three arms over {name}...", file=sys.stderr, flush=True)

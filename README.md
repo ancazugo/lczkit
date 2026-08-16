@@ -353,12 +353,28 @@ Six things about this phase are worth knowing before relying on it:
 
 ### Validation, and what it is measured against
 
-There are two references, and the distinction is load-bearing. **Hand-labelled So2Sat LCZ42 /
+There are three references, and the distinctions are load-bearing. **Hand-labelled So2Sat LCZ42 /
 DFC2017 polygons are the primary reference** where they exist. The Demuzere global map
 (`lcz_v3.tif`) is a secondary comparator — it is a model output carrying its own error, and
 scoring against it as though it were ground truth reports the *disagreement between two models* as
 lczkit's error. The agreement between the two is reported as the **ceiling**: the most any run
 could score against the global map.
+
+**WUDAPT LCZ Generator training areas are the third**, and the only reference that reaches every
+city this package has been run on — 275 024 labelled cells against So2Sat's 100 414 over the
+sixteen study windows, more in fifteen of sixteen cities. They are hand labels too, but a different
+kind of object: irregular, overlapping, drawn between 1983 and 2025, so `lczkit.validation.wudapt`
+repairs, gates and de-overlaps them and reports what that cost. Two cautions travel with any figure
+against them:
+
+- **WUDAPT is not independent of `lcz_v3`.** These polygons are that map's training data, so their
+  agreement is inflated by construction and is *not* a ceiling. The record carries
+  `independent: False` and a written reason so nobody recomputes it and reads it as one.
+- **The labels do not reproduce each other.** WUDAPT and So2Sat agree at a median 79.9% over the
+  sixteen cities, ranging 26.3% (Cairo — *below* its own 52.1% majority-class baseline) to 96.3%
+  (Paris), and 89.1% mean across Europe and North America against 69.3% elsewhere. Where two expert
+  label sets disagree, no classifier can agree with both: that is a **floor under every residual
+  this package reports**, and it belongs beside any per-city figure.
 
 Everything is reported lczexplore-style — per-class agreement and a confusion matrix, never a
 single accuracy figure — plus built-class agreement separately from overall with the natural-class
@@ -480,6 +496,71 @@ See [Phase 11](docs/experiments/phase-11-unit-decision.md).
 
 [Phase 8](docs/experiments/phase-8-scaling.md) is what made that measurable, and is the reason the
 fixture stopped being the only evidence.
+
+## Spatial units — grid, enclosure, or patch
+
+`units.strategy` is config; the default is `grid` and every figure this project records is measured
+on it.
+
+| strategy | what it is | median unit, Hong Kong fixture |
+|---|---|---:|
+| `grid` (default) | 100 m cells in the local UTM CRS | 1.00 ha |
+| `enclosure` | street-, rail- and water-bounded blocks | 0.15 ha |
+| `patch` | enclosure seeds merged to LCZ-patch scale | 11.69 ha |
+
+**An enclosure is a block; an LCZ patch is a neighbourhood.** WUDAPT polygons run 2.2–52 ha across
+the sixteen cities and a So2Sat patch is 10.24 ha, against an enclosure median of 0.04 ha on the
+raw barrier set. Re-cutting the barriers does not fix that — measured at four settings, every one
+bimodal, because a thinner network stops subdividing big faces rather than enlarging small ones. So
+`PatchUnits` sets the scale with a **merge**: it seeds on enclosures (with footways and paths
+excluded, since those are 50–73% of the mapped network in Berlin, Hong Kong and Milan and are not
+boundaries between LCZ patches) and folds each unit into the contiguous neighbour it most resembles
+in building surface fraction and height until it reaches `patch_min_area_m2`. Linear in seed count
+(exponent 1.03 over five extents), deterministic, and a strict partition.
+
+`patch_min_area_m2` is a **floor, not a centre** — merging stops when a unit reaches it and the last
+merge overshoots, so 5 ha yields a ~10 ha median. Set it to about half the grain you want.
+
+**No accuracy claim is attached to `patch`.** The sixteen-city A/B sweep is wired and has not been
+run. And a caveat travels with any figure measured on patch units: the merge reads two of the seven
+dimensions the classifier then scores, which is standard for a regionalisation and still a mild
+circularity — it cannot inflate agreement with an external reference, but it does weaken
+`bsf_by_reference_class`, so the published-range conclusions stay on the grid.
+
+## Semantic evidence from Overture attributes
+
+Overture carries `subtype` and `class` on every building and land-use parcel, and until Phase 18
+exactly one parameter of twenty read them. `lczkit.ucp.semantics` emits, per configured group,
+`sem_<group>_buildings_of_building_area` and `sem_<group>_parcels_of_unit_area` — each name
+carrying a numerator *and* a denominator, because the two are not comparable — for five groups
+mapped in `docs/references/tables/overture_lcz_semantic_mapping.md`.
+
+**Read every one of them against `building_tag_coverage`**, which ships beside them and is the
+point of the layer:
+
+| tagged building area | mean | median |
+|---|---:|---:|
+| Europe + N. America (7 cities) | **48.6%** | 50.3% |
+| Everywhere else (9 cities) | **13.6%** | 7.1% |
+
+Berlin is 64.4% and Rio 3.1%. This is the founding premise on a second attribute — Phase 9 measured
+tier-1 height at 64.3% against 9.6% on the same split — and the mechanism is measured rather than
+assumed: **wherever an ML source wins the footprints, its tagged share is exactly 0.0%.** Google
+Open Buildings and Microsoft ML supply geometry and no attributes, and Overture's conflation is
+winner-takes-all per footprint. So a `lightweight` fraction of 0.0 in Nairobi is 94.8% of building
+area carrying no tag, not an absence of informal settlement, and without the coverage column the two
+are indistinguishable — the same distinction `height_tier_fractions` draws for the cascade.
+
+Land-use parcels *do not* collapse (30–65% where building tags are near-absent), which is why they
+are reported apart rather than blended in.
+
+Two functional rules — LCZ 8 from large-low-rise evidence, LCZ 7 from lightweight — ship
+**disabled**. A threshold is swept against a reference and chosen at an operating point, never
+picked; these have not been swept, and the shipped values are placeholders.
+
+**No OSM.** `osm-rasterizer` and `osmnx` would need live Overpass, which is unpinned and
+unreproducible against a design that fixes an Overture release in every manifest. OSM's
+`industrial=*` heavy/light split stays unreachable and stays on the deferred list.
 
 ## Phase 7 — the map site
 

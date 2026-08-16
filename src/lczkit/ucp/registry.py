@@ -11,7 +11,10 @@ the first time a column is renamed.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
+
+from lczkit.config import SemanticGroupConfig
 
 STEWART_OKE_2012 = "10.1175/BAMS-D-11-00019.1"
 """Stewart & Oke (2012), *BAMS* 93(12), 1879-1900. Defines the LCZ scheme and the property table
@@ -284,19 +287,102 @@ PARAMETERS: tuple[ParameterSpec, ...] = (
 )
 
 PARAMETER_COLUMNS: tuple[str, ...] = tuple(parameter.name for parameter in PARAMETERS)
-"""Column order of the table `compute_parameters()` returns."""
+"""Column order of the table `compute_parameters()` returns, up to the semantic block.
+
+The Phase 18 semantic columns are **not** here, because their names depend on the configured
+groups. `semantic_specs()` builds their specs from the same config the columns come from, so a
+group added in config cannot end up in the output with no documented unit or reference — which is
+the state a static list would produce silently.
+"""
+
+COVERAGE_SPECS: tuple[ParameterSpec, ...] = (
+    ParameterSpec(
+        name="building_tag_coverage",
+        label="Building attribute coverage",
+        unit="fraction",
+        description=(
+            "Share of the unit's building area whose Overture `subtype` or `class` is present and "
+            "not 'unknown'. **Read every semantic fraction against this.** Building attributes are "
+            "48.6% of building area across Europe and North America and 13.6% elsewhere — Rio "
+            "reaches 3.1% — so a semantic fraction of 0.0 usually means 'untagged', not 'absent'. "
+            "Wherever an ML source wins the footprints its tagged share is exactly 0.0%. The role "
+            "`height_completeness` plays for the height cascade, on a second attribute that "
+            "collapses in the same places."
+        ),
+        reference=COMPUTED_HERE,
+    ),
+    ParameterSpec(
+        name="land_use_coverage",
+        label="Land-use parcel coverage",
+        unit="fraction",
+        description=(
+            "Share of the unit's area under any Overture land-use parcel, dissolved so "
+            "self-overlapping parcels count once. Holds 30-65% in the cities where building tags "
+            "are near-absent, which is why parcel and building evidence are reported apart."
+        ),
+        reference=COMPUTED_HERE,
+    ),
+)
+
+
+def semantic_specs(groups: Iterable[SemanticGroupConfig]) -> tuple[ParameterSpec, ...]:
+    """`ParameterSpec` for every column the semantic layer emits for `groups`.
+
+    Built from config rather than transcribed, for the reason `PARAMETER_COLUMNS` gives: a static
+    list and a configurable group set drift, and CLAUDE.md's rule is that no parameter reaches the
+    output without a documented unit and source reference.
+    """
+    specs: list[ParameterSpec] = []
+    for group in groups:
+        hint = f" Evidence for LCZ {group.lcz_hint}." if group.lcz_hint else ""
+        specs.append(
+            ParameterSpec(
+                name=f"sem_{group.name}_buildings_of_building_area",
+                label=f"{group.name.replace('_', ' ').capitalize()} share of building area",
+                unit="fraction",
+                description=(
+                    f"Share of the unit's building area whose Overture `subtype` or `class` places "
+                    f"it in the '{group.name}' group.{hint} Null where the unit holds no building "
+                    "area. Bernard et al.'s FIND/B quantity, generalised beyond industry. Groups "
+                    "are not a partition and these do not sum to one."
+                ),
+                reference=BERNARD_2024,
+            )
+        )
+    for group in groups:
+        hint = f" Evidence for LCZ {group.lcz_hint}." if group.lcz_hint else ""
+        specs.append(
+            ParameterSpec(
+                name=f"sem_{group.name}_parcels_of_unit_area",
+                label=f"{group.name.replace('_', ' ').capitalize()} share of unit area",
+                unit="fraction",
+                description=(
+                    f"Share of the unit's area under land-use parcels of the '{group.name}' "
+                    f"group, dissolved before measuring.{hint} A different numerator *and* "
+                    "denominator from the building column of the same group; the two are not "
+                    "comparable and their names say so."
+                ),
+                reference=COMPUTED_HERE,
+            )
+        )
+    return (*specs, *COVERAGE_SPECS)
+
 
 _BY_NAME = {parameter.name: parameter for parameter in PARAMETERS}
 
 
-def spec(name: str) -> ParameterSpec:
-    """The `ParameterSpec` for column `name`, or a `KeyError` naming what exists."""
-    try:
+def spec(name: str, groups: Iterable[SemanticGroupConfig] | None = None) -> ParameterSpec:
+    """The `ParameterSpec` for column `name`, or a `KeyError` naming what exists.
+
+    `groups` extends the lookup over the configured semantic columns, whose names are not knowable
+    without it.
+    """
+    if name in _BY_NAME:
         return _BY_NAME[name]
-    except KeyError:
-        raise KeyError(
-            f"no parameter named {name!r}; known: {', '.join(PARAMETER_COLUMNS)}"
-        ) from None
+    for candidate in semantic_specs(groups or []):
+        if candidate.name == name:
+            return candidate
+    raise KeyError(f"no parameter named {name!r}; known: {', '.join(PARAMETER_COLUMNS)}")
 
 
 NOT_COMPUTED: tuple[tuple[str, str], ...] = (

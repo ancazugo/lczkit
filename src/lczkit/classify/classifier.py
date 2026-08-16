@@ -41,6 +41,7 @@ LABEL_COLUMNS: tuple[str, ...] = (
     "uniqueness",
     "label_route",
     "lcz10_rule_applied",
+    "semantic_rule_applied",
     "n_params_used",
     "n_params_available",
     "missing_parameters",
@@ -74,6 +75,7 @@ class PrototypeClassifier:
         # LCZ 10 is scored and reported but never selected: it leaves the metric per Bernard et al.
         # and arrives only through the industrial rule. Kept as a derived tuple rather than a
         # literal so `lcz_d10` and the selection set cannot drift apart.
+        self.semantic_firings: dict[str, int] = {}
         self.selectable_built: tuple[int, ...] = tuple(
             code for code in BUILT_CODES if code != FUNCTIONAL_ONLY_CODE
         )
@@ -120,11 +122,21 @@ class PrototypeClassifier:
             parameters[industrial_column],
             self.config.lcz10_min_industrial_fraction,
         )
-        route = pd.Series(
-            np.where(is_built, rules.ROUTE_BUILT, rules.ROUTE_NATURAL),
-            index=parameters.index,
-            dtype="object",
-        ).where(~fired, rules.ROUTE_INDUSTRIAL)
+        # After the industrial rule, so a unit both would claim keeps the calibrated answer. Every
+        # semantic rule ships disabled, so by default this is a no-op that still records zeros —
+        # "never fired" and "never configured" have to stay distinguishable.
+        ranked, semantic_fired, self.semantic_firings = rules.apply_semantic_rules(
+            ranked, parameters, self.config.semantic_rules
+        )
+        route = (
+            pd.Series(
+                np.where(is_built, rules.ROUTE_BUILT, rules.ROUTE_NATURAL),
+                index=parameters.index,
+                dtype="object",
+            )
+            .where(~fired, rules.ROUTE_INDUSTRIAL)
+            .where(~semantic_fired, rules.ROUTE_SEMANTIC)
+        )
 
         # Select by code before renaming. Concatenating and assigning column labels positionally
         # assumes each frame comes back in its family's code order - true today, since `distances`
@@ -148,6 +160,7 @@ class PrototypeClassifier:
                         "uniqueness": uniqueness(ranked.closest, ranked.runner_up),
                         "label_route": pd.Categorical(route, categories=list(rules.ROUTES)),
                         "lcz10_rule_applied": fired,
+                        "semantic_rule_applied": semantic_fired,
                         "n_params_used": _pick(
                             built.n_params_used, natural.n_params_used, is_built
                         ),
@@ -192,6 +205,18 @@ class PrototypeClassifier:
                     "source": prototype.source,
                 }
                 for prototype in self.space.prototypes
+            ],
+            "semantic_rules": [
+                {
+                    "name": rule.name,
+                    "lcz": rule.lcz,
+                    "column": rule.column,
+                    "min_fraction": rule.min_fraction,
+                    "enabled": rule.enabled,
+                    "reason": rule.reason,
+                    "units_assigned": self.semantic_firings.get(rule.name, 0),
+                }
+                for rule in self.config.semantic_rules
             ],
             "thresholds": {
                 "built_min_building_fraction": self.config.built_min_building_fraction,

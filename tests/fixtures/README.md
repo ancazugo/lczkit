@@ -201,6 +201,39 @@ Rotterdam has no counterpart: So2Sat covers 52 cities and Rotterdam is not one o
 60 km away, is the nearest). The industry fixture stays on `lcz_v3` and every figure derived from
 it carries that limitation.
 
+### `wudapt_hongkong.parquet` / `wudapt_berlin.parquet` — the third reference, added in Phase 16
+
+WUDAPT LCZ Generator training areas intersecting each fixture bbox, EPSG:4326, built by
+`scripts/build_wudapt_fixture.py` from the dated export under `input/WUDAPT/`. Hong Kong: 77
+polygons, 8 classes, 27 KB. Berlin: 16 polygons, 4 classes, 16 KB.
+
+These are hand labels like So2Sat's, and a different kind of object from them in every respect that
+matters to the code:
+
+| | So2Sat | WUDAPT |
+|---|---|---|
+| geometry | uniform 320 m squares on a 100 m stride | hand-drawn, 0 m² to 18 680 km², median 4.8 ha |
+| overlaps | ~7× by construction, always same-source | contributor-to-contributor, and they disagree |
+| date | one campaign | `representative_date` spans 1983–2025 |
+| classes | 1–17 | 1–**19** |
+| reduction | patch centre | areal majority, after overlap resolution |
+| coverage | 51 cities | every city this package has been run on |
+
+**Stored whole and uncleaned, deliberately.** `lczkit.validation.wudapt.prepare_wudapt` is what
+repairs, gates and de-overlaps them; a pre-cleaned fixture would leave all of that untested. Both
+windows carry the states the cleaning exists for — Berlin 23 overlapping pairs of which 2 conflict,
+Hong Kong 140 of which 53 conflict, two self-intersecting polygons, seventeen submissions, both
+licences. Classes 18 and 19 occur in neither window, so that test constructs its own case rather
+than the fixture carrying a doctored row.
+
+The `area` column is kept although it is unusable — it is km² computed in Web Mercator, inflated by
+1/cos²(latitude) — precisely so `test_validation_wudapt.py` can assert that nothing reads it. A
+column that is never written down cannot be asserted against.
+
+**WUDAPT is not independent of `lcz_v3`.** These training areas are the training data behind the
+Demuzere global map, so agreement between the two is inflated by construction and is not a ceiling
+in the sense So2Sat gives one.
+
 ## Licensing
 
 All committed raster fixtures are **CC-BY-4.0** and are redistributed here under that licence:
@@ -219,3 +252,16 @@ All committed raster fixtures are **CC-BY-4.0** and are redistributed here under
 
 The Overture extracts are from Overture Maps Foundation data, which carries the licences of its
 upstream sources (ODbL for OSM-derived features, CDLA-Permissive-2.0 for the ML-derived ones).
+
+The WUDAPT fixtures are **not** CC-BY. The LCZ Generator training areas are contributed under
+`CC BY-SA` and `CC BY-NC-SA 4.0`, per-polygon, and both licences are present in both windows — the
+second is **non-commercial**. That constrains this data, not lczkit, which is MIT and contains no
+part of it; the fixtures are redistributed here under those terms as a share-alike derivative, and
+`WudaptSelection.licences` reads the licences out of whatever window a run actually used rather
+than restating them from here.
+
+- Demuzere, M., Kittner, J., Bechtel, B. (2021), *LCZ Generator: A Web Application to Create Local
+  Climate Zone Maps*, Frontiers in Environmental Science 9, 637455. `10.3389/fenvs.2021.637455`.
+- Bechtel, B., Alexander, P. J., Böhner, J., Ching, J., Conrad, O., Feddema, J., Mills, G., See,
+  L., Stewart, I. (2015), *Mapping Local Climate Zones for a Worldwide Database of the Form and
+  Function of Cities*, ISPRS IJGI 4(1), 199-219. `10.3390/ijgi4010199`.

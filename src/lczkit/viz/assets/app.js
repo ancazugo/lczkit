@@ -324,7 +324,7 @@
   }
 
   /*
-   * `label_route` records whether a cell took the distance metric or the functional LCZ 10 rule.
+   * `label_route` records whether a cell took the distance metric or one of the functional rules.
    * Printed raw it is a token; the point of showing it at all is that those are different claims.
    */
   function routeLabel(route) {
@@ -333,6 +333,7 @@
       distance_built: "nearest built prototype",
       distance_natural: "nearest natural prototype",
       industrial_rule: "industrial rule (LCZ 10)",
+      semantic_rule: "functional rule (Overture attributes)",
     };
     if (route === null || route === undefined || route === "") return "—";
     return routes[route] || String(route);

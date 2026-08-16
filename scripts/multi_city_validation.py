@@ -74,12 +74,15 @@ from berlin_wide_validation import (  # noqa: E402 - sibling script
     LCZ_SOURCE_DIR_NAME,
     LCZ_SOURCE_FILENAME,
     SO2SAT_SOURCE_DIR_NAME,
+    WUDAPT_SOURCE_DIR_NAME,
+    WUDAPT_SOURCE_FILENAME,
     clip_patches,
     clip_raster,
     # Lives beside `clip_raster` rather than here because that module is imported *by* this one
     # and so cannot import back. Re-exported through this import, which is where
     # `berlin_metropolitan_run` and `publish_sites` already look for it.
     clip_worldcover,
+    clip_wudapt,
 )
 from unit_scale_experiment import (  # noqa: E402 - sibling script
     HEIGHTS,
@@ -206,6 +209,14 @@ def prepare(city: City, settings: Settings) -> tuple[Fixture, dict[str, Any]] | 
         bbox,
     )
     ground_truth = clip_patches(patches_path, run / f"so2sat_{city.key}.parquet", bbox)
+    # Added in Phase 16. `None` where the export is absent or the window holds no polygon, which
+    # is a state the record has to be able to show — a city scored against two references and one
+    # scored against three must not look the same.
+    wudapt = clip_wudapt(
+        settings.source_dir(WUDAPT_SOURCE_DIR_NAME) / WUDAPT_SOURCE_FILENAME,
+        run / f"wudapt_{city.key}.parquet",
+        bbox,
+    )
 
     fixture = Fixture(
         name=city.key,
@@ -214,6 +225,7 @@ def prepare(city: City, settings: Settings) -> tuple[Fixture, dict[str, Any]] | 
         worldcover=worldcover,
         reference=reference,
         ground_truth=ground_truth,
+        wudapt=wudapt,
     )
     window = {
         "region": city.region,
@@ -224,6 +236,7 @@ def prepare(city: City, settings: Settings) -> tuple[Fixture, dict[str, Any]] | 
         "n_patches_window": int(len(inside)),
         "patch_retention": float(len(inside) / len(patches)),
         "classes_in_window": classes,
+        "has_wudapt": wudapt is not None,
     }
     return fixture, window
 

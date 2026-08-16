@@ -158,6 +158,14 @@ you must respect in every phase:
   of LCZ labels globally. No download is necessary, but some cleaning might be - this is the secondary 
   validation reference and the first if So2sat doesn't have sufficient labels for a ROI.
 
+  **Built in Phase 16**: `lczkit.validation.wudapt`, `WudaptConfig` under `ValidationConfig`,
+  fixtures at `tests/fixtures/lcz/wudapt_{berlin,hongkong}.parquet`. The export is
+  `LCZ-Generator_training_areas_2024-10-01.gpkg`, 630 311 polygons, and `WudaptConfig.filename`
+  refuses to default to it — contributors keep adding, so an unpinned name changes the reference
+  between runs, exactly as `OvertureConfig.release` refuses "latest". The polygons are **CC BY-SA
+  and CC BY-NC-SA 4.0**, per polygon: non-commercial in the second case, which constrains the data
+  and not this MIT package, and which a run's record states from the data rather than a constant.
+
 - **GUPPD boundaries for all urban regions in the world**, locally, at `$DATA_DIR/input/NASA/GUPPD`.
   This folder contains the release of the GUPPD dataset for all urban regions around the world.
   A post processed csv file is available for all cities, including their names, countries and 
@@ -1234,6 +1242,209 @@ and an **"About this map"** block reading the cascade, weights and release out o
 
 ---
 
+### Phase 16 — WUDAPT as a reference — CONCLUDED
+
+**Built on explicit request, and turned on the other two references before the package.** CLAUDE.md
+has named WUDAPT the secondary reference since Phase 0; until now `grep -rni wudapt` returned prose
+only — no loader, no config, zero `.py` hits. `src/lczkit/validation/wudapt.py` exports the same
+three-column contract as `reference_lcz` and `labelled_lcz`, so `agreement()` takes any of the three.
+Full write-up in `docs/experiments/phase-16-wudapt-reference.md`.
+
+**The question nobody had asked: do the labels reproduce?** Every ceiling this project has quoted
+compares a *model* to labels. Two independent human label sets, same ground, sixteen cities, 100 m
+grid, ~4 minutes with no pipeline run:
+
+| | median | range |
+|---|---:|---:|
+| WUDAPT vs So2Sat | **79.9%** | 26.3% – 96.3% |
+
+> **A second unquantified floor, and it is larger than the patch-versus-cell one.** Where two expert
+> label sets disagree, no classifier can agree with both. This is a term in the error budget, not a
+> caveat.
+
+**The seven-against-nine split, third independent sighting — and the first outside lczkit.**
+Europe + N. America 89.1% mean / 91.6% median against 69.3% / 77.7% elsewhere, measured with no
+pipeline involved. It does not explain Phase 11's A/B split or Phase 12's compactness lift, and it
+is not offered as doing so; it does mean an explanation concerning only lczkit's morphology now has
+to account for the labels splitting the same way. **`corr(label reproducibility, ceiling) = +0.69`**
+— a common cause (how ambiguous the city is to label) fits better than `lcz_v3` being differently
+accurate in different places.
+
+**Cairo: 26.3% against a 52.1% baseline — two expert label sets agreeing less than a constant
+predictor.** Two explanations refuted by measurement, one supported:
+
+- *Age* — refuted. 1 014 of 1 030 polygons postdate 2018.
+- *Contributor quality* — refuted, informatively. The QC gate moves Cairo 26.3% → 26.7%, Mumbai
+  47.4% → 50.3%, Jakarta 70.7% → **68.8%**, for half the labelled ground; `oa ≥ 0.7` gives
+  **19.1%** / 47.3% / 69.6% — worse on all three, worst on the city that needed help most.
+- *Systematic interpretation difference* — supported. So2Sat lays a blanket LCZ 2 over ground WUDAPT
+  splits six ways, and **302 of 400** So2Sat LCZ 8 cells are WUDAPT's LCZ 10 — the 8/10 boundary
+  Stewart & Oke separate only by anthropogenic heat, which neither team can measure. Berlin's
+  equivalent matrix is near-diagonal.
+
+Cairo's 3.4% / 1.3% remains on the record; the founding premise is untouched, since Phase 10
+measured the height correlation *within* cities. But Cairo's specific number was taken against a
+reference another expert team disagrees with more than chance.
+
+**Reach: 275 024 labelled cells against So2Sat's 100 414 — 2.7×, and more in 15 of 16 cities.**
+Largest where So2Sat is thinnest: Mumbai 1 706 → 13 086, Hong Kong 4 131 → 33 227. Vancouver is the
+sole exception (0.67×).
+
+**The instrument reproduces the committed record**: Berlin's ceiling 75.2% on 9 620 cells against
+the committed 75.2% on 9 627; Cairo 42.5%, Vancouver 36.7%, Mumbai 22.8%, Rio 83.2% all reproduce.
+
+Other measurements worth keeping:
+
+- **`raw = labelled + duplicate + conflict` exactly** — 13 595 047.0 m² both ways on the Berlin
+  fixture. Cities contest 0.09% (Vancouver) to 19.48% (São Paulo) of drawn ground.
+- **`corr(contested share, label agreement) = −0.14` — hypothesis refuted.** A reference that
+  contradicts itself is not thereby one that disagrees with an independent set. São Paulo contests
+  19.48% and reaches 82.1%; Vancouver contests 0.09% and reaches 77.3%.
+- **`lcz_v3` vs WUDAPT is not a ceiling and carries `independent: False` in the record.** These
+  polygons are that map's training data. Vancouver reads 86.8% against a real ceiling of 36.7%.
+
+**Rulings:**
+
+1. **A reference's own quality metrics are not a validation filter.** WUDAPT's QC flags and `oa`
+   both fail to improve agreement with independent labels and `oa` makes it worse — it scores a
+   submission against *itself*, and self-consistency is precisely what a second reference is for.
+   `require_qc=False` and `min_oa=None`, with the measurement in the config docstrings.
+2. **So2Sat stays primary where it exists.** WUDAPT adds reach and support, not authority:
+   contributor-drawn exemplars against a designed sample. Where both exist both are reported, and
+   `reference_file` names which produced which figure.
+
+---
+
+### Phase 17 — organic patch units — CONCLUDED
+
+**Built on explicit request.** `GridUnits` is untouched and remains the default. Full write-up in
+`docs/experiments/phase-17-patch-units.md`.
+
+**The measurement that set the design: an enclosure is a block, an LCZ patch is a neighbourhood.**
+
+| | median unit |
+|---|---:|
+| `EnclosureUnits`, Hong Kong fixture | **0.04 ha** |
+| 100 m grid cell | 1.00 ha |
+| WUDAPT polygon, sixteen cities | 2.2–52 ha (median ~5) |
+| So2Sat patch | 10.24 ha |
+
+And **a thinner barrier set does not fix it** — measured at four settings, every one bimodal
+(slivers plus a few very large faces), median barely moving: all streets 0.04 ha, drop
+footway/path 0.11, major+tertiary 0.07, major only 0.07. A thinner network does not enlarge small
+faces, it only stops subdividing big ones. **The scale is set by a merge step or not at all.**
+
+`src/lczkit/units/patches.py`: `EnclosureUnits` seeds over a barrier set with the pedestrian classes
+removed, then a contiguity-constrained greedy merge into the most morphologically similar neighbour
+until `min_area_m2`. Hong Kong fixture: grid 959 units / 1.00 ha median, enclosure 618 / 0.15,
+**patch 62 / 11.69** — inside the WUDAPT band, 556 merges, 0 isolates, 0 left below the floor.
+
+- **Pedestrian classes are 72.7% of Berlin's segments, 72.8% of Hong Kong's, 50.6% of Milan's** and
+  3.5–7.5% elsewhere. Left in the barrier set, the partition is largely a measure of how thoroughly
+  a city's footpaths have been surveyed. `pedestrian` itself is kept — Overture uses it for plazas.
+- **`min_area_m2`, not `target_area_m2`.** A floor: merging stops when a unit *reaches* it and the
+  merge overshoots, so 5 ha gives a 10.5 ha median. Named for what it does after the first run
+  showed what it does.
+- **Scaling measured at five extents before shipping**, per the standing anti-pattern: 3 600 →
+  78 400 seeds, 0.85 s → 21.3 s, **exponent 1.03** (pairwise 1.02/1.05/0.91/1.23). Linear.
+  Berlin's 891 km² extrapolates to ~100 s — a lower bound, since Phase 8 measured such fits running
+  24% optimistic.
+- `libpysal` is now a **declared** dependency; it was present only transitively via momepy/esda.
+
+**The Phase 11 ruling, applied six phases late.** "Expose `unit_strategy` as config, default `grid`,
+no auto-selection" was ruled and never applied: `pipeline.run_pipeline` held a literal `GridUnits()`
+and **never assembled barriers at all**, so enclosures were unreachable from the chain. A fifth
+instance of the Phase 14 pattern, found by needing the seam rather than by auditing for it.
+`UnitsConfig` now carries it; `PatchReport` records the outcome separately from the config that
+asked for it.
+
+**Caveat that travels with any figure on patch units.** The merge reads BSF and height, two of the
+seven dimensions the classifier scores — the standard shape of a regionalisation, and still a mild
+circularity. It cannot inflate agreement with an external reference, but it does make
+`bsf_by_reference_class` a weaker test on patches than on cells. **Phase 13's conclusions stay on
+the grid.**
+
+**No accuracy claim is attached, and none is made.** The sixteen-city A/B sweep is wired
+(`agreement_wudapt`, arm D) and not run — it is a sweep, not a build. Pre-registered reading,
+recorded now so it cannot be chosen afterwards: Phase 12 named unit definition the lever at
+compactness lift 1.16 against height 0.86, so if patch units are the answer the **compactness lift
+falls toward 1.0**. Plain enclosures *raised* it to 2.33, so "bigger units" is not automatically the
+fix — which is what the sweep would test.
+
+---
+
+### Phase 18 — Overture semantic evidence — CONCLUDED
+
+**Built on explicit request.** The package computed twenty parameters and exactly one read a
+semantic attribute — `industrial_fraction`, a literal `isin(["industrial"])`. Overture ingests
+`subtype`/`class` on every building and parcel and cleaning is test-pinned to retain them, so the
+vocabulary had been there and unread since Phase 1. Full write-up in
+`docs/experiments/phase-18-semantic-evidence.md`.
+
+**Overture-native, not OSM.** `osm-rasterizer` and `osmnx` are neither installed nor declared and
+both need live Overpass — unpinned and unreproducible against a design that fixes a release string
+in every manifest. `docs/references/tables/overture_lcz_semantic_mapping.md` ports the knowledge in
+`osm_lcz_tag_mapping.md` into a committed crosswalk, parsed and asserted cell for cell.
+
+**The measurement, and it is the founding premise on a second attribute:**
+
+| tagged building **area** | mean | median |
+|---|---:|---:|
+| Europe + N. America (7) | **48.6%** | 50.3% |
+| Everywhere else (9) | **13.6%** | 7.1% |
+
+Rio 3.1%, Islamabad 4.5%, Nairobi 5.2%, Cairo 5.7% against Berlin 64.4%. Phase 9 measured tier-1
+height at 64.3% / 9.6% on the same split — **a fourth sighting of the seven-against-nine regional
+line**, after Phase 11's A/B, Phase 12's compactness lift and Phase 16's label reproducibility.
+
+**The mechanism, which the diagnostic makes visible rather than inferred: wherever an ML source
+wins the footprints its tagged share is _exactly_ 0.0%.** Google Open Buildings and Microsoft ML
+supply geometry and no attributes, and Overture's conflation is winner-takes-all per footprint, so
+a city those sources won has nothing to read however well mapped it is in OSM.
+
+**Land-use parcels do not collapse** — 30–65% where building tags are near-absent against 79–107%
+in Europe — so they are the evidence that generalises, and the two are reported as separate columns
+rather than fused. **Area coverage runs well above count coverage everywhere** (Berlin 64.4% vs
+46.6%, Mumbai 18.1% vs 5.4%): tagged buildings are systematically the larger ones, and the area
+share is reported because it is the denominator every semantic fraction divides by.
+
+`src/lczkit/ucp/semantics.py` emits, per group, `sem_<group>_buildings_of_building_area` and
+`sem_<group>_parcels_of_unit_area` — each name carrying a numerator *and* a denominator — plus
+**`building_tag_coverage`** and **`land_use_coverage`**, which are the point: without them a
+`lightweight` fraction of 0.0 in Nairobi cannot be told from 94.8% of building area carrying no tag.
+Five groups; scope held to the built types, with a test asserting no group reaches `park`, `forest`,
+`grass` or `farmland` — rasters own land cover, and that decision stays locked.
+
+**`industrial_fraction_of_building_area` is not repointed.** It carries the swept 0.45 threshold, so
+widening what it selects would silently invalidate the calibration. `heavy_industry` is reported
+beside it and a test pins that the two never diverge on Rotterdam (superset by construction, ρ>0.99).
+
+**Two rules ship, both disabled** — LCZ 8 from `large_lowrise` gated on `mean_building_area_m2`
+(which a *rule* may read although the metric cannot), and LCZ 7 from `lightweight`. Disabled is a
+ruling, not caution: a threshold is swept and chosen at an operating point, never picked, and these
+have not been swept. `label_route` gains `semantic_rule`, kept distinct from `industrial_rule` so
+that rule's cited firing count does not change meaning.
+
+**Two defects found by measuring rather than reasoning:**
+
+- **A whole-extent `union_all` over the land-use layer**, in the first draft of both the coverage
+  column and the diagnostic. The standing anti-pattern, already paid for twice — and it also *does
+  not work*: over real Overture land use it raises `GEOSException: side location conflict` **even
+  after `make_valid`**, because per-feature validity does not make a collection unionable.
+  `industrial.py` survives it by unioning a few dozen parcels; this ran on Berlin's 70 509. Replaced
+  by clip-then-dissolve-per-unit: bounded, well-conditioned, exactly equal. Caught by running the
+  diagnostic over a real city rather than a fixture.
+- **Selection by index over a layer with no uniqueness guarantee** — `.loc[an_index]` returns extra
+  rows on a duplicated index, which reported `building_tag_coverage = 1.0` for an untagged unit. All
+  selection is positional now. Caught by the one test written to prove tagged and untagged are
+  distinguishable: the property the module exists for was the property that failed.
+
+**No sweep, so no rule fires and no accuracy claim is made.** For LCZ 7 the sweep needs a city where
+the class exists *and* is tagged, which the coverage table suggests may not exist — itself the
+finding, since the rule's value then lies in making that measurable rather than in firing.
+
+---
+
 ### STOP RULE — applies after Phase 13
 
 **No further diagnostic phases.** Thirteen phases in, the finding rate remains high but the returns
@@ -1248,8 +1459,16 @@ Remaining work, in order:
 3. ~~**Phase 15 — command line and UI.**~~ **Concluded**, both parts, on explicit request and
    outside the diagnostic sequence. It opened no scientific question; it found four engineering
    defects, two of them in seams no test spanned.
-4. **The paper.**
-5. **Cleanup** — docs, release.
+4. ~~**Phase 16 — WUDAPT as a reference.**~~ **Concluded**, on explicit request. An instrument
+   phase, not a lever phase — it changed no label. It produced a finding the paper needs: the
+   ground truth's own reproducibility, median 79.9% and as low as 26.3%.
+5. ~~**Phase 17 — organic patch units.**~~ **Concluded**, on explicit request. `PatchUnits` ships;
+   no accuracy claim is attached, because the A/B sweep is a sweep and was not run.
+6. ~~**Phase 18 — Overture semantic evidence.**~~ **Concluded**, on explicit request. The evidence
+   layer and its coverage columns ship; both functional rules ship **disabled** pending a threshold
+   sweep, per the standing calibrate-don't-pick ruling.
+7. **The paper.**
+8. **Cleanup** — docs, release.
 
 **`OA_w` was blocked and is now closed.** Bechtel, Demuzere & Stewart (2020) supplied both the
 class-similarity matrix and the definition; the matrix is transcribed in
@@ -1286,6 +1505,19 @@ directly comparable to published LCZ maps.
    saturate at a 100 m cell, and the saturation was an artefact of how that phase built the
    numerator rather than a property of the quantity. Two instances, not three. The retraction is
    worth as much as the claim: a scale finding and a numerator bug produce the same distribution.
+6. **The ground truth does not reproduce, and the gap is region-shaped** (Phase 16). Two independent
+   expert label sets over sixteen cities agree at a median 79.9%, ranging 26.3% (Cairo, *below* its
+   own 52.1% majority-class baseline) to 96.3% (Paris) — 89.1% mean across Europe and N. America
+   against 69.3% elsewhere. Every ceiling in this literature, this project's included, compares a
+   *model* to labels; nobody had measured whether the labels themselves agree.
+
+   This is the **second unquantified floor** under the 35.3%-against-75.2% gap and it is larger than
+   the patch-versus-cell one. It also bears directly on claim 1: the cities where the founding
+   premise bites hardest are the cities whose ground truth is least reproducible, and
+   `corr(label reproducibility, ceiling) = +0.69` says the two references and the global map are all
+   struggling with the same thing. The premise itself is unaffected — Phase 10 measured the height
+   correlation *within* cities with only the cascade changed — but a paper that reports Cairo at
+   3.4% without reporting that Cairo's two reference sets agree at 26.3% is reporting half of it.
 
 Plus, as an unexplained regularity worth reporting rather than resolving: **the compactness lift and
 the enclosure A/B advantage split along the same seven-against-nine regional line, twice measured,
@@ -1529,7 +1761,10 @@ reconcile silently.** That flagging behaviour is working; keep it.
 | P2: coarse products favour the grid over enclosures | **Refuted in the opposite direction.** B's built-class lead widens with heights filled (+1.7 → +4.1). Phase 9 handicapped enclosures by measuring them with `Hr` mostly null. | 10 |
 | Berlin baseline 40.9% / 53.2% ceiling | **Superseded.** Full-sample: 35.3% against 75.2% on 9 627 cells, independently reproduced. The gap is 40 points, not 12. | 6.7, 9, 10 |
 | Berlin as primary fixture | **Hong Kong is better** — 13 classes, the richest on disk, and the antidote to the two-mid-rise-class fixture that distorted Phase 6.7. Test strategy updated. | 10, 13 |
-| A vs B, three measurements | Not adopted, three times, same pre-registered rule (needs both overall and built). Phase 11's third pass: built +3.8 (12/15), overall −0.2 (8/15), **split regionally** — enclosures lead on both criteria outside Europe/N. America. Ruling: `unit_strategy` as config, default `grid`, **no auto-selection by region** — region is not the mechanism. | 9, 11 |
+| A vs B, three measurements | Not adopted, three times, same pre-registered rule (needs both overall and built). Phase 11's third pass: built +3.8 (12/15), overall −0.2 (8/15), **split regionally** — enclosures lead on both criteria outside Europe/N. America. Ruling: `unit_strategy` as config, default `grid`, **no auto-selection by region** — region is not the mechanism. **Ruled in Phase 11, applied in Phase 17** — for six phases `pipeline.run_pipeline` held a literal `GridUnits()` and never assembled barriers, so enclosures were unreachable from the chain at all. Fifth instance of "a ruling is not applied until the code says so", and found by needing the seam rather than by auditing for it. | 9, 11, 17 |
+| Enclosures as the organic-unit answer | **Measured and refused.** An enclosure is a block: median 0.04 ha on the Hong Kong fixture, against WUDAPT's 2.2–52 ha and a So2Sat patch's 10.24 ha. A thinner barrier set does not fix it either — four settings measured, all bimodal, median moving 0.04 → 0.11 ha at best, because a thinner network stops subdividing big faces rather than enlarging small ones. **`PatchUnits` sets the scale with a merge step**; the barrier filter alone would not have. | 6.5, 11, 17 |
+| Pedestrian ways as enclosure barriers | Dropped by default. `footway`/`steps`/`path`/`cycleway`/`bridleway` are **72.7% of Berlin's segments, 72.8% of Hong Kong's, 50.6% of Milan's** and 3.5–7.5% elsewhere, so leaving them in makes the partition largely a measure of footpath survey completeness rather than of the city. `pedestrian` is kept — Overture uses it for plazas, which are real breaks. | 17 |
+| Units defined using parameters the classifier then scores | **Accepted, documented, and bounded.** Standard for a regionalisation (SKATER, AZP), and still mild circularity: a patch is homogeneous in BSF partly because it was built to be. It cannot inflate agreement with an external reference, so validation is unaffected; it does weaken `bsf_by_reference_class` on patches. **Phase 13's conclusions stay on the grid.** | 13, 17 |
 | Cascade order as a blending knob | **Ill-posed.** Winner-takes-all per building; `full_reversed` is bit-identical to `coarse` in 6 of 8 cities. Order is a selection switch and no intermediate configuration is reachable by reordering. | 11 |
 | Open Buildings 2.5D | **Retired from the cascade.** Hurts first, claims 0.3–6.4% last. Code and tier interface kept, documented as measured-harmful. | 10, 11 |
 | Retention measured against summed raw footprint area | **Spec bug, corrected and implemented.** Sources self-overlap (Kowloon 7.52%, Berlin 0.61%), making ≥99%-of-sum and trim-not-merge jointly unsatisfiable. Measured against the **union**, one-sided; `FootprintCoverage` reports `raw_self_overlap_fraction` and a residual, since `union_retention` above 1.0 means the BSF numerator still double-counts. | 1, 11, 12 |
@@ -1574,6 +1809,18 @@ reconcile silently.** That flagging behaviour is working; keep it.
 | `Settings.load()` created `run_dir` as a side effect | Fine while every caller went on to run a pipeline; wrong as soon as a command exists whose purpose is *not* to act. `create_run_dir=True` by default, `False` for `--dry-run`. | 0, 15 |
 | `land_cover.gee_project` overwritten with `None` | `settings.land_cover.gee_project = os.environ.get("GEE_PROJECT_NAME")` ran unconditionally, so an absent variable discarded a configured value. A silent discard, not a precedence rule. Assigned only when the variable is present. Invisible until `--config` made it possible to configure the field. | 4, 15 |
 | `Settings.load` finds the repository `.env` from anywhere in a checkout | dotenv's upward search, not the working directory. `override=False` means an already-set `DATA_DIR` wins, so tests set the variable rather than writing a file — but a test of the *unset* branch must neutralise `load_dotenv` outright, since the repo's own `.env` would otherwise satisfy it. Pre-existing; recorded because it is invisible until something tests the failure path. | 0, 15 |
+| WUDAPT named the secondary reference in Phase 0, never built | **Sixteen phases unread.** `grep -rni wudapt` returned prose only — no loader, no config entry, no source-dir constant, zero `.py` hits — while the file sat on disk covering every city the package had been run on. Built in Phase 16, on explicit request. The same shape as the height cascade being specified in Phase 3 and built in Phase 10: a capability the spec assumes and the code does not have is invisible until something asks for it. | 0, 16 |
+| Do the ground-truth labels themselves reproduce? | **Never asked until Phase 16, and they do not.** Two independent expert label sets over the same ground: median 79.9%, range 26.3%–96.3%, Europe + N. America 89.1% mean against 69.3% elsewhere. Cairo sits *below* its own majority-class baseline. A floor under every residual this package reports, larger than the patch-versus-cell floor, and it must be stated beside any per-city figure. | 16 |
+| WUDAPT's QC flags and `oa` as a quality filter | **Rejected on measurement.** The QC gate costs half the polygons and moves agreement with So2Sat by +0.4 / +2.9 / **−1.9** points on Cairo / Mumbai / Jakarta; `oa ≥ 0.7` gives **−7.2** / −0.1 / −1.1. `oa` is a submission scored against *itself*, so it selects self-consistent contributors, not ones who agree with an independent expert — which is the whole job of a second reference. Defaults off, measurement in the config docstrings. | 16 |
+| `lcz_v3` vs WUDAPT as a second ceiling | **Not independent, and flagged as such in the record.** The LCZ Generator's training areas are that map's training data, so the figure compares a model against a subset of its own training set — Vancouver reads 86.8% against a real ceiling of 36.7%. Computed and reported with `independent: False` and a written reason, precisely so nobody recomputes it elsewhere and reads it as So2Sat's equivalent. | 6.7, 16 |
+| WUDAPT's stored `area` column | **Unusable: km² in Web Mercator**, inflated by 1/cos²(latitude) — median ratio to true area 1 004 995 against Mollweide's 744 899. Every filter and statistic recomputes from geometry; a test corrupts the column and asserts nothing moves. | 16 |
+| WUDAPT `class` runs to 19 | 633 polygons globally carry codes 18 and 19, outside the Demuzere coding. Dropped and counted, never folded into a neighbouring class — this package has no definition for them and inventing one would put a label into the reference no contributor drew. | 16 |
+| Overture's `subtype`/`class` unread for eighteen phases | One parameter of twenty read a semantic attribute. Built in Phase 18 on request: `sem_*` group fractions plus `building_tag_coverage` and `land_use_coverage`. **Tagged building area is 48.6% across Europe/N. America against 13.6% elsewhere** — the founding premise on a second attribute, and a fourth sighting of the seven-against-nine split. Mechanism measured, not inferred: wherever an ML source wins the footprints its tagged share is exactly 0.0%. | 1, 18 |
+| `osm-rasterizer` / OSM tags as the semantic source | **Declined, on reproducibility.** Neither it nor `osmnx` is installed or declared, and both need live Overpass — unpinned, unreproducible, and it would introduce a second footprint set that cannot be joined to `buildings_area`. The knowledge in `osm_lcz_tag_mapping.md` is ported into an Overture-native crosswalk instead. OSM's `industrial=*` heavy/light split remains unreachable and stays on the deferred list with the OSM `VectorSource`. | 5, 18 |
+| Semantic fractions without a coverage column | **Unreadable, and the reason the layer exists.** A `lightweight` fraction of 0.0 in Nairobi is 94.8% of building area carrying no tag, not an absence of informal settlement — the same distinction `height_tier_fractions` draws for the cascade. `building_tag_coverage` is **area**-weighted, not count: tagged buildings are systematically larger (Berlin 64.4% vs 46.6%) and area is the denominator every fraction divides by. | 3, 18 |
+| Whole-extent `union_all` over the land-use layer | **Caught before shipping, third instance of the anti-pattern** — and this one does not merely cost time: over real Overture land use it raises `GEOSException: side location conflict` **even after `make_valid`**, because per-feature validity does not make a collection unionable. `industrial.py` survives by unioning a few dozen parcels; the coverage column ran on Berlin's 70 509. Clip to units first, dissolve per unit: bounded, exact. Found by running the diagnostic over a real city rather than a fixture. | 12, 18 |
+| `.loc[an_index]` over a building layer | Returns extra rows on a duplicated index, reporting `building_tag_coverage = 1.0` for an untagged unit. The building layer carries no uniqueness guarantee; all selection is positional now. Found by the one test written to prove the module's central property. | 18 |
+| Uncalibrated functional rules for LCZ 7 and 8 | **Shipped disabled, and that is the ruling.** A threshold is swept against a reference and chosen at an operating point, never picked — the LCZ 10 sweep ran nineteen settings and Phase 14 found the threshold was not even the binding constraint there. Shipped values are placeholders. For LCZ 7 the sweep needs a city where the class exists *and* is tagged, which the coverage table suggests may not exist — itself the finding. | 6, 14, 18 |
 | Nothing asserted that a clipped raster covers its window | The silent variant was one line away and would not have raised: `clip_raster` windows with `from_bounds` and `read(window=…)`, which **returns a smaller array** rather than erroring, and `LocalRasterSource.fractions` turns uncovered units into **all-`NaN`** by design. Two correct behaviours composing into a quarter-missing map. `clip_worldcover` now reopens what it wrote and raises, naming the short side; `coverage_shortfall` ignores sub-pixel gaps because every real clip has one. The last `WORLDCOVER_URL` call sites were retired — Berlin-only, so no stored result moves. | 4, 7, 13 |
 | Pooling a partial sweep against a complete stored record | Reported the difference between two city lists as a pipeline deviation (6.6%). Stability comparisons now intersect the city sets; restricted, the deviation is 0.0%. | 13 |
 | Superseded text left in concluded phase blocks | Phase 8's block opened with a nine-minute runtime and later asserted the package could not process a city; Phase 3 still carried the corrected-away axis pairing; deferred still listed SVF first. **Concluded phases keep measurements and rulings and drop imperatives.** | 3, 6, 8, 13 |
@@ -1583,7 +1830,9 @@ reconcile silently.** That flagging behaviour is working; keep it.
 ## Deferred — do not build unless asked
 
 **Priority order within deferred: unit definition and footprint coverage first** (Phase 12:
-normalised compactness lift 1.16 against height 0.86, leading 11 of 16 at `coarse`). **SVF is not
+normalised compactness lift 1.16 against height 0.86, leading 11 of 16 at `coarse`). **`PatchUnits`
+exists as of Phase 17 and its sixteen-city A/B sweep is the outstanding measurement** — wired, not
+run, with the reading pre-registered in that block so it cannot be chosen afterwards. **SVF is not
 the next lever** — it is weight 4 added to a metric whose weight-6 `Hr` dimension the cascade only
 recently filled. Standing caution: "adopt enclosures" is *not* the unit-definition answer, since
 arm B raises the compactness lift rather than lowering it.
@@ -1602,7 +1851,11 @@ fuzzy or continuous LCZ output · W2W / WRF export · OSM as an alternative `Vec
 tessellation-based building-level units · dask-geopandas scaling · deck.gl overlay for
 buildings (only if MapLibre `fill-extrusion` proves insufficient) · run-comparison views in the
 site · OSM `industrial=*` subtags as supplementary heavy/light industry evidence (arrives with the
-deferred OSM source; the only realistic route to the distinction Overture discards)
+deferred OSM source; the only realistic route to the distinction Overture discards, and reaffirmed
+in Phase 18 — an Overture-native crosswalk cannot recover it, because the values are not in the
+normalised vocabulary at all) · **calibration sweeps for the Phase 18 LCZ 7 and LCZ 8 rules**, which
+ship disabled precisely because a threshold is swept and not picked; note the LCZ 7 sweep needs a
+city where the class exists *and* is tagged, and the coverage table suggests there may not be one
 
 *(**CLI removed from this list in Phase 15**, built on explicit request. `lczkit run` and
 `lczkit site build|serve`.)*
@@ -1669,7 +1922,18 @@ deferred OSM source; the only realistic route to the distinction Overture discar
   axis. Tag every stored diagnostic with the configuration it was measured under.
 - **Don't assume a geometric set operation is cheap because its result is a scalar.** `unary_union`
   over a city's footprints is superlinear — 711 s at 891 km² against a 9.8-minute whole run.
-  Component-wise union is sublinear and exact.
+  Component-wise union is sublinear and exact. **And it is not only a cost problem**: Phase 18 found
+  a global union over real Overture land use raises `GEOSException: side location conflict` *even
+  after `make_valid`*, because validity per feature does not make a collection unionable. Clip to
+  the units first and dissolve per unit — bounded, well-conditioned, and exactly equal.
+- **A helper that is safe on a subset is not thereby safe on the whole layer.**
+  `industrial._covered_fraction(dissolve=True)` has unioned globally since Phase 5 and is fine
+  there, because it runs on a few dozen industrial parcels. Reusing it for *all* land use put a
+  70 509-parcel union in the hot path. Check what a reused helper is about to be handed, not just
+  what it does.
+- **Don't select rows by index from a layer with no uniqueness guarantee.** `buildings.loc[idx]`
+  over a duplicated index silently returns extra rows — a wrong number, not an error. The building
+  layers carry no such guarantee; select positionally, or pass geometries rather than an index.
 - **Don't let "the reference" name a role instead of a file.** `lcz_v3` and the So2Sat labels can
   both fill it, they disagree by up to 18 points, and a table that does not record which one it
   used is indistinguishable from one that used the other. Both reference mix-ups this project

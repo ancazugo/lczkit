@@ -22,6 +22,7 @@ from lczkit.heights.tiers import build_cascade
 from lczkit.landcover.local import LocalRasterSource
 from lczkit.ucp import PARAMETER_COLUMNS, compute_parameters
 from lczkit.ucp.registry import spec
+from lczkit.ucp.semantics import group_columns
 from lczkit.units.enclosures import EnclosureUnits, assemble_barriers
 from lczkit.units.grid import GridUnits
 
@@ -100,10 +101,14 @@ def test_the_table_matches_the_registry_and_the_units_index(
 ) -> None:
     """CLAUDE.md's acceptance criterion: a parameter table keyed by `unit_id` with every field
     documented. The registry lookup is what makes "documented" checkable at runtime."""
-    assert tuple(grid_parameters.columns) == PARAMETER_COLUMNS
+    assert tuple(grid_parameters.columns) == (
+        *PARAMETER_COLUMNS,
+        *group_columns(UcpConfig().semantic_groups),
+    )
     assert grid_parameters.index.equals(grid_units.index)
     assert grid_parameters.index.name == "unit_id"
-    assert all(spec(column).unit for column in grid_parameters.columns)
+    groups = UcpConfig().semantic_groups
+    assert all(spec(column, groups).unit for column in grid_parameters.columns)
 
 
 def test_the_stewart_and_oke_fractions_partition_every_covered_unit(
@@ -181,7 +186,13 @@ def test_enclosure_units_produce_the_same_schema(
     the streets, so the street metrics rely on a segment reaching both units it separates."""
     result = parameters_for(enclosure_units, cleaned, buildings)
 
-    assert tuple(result.columns) == PARAMETER_COLUMNS
+    # `PARAMETER_COLUMNS` is the registry's static block; the Phase 18 semantic columns
+    # follow it and their names come from the configured groups, so the assertion is that
+    # the table *starts* with the registry in order and adds exactly the configured rest.
+    assert tuple(result.columns) == (
+        *PARAMETER_COLUMNS,
+        *group_columns(UcpConfig().semantic_groups),
+    )
     assert result.index.equals(enclosure_units.index)
     assert result["aspect_ratio"].notna().sum() > 0
     covered = result[PARTITION].dropna()

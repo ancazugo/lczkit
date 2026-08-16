@@ -78,7 +78,14 @@ from lczkit.ucp import compute_parameters
 from lczkit.units.aggregate import aggregate
 from lczkit.units.enclosures import EnclosureUnits, assemble_barriers
 from lczkit.units.grid import GridUnits
-from lczkit.validation import agreement, labelled_lcz, parameter_ranges, reference_lcz
+from lczkit.validation import (
+    agreement,
+    labelled_lcz,
+    parameter_ranges,
+    prepare_wudapt,
+    reference_lcz,
+    wudapt_lcz,
+)
 from lczkit.validation.ranges import weighted_quantile
 
 REPO = Path(__file__).resolve().parent.parent
@@ -142,6 +149,20 @@ class Fixture:
     the city is scored against `lcz_v3` alone, and the run says so rather than implying otherwise.
     """
 
+    wudapt: Path | None = None
+    """WUDAPT LCZ Generator training areas, added in Phase 16. Hand labels too, but irregular,
+    overlapping and spread over four decades — see `lczkit.validation.wudapt`.
+
+    A *third* reference rather than a replacement for either. So2Sat stays primary where it exists:
+    it is a designed sample with uniform support, and WUDAPT is contributor-drawn exemplars. What
+    WUDAPT adds is reach — it covers every city this package has been run on, where So2Sat covers
+    fifty-one — and support, at 63-996 km² per study window against So2Sat's 7.1 km² union on
+    Berlin.
+
+    It is **not** a second ceiling. The LCZ Generator's training areas are the training data behind
+    `lcz_v3`, so the two are not independent and their agreement is inflated by construction.
+    """
+
 
 class FixtureVectors:
     """A `VectorSource` over the committed fixture parquet, bbox-filtered.
@@ -197,6 +218,7 @@ FIXTURE_CITIES = (
         worldcover=FIXTURES / "landcover" / "worldcover_hongkong.tif",
         reference=FIXTURES / "lcz" / "lcz_reference_hongkong.tif",
         ground_truth=FIXTURES / "lcz" / "so2sat_hongkong.parquet",
+        wudapt=FIXTURES / "lcz" / "wudapt_hongkong.parquet",
     ),
     Fixture(
         name="berlin",
@@ -205,6 +227,7 @@ FIXTURE_CITIES = (
         worldcover=FIXTURES / "landcover" / "worldcover_berlin.tif",
         reference=FIXTURES / "lcz" / "lcz_reference_berlin.tif",
         ground_truth=FIXTURES / "lcz" / "so2sat_berlin.parquet",
+        wudapt=FIXTURES / "lcz" / "wudapt_berlin.parquet",
     ),
     Fixture(
         name="rotterdam",
@@ -439,6 +462,52 @@ def ground_truth_labels(
     return labels, {"file": fixture.ground_truth.name, **vars(match)}
 
 
+def _wudapt_agreement(
+    fixture: Fixture, arm: Arm, height_completeness: pd.Series | None
+) -> dict[str, Any] | None:
+    """One arm scored against WUDAPT on its own units.
+
+    `height_completeness` is only passed when it is indexed like the arm — it is computed on the
+    grid, so an arm in another unit system gets the strata omitted rather than misaligned. Silently
+    reindexing it would fill every stratum with NaN and report the breakdown as empty rather than
+    as absent.
+    """
+    labelled = wudapt_labels(fixture, arm.units)
+    if labelled is None:
+        return None
+    strata = (
+        height_completeness
+        if height_completeness is not None and height_completeness.index.equals(arm.units.index)
+        else None
+    )
+    return agreement(
+        arm.labels,
+        labelled[0]["reference_lcz"],
+        arm.area,
+        coverage=labelled[0]["reference_coverage"],
+        height_completeness=strata,
+        config=VALIDATION,
+        reference_file=str(fixture.wudapt and fixture.wudapt.name),
+    ).model_dump()
+
+
+def wudapt_labels(
+    fixture: Fixture, units: gpd.GeoDataFrame
+) -> tuple[pd.DataFrame, dict[str, Any]] | None:
+    """WUDAPT on `units`, with what the cleaning cost and what the contributors disagreed about.
+
+    Takes `units` rather than the grid because — unlike `labelled_lcz`, whose centroid rule is
+    tuned to a 100 m cell — the areal reduction is unit-shape agnostic, so an arm computing in
+    enclosures or patches is matched natively instead of through a projection.
+    """
+    if fixture.wudapt is None:
+        return None
+    polygons = gpd.read_parquet(fixture.wudapt)
+    resolved, selection = prepare_wudapt(polygons, crs=units.crs, config=VALIDATION.wudapt)
+    labels, match = wudapt_lcz(units, resolved)
+    return labels, {"file": fixture.wudapt.name, **vars(selection), **vars(match)}
+
+
 def lcz8_diagnostic(
     fixture: Fixture,
     arms: list[Arm],
@@ -561,6 +630,7 @@ def evaluate(
     grid_reference = reference_lcz(grid, fixture.reference, VALIDATION.reference)
     grid_area = grid.geometry.area
     truth = ground_truth_labels(fixture, grid)
+    wudapt = wudapt_labels(fixture, grid)
 
     results: dict[str, Any] = {
         "fixture": fixture.name,
@@ -570,9 +640,50 @@ def evaluate(
         "n_grid_cells": int(len(grid)),
         "cleaning": provenance,
         "ground_truth": None,
+        "wudapt": None,
         "reference_ceiling": None,
+        "wudapt_vs_ground_truth": None,
+        "wudapt_vs_reference": None,
         "arms": {},
     }
+    if wudapt is not None:
+        results["wudapt"] = {**wudapt[1], "citation": VALIDATION.wudapt.citation}
+    if wudapt is not None and truth is not None:
+        # **The number Phase 16 exists to produce.** Two independent sets of human labels over the
+        # same ground, one designed and one contributed, scored against each other. It bounds what
+        # either can be used for, and nobody had it: every ceiling this project has quoted compares
+        # a *model* to labels, so the labels' own reproducibility was never measured.
+        results["wudapt_vs_ground_truth"] = agreement(
+            wudapt[0]["reference_lcz"],
+            truth[0]["reference_lcz"],
+            grid_area,
+            coverage=truth[0]["reference_coverage"].where(
+                wudapt[0]["reference_coverage"] >= VALIDATION.min_reference_coverage, 0.0
+            ),
+            config=VALIDATION,
+            reference_file=str(fixture.ground_truth and fixture.ground_truth.name),
+        ).model_dump()
+    if wudapt is not None:
+        # Reported, and reported as *not* a ceiling. The LCZ Generator's training areas are the
+        # training data behind `lcz_v3`, so this compares a model to a subset of its own training
+        # set. It is here because leaving it out would invite someone to compute it and read it as
+        # the So2Sat ceiling's equivalent, which is the mistake Phase 6.7 was opened for.
+        results["wudapt_vs_reference"] = {
+            "independent": False,
+            "why_not": (
+                "WUDAPT LCZ Generator training areas are the training data behind lcz_v3, so this "
+                "figure is inflated by construction and is not a ceiling in the sense the So2Sat "
+                "comparison gives one."
+            ),
+            **agreement(
+                grid_reference["reference_lcz"],
+                wudapt[0]["reference_lcz"],
+                grid_area,
+                coverage=wudapt[0]["reference_coverage"],
+                config=VALIDATION,
+                reference_file=str(fixture.wudapt and fixture.wudapt.name),
+            ).model_dump(),
+        }
     if truth is not None:
         labels, match = truth
         results["ground_truth"] = {**match, "citation": VALIDATION.ground_truth_citation}
@@ -639,6 +750,15 @@ def evaluate(
                 ).model_dump()
                 if truth is not None
                 else None
+            ),
+            # Measured on the arm's **own** units, not the grid projection. The areal reduction
+            # does not need a 100 m cell, so an arm computing in enclosures or patches is scored
+            # against WUDAPT where it actually computed — which is the whole reason this reference
+            # was built before the units work rather than after it.
+            "agreement_wudapt": (
+                None
+                if fixture.wudapt is None
+                else _wudapt_agreement(fixture, arm, height_completeness)
             ),
             "bsf_by_reference_class": parameter_ranges(
                 arm.parameters[TESTED_PARAMETER],
@@ -714,18 +834,61 @@ def show(results: dict[str, Any]) -> None:
             f"{ceiling['natural_share']:.1%}). No run can beat this against that file."
         )
 
+    wudapt = results.get("wudapt")
+    if wudapt is not None:
+        # Printed with the disagreement rate, because a reference that contradicts itself over some
+        # of its own ground is a different instrument from one that does not, and the number is
+        # free — the resolution has to arbitrate that ground anyway.
+        contested = wudapt["conflict_area_m2"]
+        drawn = wudapt["labelled_area_m2"] + wudapt["duplicate_area_m2"] + contested
+        print(
+            f"\n  wudapt: {wudapt['file']}, {wudapt['n_kept']} of {wudapt['n_read']} "
+            f"polygons kept, {wudapt['n_units_labelled']} of {results['n_grid_cells']} labelled "
+            f"(mean coverage {wudapt['mean_coverage']:.2f}, "
+            f"{wudapt['n_units_multi_label']} split)"
+        )
+        print(
+            f"    dates {wudapt['date_min']}..{wudapt['date_max']}; QC pass "
+            f"{wudapt['qc_pass_fraction']:.1%}; contributors contest "
+            f"{contested / drawn:.2%} of drawn ground "
+            f"({wudapt['n_conflicting_pairs']} of {wudapt['n_overlapping_pairs']} "
+            f"overlapping pairs)"
+        )
+        both = results.get("wudapt_vs_ground_truth")
+        if both is not None:
+            # The two label sets against each other. Not a ceiling on lczkit — it is a floor under
+            # how much of the residual gap is the references disagreeing rather than lczkit erring.
+            print(
+                f"    WUDAPT against So2Sat labels: {both['overall_agreement']:.1%} over "
+                f"{both['n_compared']} cells (built {both['built_agreement']:.1%}). Two sets of "
+                "human labels, neither a model — this is the labels' own reproducibility."
+            )
+        against_map = results.get("wudapt_vs_reference")
+        if against_map is not None:
+            print(
+                f"    WUDAPT against {results['reference_file']}: "
+                f"{against_map['overall_agreement']:.1%} — NOT a ceiling, and not independent: "
+                "these polygons are that map's training data."
+            )
+
     print(
-        f"\n  {'arm':<4} {'units':>7} {'vs truth':>9} {'built':>7} "
+        f"\n  {'arm':<4} {'units':>7} {'vs truth':>9} {'built':>7} {'vs wudapt':>10} {'built':>7} "
         f"{'vs lcz_v3':>10} {'built':>7} {'nat share':>10}   description"
     )
     for name, arm in results["arms"].items():
         report = arm["agreement"]
         gt = arm["agreement_ground_truth"]
+        wu = arm.get("agreement_wudapt")
         truth_cells = (
             f"{gt['overall_agreement']:>8.1%} {gt['built_agreement']:>7.1%}" if gt else f"{'—':>16}"
         )
+        wudapt_cells = (
+            f"{wu['overall_agreement']:>10.1%} {wu['built_agreement']:>7.1%}"
+            if wu
+            else f"{'—':>18}"
+        )
         print(
-            f"  {name:<4} {arm['n_units']:>7} {truth_cells} "
+            f"  {name:<4} {arm['n_units']:>7} {truth_cells} {wudapt_cells} "
             f"{report['overall_agreement']:>10.1%} {report['built_agreement']:>7.1%} "
             f"{report['natural_share']:>10.1%}   {arm['description']}"
         )
@@ -744,6 +907,7 @@ def show(results: dict[str, Any]) -> None:
     for name, arm in results["arms"].items():
         for source, report in (
             ("vs truth", arm.get("agreement_ground_truth")),
+            ("vs wudapt", arm.get("agreement_wudapt")),
             ("vs lcz_v3", arm["agreement"]),
         ):
             if not report:

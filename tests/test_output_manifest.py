@@ -20,7 +20,7 @@ from lczkit.classify import PrototypeClassifier
 from lczkit.cleaning.report import CleaningReport, CleaningStep
 from lczkit.config import ClassificationConfig, Settings
 from lczkit.output.manifest import TRACKED_PACKAGES, build_manifest, package_versions
-from lczkit.ucp.registry import LIMITATIONS, NOT_COMPUTED, PARAMETER_COLUMNS
+from lczkit.ucp.registry import LIMITATIONS, NOT_COMPUTED, PARAMETER_COLUMNS, semantic_specs
 from lczkit.validation import agreement
 
 
@@ -77,7 +77,12 @@ def test_the_parameter_registry_reaches_the_manifest_with_units_and_sources(
     manifest = build_manifest(settings, PrototypeClassifier())
 
     named = {entry["name"]: entry for entry in manifest.parameters}
-    assert set(named) == set(PARAMETER_COLUMNS)
+    # The registry's static block plus the Phase 18 semantic columns, whose names come from
+    # the configured groups. Every one still has to arrive with a unit and a reference —
+    # that is what this test is for, and it is why `semantic_specs` exists rather than a
+    # static list the groups could outgrow.
+    expected = {spec.name for spec in semantic_specs(settings.ucp.semantic_groups)}
+    assert set(named) == set(PARAMETER_COLUMNS) | expected
     assert named["height_of_roughness_elements_m"]["unit"] == "m"
     assert all(entry["reference"] for entry in manifest.parameters)
 
