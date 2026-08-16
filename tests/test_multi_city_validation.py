@@ -350,22 +350,61 @@ def test_the_sweep_and_the_package_share_one_city_registry() -> None:
     assert sweep.WINDOW_KM == package.WINDOW_KM
 
 
-def test_the_four_cities_added_after_the_recorded_sweeps_are_marked_as_such() -> None:
-    """Every stored figure in `docs/experiments/` is over the original sixteen. Los Angeles, New
-    York, Washington D.C. and Santiago came later, so any comparison against a stored record has to
-    intersect the city sets first — CLAUDE.md records pooling two populations as a mistake this
-    project has already made, and reported 6.6% of deviation that was 0.0% once restricted.
+def test_the_cities_added_after_the_recorded_sweeps_are_marked_as_such() -> None:
+    """Every stored figure in `docs/experiments/` is over the original sixteen. Twelve cities came
+    later, so any comparison against a stored record has to intersect the city sets first —
+    CLAUDE.md records pooling two populations as a mistake this project has already made, and
+    reported 6.6% of deviation that was 0.0% once restricted.
 
-    Pinned as a list rather than asserted by count, so that adding a seventeenth city is a
-    deliberate edit here rather than a silently passing test.
+    Pinned as a list rather than asserted by count, so that a twenty-ninth city is a deliberate edit
+    here rather than a silently passing test.
     """
     from lczkit.cities import BY_KEY, CITIES
 
-    added_after_the_recorded_sweeps = {"los_angeles", "new_york", "washington_dc", "santiago"}
+    added_after_the_recorded_sweeps = {
+        # North America was n=1 (Vancouver); adding these reorganised the regional grouping.
+        "los_angeles",
+        "new_york",
+        "washington_dc",
+        "santiago",
+        # East Asia was n=1 (Hong Kong); Oceania and West Asia were empty.
+        "beijing",
+        "guangzhou",
+        "nanjing",
+        "tokyo",
+        "wuhan",
+        "istanbul",
+        "tehran",
+        "sydney",
+    }
     original_sixteen = {city.key for city in CITIES} - added_after_the_recorded_sweeps
 
     assert len(original_sixteen) == 16
     assert added_after_the_recorded_sweeps <= set(BY_KEY)
-    # North America was n=1 before, which cannot separate a regional effect from one city.
-    north_america = {city.key for city in CITIES if city.region == "North America"}
-    assert len(north_america) == 4
+
+
+def test_the_regions_still_represented_by_one_city_are_the_ones_with_no_alternative() -> None:
+    """A region of one cannot separate a regional effect from that city, and this project read a
+    regional regularity off "Europe + N. America" for three phases while North America *was*
+    Vancouver. When it grew to four the grouping reorganised, so n=1 is not a theoretical weakness
+    here — it has already produced a wrong reading once.
+
+    Two regions remain at one city and **cannot be fixed from the data on disk**, which is why they
+    are pinned by name rather than merely tolerated:
+
+    - **Southeast Asia** is Jakarta. The only other So2Sat city in the region is Quezon City /
+      Manila, which carries 246 patches of a single class and fails the screen.
+    - **Oceania** is Sydney. Melbourne passes So2Sat comfortably — 5 506 patches, 7 classes — but
+      WUDAPT holds exactly *one* polygon there, so it has no second reference.
+
+    Any figure grouped by either region is a figure about one city, and should say so. A new
+    singleton appearing fails here; so does one of these two becoming fixable and not being fixed.
+    """
+    from collections import Counter
+
+    from lczkit.cities import CITIES
+
+    counts = Counter(city.region for city in CITIES)
+    singletons = {region for region, n in counts.items() if n < 2}
+
+    assert singletons == {"Southeast Asia", "Oceania"}

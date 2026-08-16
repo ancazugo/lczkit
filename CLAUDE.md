@@ -1303,31 +1303,70 @@ Other measurements worth keeping:
 - **`lcz_v3` vs WUDAPT is not a ceiling and carries `independent: False` in the record.** These
   polygons are that map's training data. Vancouver reads 86.8% against a real ceiling of 36.7%.
 
-**Re-measured over twenty cities, and the regional grouping does not survive.** Los Angeles, New
-York, Washington D.C. and Santiago were added afterwards (see the Phase 18 registry note), because
-North America was **n = 1** — Vancouver alone — in a grouping this file leans on three times. On the
-enlarged set the headline figures do not move (median 79.9%, range 26.3%–96.3%) and the grouping
-does:
+**Re-measured twice on an enlarged registry — and the grouping reorganised once, then held.** The
+registry grew 16 → 20 → 28, each time to fix a region of **n = 1**, which cannot separate a regional
+effect from one city. The headline is remarkably stable across all three: median **79.9% / 79.9% /
+79.7%**, range 26.3%–97.7%.
+
+**First enlargement (North America, Vancouver alone → four).** The grouping this file leans on three
+times did not survive it:
 
 | | n | mean | median | above baseline |
 |---|---:|---:|---:|---:|
 | Europe | 6 | **91.0%** | 92.5% | 0.87 |
 | South America | 3 | 85.6% | 85.3% | 0.77 |
 | North America | 4 | **70.8%** | 74.9% | 0.55 |
-| "Europe + N. America" as claimed | 10 | 82.9% | 86.2% | 0.74 |
-| "everywhere else" as claimed | 10 | 70.9% | 78.4% | 0.52 |
 
-**North America (70.8%) is indistinguishable from "everywhere else" (70.9%), and South America
-(85.6%) sits nearer Europe than North America does.** So on this quantity the line is **Europe
-against everywhere else**, not Global North against Global South, and Vancouver was carrying a
-continent: it is now the *second best* of four, behind Washington D.C., with New York at 50.8%.
+North America is indistinguishable from "everywhere else" (70.9%), and South America sits nearer
+Europe than North America does. Vancouver was carrying a continent — it is now second of four,
+behind Washington D.C., with New York at 50.8%.
+
+**Second enlargement (East Asia, Hong Kong alone → six; Oceania and West Asia opened).** The
+corrected line *held*, over twenty-eight cities:
+
+| region | n | mean | median | mean ceiling |
+|---|---:|---:|---:|---:|
+| **Europe** | 6 | **91.0%** | 92.5% | 72.2% |
+| Oceania | 1 | 87.5% | 87.5% | 59.7% |
+| South America | 3 | 85.6% | 85.3% | 73.5% |
+| East Asia | 6 | 72.3% | 74.1% | 52.1% |
+| North America | 4 | 70.8% | 74.9% | 51.4% |
+| Southeast Asia | 1 | 70.7% | 70.7% | 59.0% |
+| West Asia | 2 | 69.2% | 69.2% | 51.8% |
+| Africa | 3 | 61.8% | 79.1% | 48.6% |
+| South Asia | 2 | 59.5% | 59.5% | 34.0% |
+
+**Europe 91.0% against everything else 71.6%** — a 19.4-point gap, against 11.2 for the old
+"Europe + N. America" cut. East Asia at 72.3% lands with the elsewhere bloc, exactly as North
+America did. **The line is Europe against everywhere else**, and it has now been tested by
+quadrupling one of the groups that was supposed to be inside it and sextupling one that was not.
+
+Two further readings moved with the sample and are recorded because they contradict figures
+committed at n = 16:
+
+- **`corr(contested share, agreement)` runs −0.14 (16 cities) → −0.13 (20) → −0.36 (28).** The flat
+  refutation recorded below softens rather than reverses: Tehran contests 25.31% and reaches 40.6%,
+  Beijing 16.15% and 64.2%. Weak negative, not a proxy, and no longer "no relationship at all".
+- **`corr(label reproducibility, ceiling)` runs +0.69 → +0.58.** Same sign, weaker.
+
+**Caveats that travel with the regional table.** Southeast Asia and Oceania are **n = 1 and cannot
+be fixed from the data on disk** — Manila carries 246 patches of one class, and Melbourne passes
+So2Sat comfortably but WUDAPT holds *one* polygon there. West Asia is n = 2 with a **57-point
+internal spread** (Istanbul 97.7%, Tehran 40.6%), which is two cities rather than a region. Any
+figure grouped by those three should say so.
+
+**Six European cities also qualify and were deliberately left out** — Madrid 97.5%, Amsterdam 83.5%,
+Zurich 88.1%, Lisbon 76.8%, Munich 76.6%, Moscow 99.6%. Europe is already over-represented at six,
+and adding six more would weaken the very comparison the enlargement exists to test. Moscow is
+additionally excluded on its own merits: 99.6% on an overlap of **225 cells**, because its two
+references drew different parts of the city, and a near-perfect figure on a thin non-random
+intersection is the kind that gets quoted and then retracted.
 
 **This re-measures one of the four sightings, not all four.** Phase 11's A/B advantage, Phase 12's
 compactness lift and Phase 18's tag coverage were all measured over the original sixteen with North
-America still n = 1, and none is re-measured here — the Overture extracts for the four new cities are
-not on disk. Until they are, "the seven-against-nine split" is a claim about sixteen cities, and the
-one quantity extended past it reorganised. Treat the other three as untested at n = 4 rather than as
-confirmed.
+America at n = 1 and East Asia at n = 1, and none is re-measured — the Overture extracts for the
+twelve added cities are not on disk, so that is a fetch and a sweep rather than a re-analysis. Treat
+the other three as measured over sixteen, not as confirmed.
 
 **Rulings:**
 
@@ -1469,8 +1508,16 @@ that rule's cited firing count does not change meaning.
 the class exists *and* is tagged, which the coverage table suggests may not exist — itself the
 finding, since the rule's value then lies in making that measurable rather than in firing.
 
-**The city registry went from sixteen to twenty**, on request, after the reference comparison showed
-North America was **n = 1** in a grouping this file leans on three times. Added: Los Angeles, New
+**The city registry went from sixteen to twenty to twenty-eight**, on request, after the reference
+comparison showed North America was **n = 1** in a grouping this file leans on three times — and
+then that East Asia was n = 1 too, with Oceania and West Asia empty. The second batch is Beijing,
+Guangzhou, Nanjing, Tokyo and Wuhan (East Asia, 1 → 6), Istanbul and Tehran (West Asia, 0 → 2) and
+Sydney (Oceania, 0 → 1); all eight pass the same screen and carry both references, and they are
+spread across the reproducibility range — Nanjing 83.2% down to Guangzhou 58.7%, Tehran at 40.6% —
+rather than picked from its top. Two good So2Sat cities have **zero** WUDAPT and stay out for that
+reason alone: Osaka/Kyoto (5 134 patches, 13 classes) and Dongying (1 936, 10).
+
+The first batch, and the reasoning that also governs the second: Added: Los Angeles, New
 York, Washington D.C. (North America) and Santiago (South America) — every So2Sat city in the
 Americas that passes the 500-patch / 4-class screen and carries both references. **New York was added
 *because* it reproduces badly** (50.8%): keeping the North American city that agrees and dropping the
@@ -1825,7 +1872,9 @@ reconcile silently.** That flagging behaviour is working; keep it.
 | `unit_scale_experiment.show()` printed `lcz_v3` axes under an unlabelled heading | Fixed. It sat four lines below a table whose columns *are* labelled. Did not contaminate published figures, but the two references disagree by more than the quantity measured — Cairo 7.2% vs 24.7% compactness. | 12 |
 | `tiles.subset()` discarded the canonical row order | `sindex.query` is documented as unordered, and its result went straight to `neatnet` and to the pooled threshold that keys the tile cache. Sorted. **On the fixture the order-sensitivity that `test_simplification_depends_on_input_row_order` attributed to `neatnet` was `subset`'s own** — untiled, that network simplifies identically under a shuffle. | 8, 9, 12 |
 | Pooled-threshold thread environment asymmetric | The serial branch ran unpinned while the parallel branch ran pinned, and `n_workers` follows `os.sched_getaffinity` — so the same extent on a differently-sized node could land on a different cache key. Both branches now pinned. | 8, 12 |
-| "Europe + N. America" as a grouping | **Does not survive n > 1 in its North American half.** It carried three phases on Vancouver alone. Extended to four North American cities, label reproducibility gives Europe 91.0%, South America 85.6%, **North America 70.8% against "everywhere else" 70.9%** — the line is Europe against everywhere else, not Global North against Global South, and Vancouver is now second of four. **Re-measured for one of the four sightings only**; Phase 11's A/B, Phase 12's compactness lift and Phase 18's tag coverage were all measured at n = 1 and are untested at n = 4. Ruling: check the smallest cell before a grouping carries an argument. | 11, 12, 16, 18 |
+| "Europe + N. America" as a grouping | **Does not survive n > 1 in its North American half, and the corrected line then held.** It carried three phases on Vancouver alone. At twenty cities: Europe 91.0%, South America 85.6%, **North America 70.8% against "everywhere else" 70.9%**. At twenty-eight, with East Asia taken from Hong Kong alone to six: **Europe 91.0% against everything else 71.6%**, East Asia landing at 72.3% with the elsewhere bloc. The line is Europe against everywhere else, not Global North against Global South. **Re-measured for one of the four sightings only** — Phase 11's A/B, Phase 12's compactness lift and Phase 18's tag coverage were all measured at n = 1 in both regions and are untested. Ruling: check the smallest cell before a grouping carries an argument. | 11, 12, 16, 18 |
+| A region represented by one city | **Not a region, and it has already produced a wrong reading.** North America was Vancouver for three phases; when it grew to four the grouping reorganised. East Asia was Hong Kong. Southeast Asia (Jakarta) and Oceania (Sydney) remain n = 1 and **cannot be fixed from the data on disk** — Manila carries 246 patches of one class, Melbourne has exactly one WUDAPT polygon — so they are pinned by name in a test rather than tolerated silently. West Asia is n = 2 with a 57-point internal spread, which is two cities. | 16, 18 |
+| `corr(contested share, label agreement)` = −0.14 | **Measured at n = 16 and softened by the sample.** −0.14 (16) → −0.13 (20) → **−0.36 (28)**: Tehran contests 25.31% and reaches 40.6%, Beijing 16.15% and 64.2%. The flat refutation no longer holds cleanly; it is a weak negative relationship, still not a proxy for anything. Recorded because the original figure is committed below. | 16 |
 | Two city registries, one in the package and one in the sweep | Phase 15 lifted `City`/`CITIES`/`BY_KEY`/`WINDOW_KM`/`densest_window` into `lczkit.cities` for the CLI and left the originals in `scripts/multi_city_validation.py`. They agreed until someone edited one — and the one that produces every published figure is the *script*, so adding four cities to the package would have left the sweep running sixteen. Same failure as `CLEANING`. The script imports them now and a test asserts **identity**, since equality passes right up until the moment it matters. | 15, 18 |
 | Regional split, second independent sighting | Compactness lift 2.37 Europe/N. America vs 1.15 elsewhere; same seven-against-nine split as Phase 11's A/B. Finding in its own right; **mechanism still unknown, and the proposed street-area mechanism is refuted** (Phase 13). Report as an unexplained regularity. | 11, 12, 13 |
 | Row-order fix vs tile cache | Threshold bit-identical, but the cache would have served pre-fix tiles silently. `TILE_RESULT_VERSION` bumped. | 8, 12 |

@@ -47,19 +47,37 @@ class City:
 #: because that is where So2Sat's dense coverage is, and the per-region breakdown in the report says
 #: so rather than averaging it away.
 #:
-#: **Sixteen until Phase 18, twenty after it, and every recorded figure predates the last four.**
-#: Los Angeles, New York, Washington D.C. and Santiago were added because North America was n=1 —
-#: Vancouver alone — in a "Europe + N. America" grouping the argument leans on three separate times,
-#: and a group of one cannot distinguish a regional effect from that city. Anything comparing a new
-#: sweep against a stored one must **intersect the city sets first**: pooling twenty against sixteen
-#: reports the difference between two populations as a deviation, which CLAUDE.md records as a
-#: mistake this project has already made once.
+#: **Sixteen until Phase 18, then twenty, then twenty-eight — and every recorded figure predates
+#: the last twelve.** Anything comparing a new sweep against a stored one must **intersect the city
+#: sets first**: pooling twenty-eight against sixteen reports the difference between two populations
+#: as a deviation, which CLAUDE.md records as a mistake this project has already made once.
 #:
-#: All four pass the same screen and carry both references. Their label reproducibility — WUDAPT
-#: against So2Sat, measured before they were added — is Santiago 85.3%, Washington D.C. 82.6%,
-#: Los Angeles 72.5%, New York 50.8%, against the original sixteen's 79.9% median. **New York was
-#: added *because* it reproduces badly**: keeping the North American city that agrees well and
-#: dropping the ones that do not is how the regional split would be manufactured rather than tested.
+#: Both enlargements fixed the same defect — a regional group of **n = 1**, which cannot separate a
+#: regional effect from one city — and the first of them showed the defect was real rather than
+#: theoretical:
+#:
+#: - **North America was Vancouver alone**, in a "Europe + N. America" grouping the argument leans
+#:   on three separate times. Los Angeles, New York, Washington D.C. and Santiago were added, and
+#:   the grouping **reorganised**: North America landed with "everywhere else" and the line became
+#:   Europe against everything. See the Phase 16 addendum.
+#: - **East Asia was Hong Kong alone**, Oceania and West Asia were empty. Beijing, Guangzhou,
+#:   Nanjing, Tokyo and Wuhan take East Asia to six; Istanbul and Tehran open West Asia; Sydney
+#:   opens Oceania.
+#:
+#: Every one passes the same 500-patch / 4-class screen and carries both references. They are spread
+#: deliberately across the label-reproducibility range rather than picked from its top — Nanjing
+#: 83.2% down to Guangzhou 58.7%, with Tehran at 40.6%, New York at 50.8% — because keeping the
+#: cities of a region that agree and dropping the ones that do not is how a regional split gets
+#: manufactured instead of tested.
+#:
+#: Moscow, Madrid, Amsterdam, Munich, Zurich and Lisbon also qualify and are deliberately **not**
+#: here: Europe is already over-represented at six, and adding six more would weaken the very
+#: comparison the enlargement exists to test. Moscow additionally scores 99.6% on an overlap of only
+#: 225 cells — its two references drew different parts of the city — and a near-perfect figure on a
+#: thin, non-random intersection is the kind that gets quoted and then retracted.
+#:
+#: Istanbul and Tehran are labelled `West Asia` rather than folded into Europe. Istanbul genuinely
+#: straddles, and putting it in Europe would inflate the group whose distinctiveness is under test.
 CITIES = (
     City("berlin", "Berlin", "Europe"),
     City("london", "London", "Europe"),
@@ -77,6 +95,14 @@ CITIES = (
     City("mumbai", "Mumbai", "South Asia"),
     City("jakarta", "Jakarta", "Southeast Asia"),
     City("hong_kong", "Hong_Kong", "East Asia"),
+    City("beijing", "Beijing", "East Asia"),
+    City("guangzhou", "Guangzhou", "East Asia"),
+    City("nanjing", "Nanjing", "East Asia"),
+    City("tokyo", "Tokyo", "East Asia"),
+    City("wuhan", "Wuhan", "East Asia"),
+    City("istanbul", "Istanbul", "West Asia"),
+    City("tehran", "Tehran", "West Asia"),
+    City("sydney", "Sydney", "Oceania"),
     City("vancouver", "Vancouver", "North America"),
     City("los_angeles", "Los_Angeles", "North America"),
     City("new_york", "New_York", "North America"),

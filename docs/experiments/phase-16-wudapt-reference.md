@@ -119,9 +119,10 @@ Berlin, by contrast, is near-diagonal: 2→2 1 019/1 019, 4→4 417/418, 6→6 2
 ## 3. The seven-against-nine split, a third time — and this time it is in the reference
 
 > **Superseded in part by the addendum at the end of this file.** North America here is Vancouver
-> alone. Extended to four North American cities the grouping reorganises: North America lands with
-> "everywhere else", and the line becomes Europe against everything. The measurement below stands
-> over the sixteen cities it was taken on; the *grouping* it is read through does not generalise.
+> alone and East Asia is Hong Kong alone. Enlarged to four and six respectively, the grouping
+> reorganises: both land with "everywhere else", and the line becomes Europe against everything.
+> The measurement below stands over the sixteen cities it was taken on; the *grouping* it is read
+> through does not generalise.
 
 | | label reproducibility (mean) | (median) |
 |---|---:|---:|
@@ -319,3 +320,85 @@ agree about, not which cities the package maps well.
 
 **Ruling: a regional grouping measured at n = 1 in one of its halves is not a finding.** Check the
 smallest cell before a grouping carries an argument.
+
+
+---
+
+## Second addendum — twenty-eight cities, and the corrected line holds
+
+The first addendum fixed North America at n = 1 and the grouping reorganised. The same defect was
+then found twice more: **East Asia was Hong Kong alone**, and Oceania and West Asia were empty. All
+51 So2Sat cities were screened against both references; eighteen more qualify, and eight were added:
+**Beijing, Guangzhou, Nanjing, Tokyo, Wuhan** (East Asia, 1 → 6), **Istanbul, Tehran** (West Asia,
+0 → 2) and **Sydney** (Oceania, 0 → 1).
+
+They are spread across the reproducibility range deliberately — Nanjing 83.2% down to Guangzhou
+58.7%, with Tehran at 40.6% — for the reason New York went in: taking a region's agreeable cities
+and leaving its disagreeable ones manufactures the split rather than testing it.
+
+### The headline is stable; the corrected grouping holds
+
+| registry | n | median | range |
+|---|---:|---:|---|
+| original | 16 | 79.9% | 26.3%–96.3% |
+| + Americas | 20 | 79.9% | 26.3%–96.3% |
+| + East Asia, W. Asia, Oceania | 28 | **79.7%** | 26.3%–**97.7%** |
+
+| region | n | mean | median | above baseline | mean ceiling |
+|---|---:|---:|---:|---:|---:|
+| **Europe** | 6 | **91.0%** | 92.5% | 0.87 | 72.2% |
+| Oceania | 1 | 87.5% | 87.5% | 0.75 | 59.7% |
+| South America | 3 | 85.6% | 85.3% | 0.77 | 73.5% |
+| East Asia | 6 | 72.3% | 74.1% | 0.60 | 52.1% |
+| North America | 4 | 70.8% | 74.9% | 0.55 | 51.4% |
+| Southeast Asia | 1 | 70.7% | 70.7% | 0.47 | 59.0% |
+| West Asia | 2 | 69.2% | 69.2% | 0.55 | 51.8% |
+| Africa | 3 | 61.8% | 79.1% | 0.29 | 48.6% |
+| South Asia | 2 | 59.5% | 59.5% | 0.42 | 34.0% |
+
+| cut | n | mean | gap |
+|---|---|---:|---:|
+| Europe against everything else | 6 / 22 | 91.0% / 71.6% | **19.4 pts** |
+| "Europe + N. America" against the rest | 10 / 18 | 82.9% / 71.7% | 11.2 pts |
+
+**East Asia lands at 72.3%, with the elsewhere bloc, exactly as North America did.** The
+Europe-against-everywhere-else line has now been tested by quadrupling one group that was supposed
+to be inside the old cut and sextupling one that was outside it, and it holds — and it separates
+more cleanly than the grouping it replaced.
+
+### Two committed correlations moved with the sample
+
+- **`corr(contested share, agreement)`: −0.14 (16) → −0.13 (20) → −0.36 (28).** Section 5 records
+  this hypothesis as *refuted* at sixteen cities. At twenty-eight the flat refutation softens into a
+  weak negative — Tehran contests 25.31% and reaches 40.6%, Beijing 16.15% and 64.2%. It is still
+  not a proxy for anything, and it is no longer "no relationship at all". Recorded because the
+  original figure is committed.
+- **`corr(label reproducibility, ceiling)`: +0.69 → +0.58.** Same sign, weaker, same reading.
+
+### What is still n = 1, and cannot be fixed
+
+**Southeast Asia is Jakarta** — the only other So2Sat city in the region is Manila, at 246 patches of
+a single class. **Oceania is Sydney** — Melbourne passes So2Sat comfortably (5 506 patches, 7
+classes) but WUDAPT holds *one* polygon there. Both are pinned by name in
+`tests/test_multi_city_validation.py` rather than tolerated, so a new singleton fails and so does one
+of these becoming fixable and not being fixed.
+
+**West Asia is n = 2 with a 57-point internal spread** — Istanbul 97.7%, Tehran 40.6%. That is two
+cities, not a region, and no figure should be grouped by it without saying so.
+
+### Deliberately not added
+
+Six European cities qualify — Moscow 99.6%, Madrid 97.5%, Zurich 88.1%, Amsterdam 83.5%, Lisbon
+76.8%, Munich 76.6%. Europe is already over-represented at six of twenty-eight, and adding six more
+would weaken the very comparison this enlargement exists to test. **Moscow is excluded on its own
+merits as well**: its 99.6% rests on an overlap of 225 cells, because its two references drew
+different parts of the city, and a near-perfect figure on a thin non-random intersection is the kind
+that gets quoted and then retracted.
+
+Two cities pass So2Sat well and have **no WUDAPT at all** — Osaka/Kyoto (5 134 patches, 13 classes)
+and Dongying (1 936, 10). They are So2Sat-only, with no reproducibility figure available.
+
+Ten more fail on So2Sat, every one with a single class: Bogotá, Buenos Aires, Caracas, Chicago,
+Dhaka, Karachi, Lima, Manila, Philadelphia, Salvador. All ten carry real WUDAPT, so they are
+reachable as WUDAPT-only cities with no ceiling — and a record using them would have to say which
+reference it had.
