@@ -138,6 +138,8 @@ you must respect in every phase:
   │   ├── GOB25D/          # Google Open Buildings 2.5D, height tier 2 (retired, Phase 11)
   │   ├── WSF3D/           # WSF-3D, height tier 3
   │   ├── So2Sat-LCZ42/    # v4 — primary validation reference, see below
+  │   ├── WUDAPT/          # secondary validation reference, see below
+  │   ├── NASA/GUPPD       # reference for bounds and cities
   │   └── ETH_CanopyHeight/
   └── output/
       └── lczkit/
@@ -148,6 +150,18 @@ you must respect in every phase:
   are in `patches_reference_rxr.gpkg`; per-city subsets are at
   `cities/<city name>/patches_reference_<city name>.gpkg`. Prefer the per-city file when working
   a single fixture. No download step is needed — this is the primary validation reference.
+
+- **WUDAPT is available globally in full**, locally, at `$DATA_DIR/input/WUDAPT`. This is a single 
+  vector file with the manual labels submitted by the community to train LCZs in different parts 
+  of the world. These labels originate from different years and do not represent patches, but irregular
+  polygons that may be overlapping and might not coincide. However, this is the single largest source
+  of LCZ labels globally. No download is necessary, but some cleaning might be - this is the secondary 
+  validation reference and the first if So2sat doesn't have sufficient labels for a ROI.
+
+- **GUPPD boundaries for all urban regions in the world**, locally, at `$DATA_DIR/input/NASA/GUPPD`.
+  This folder contains the release of the GUPPD dataset for all urban regions around the world.
+  A post processed csv file is available for all cities, including their names, countries and 
+  bounding boxes. Use this as reference when I ask for a specific city to analyze.
 
 - **There is no separate cache directory.** Downloaded and derived source data is cached in
   place under `input/<Source>/`, with the cache key expressed as the file or subdirectory name.
