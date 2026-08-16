@@ -15,7 +15,7 @@ from lczkit.cli._options import apply_config_file, parse_bbox
 from lczkit.cli._render import EXIT_MISSING_TOOL, StageProgress, console, fail, out, report_site
 from lczkit.cli._render import stage_table as render_stages
 from lczkit.config import Settings
-from lczkit.pipeline import run_pipeline
+from lczkit.pipeline import PipelineResult, run_pipeline
 from lczkit.presets import DEFAULT_PRESET, PRESETS, apply_preset
 from lczkit.protocols import BBox
 from lczkit.viz import TippecanoeMissingError
@@ -159,8 +159,24 @@ def run(
     if not quiet:
         out.print(render_stages(result))
     console.print(f"  wrote [bold]{result.run_dir}[/bold]")
+    _report_gis(result)
     if result.site is not None:
         report_site(result.site)
+
+
+def _report_gis(result: PipelineResult) -> None:
+    """Name the file a GIS opens, and the CRS it is in.
+
+    Printed because `units.parquet` is the file a reader reaches for and GeoParquet's driver is
+    optional in GDAL — a QGIS built without it reports a correct file as having no CRS, which
+    looks like a defect in the run rather than a gap in the reader.
+    """
+    outputs = result.outputs
+    crs = outputs.manifest.crs or "an unnamed projected CRS"
+    if outputs.units_gpkg is None:
+        console.print(f"  units in [bold]{crs}[/bold] (GeoParquet only)")
+        return
+    console.print(f"  open in a GIS: [bold]{outputs.units_gpkg}[/bold] ({crs})", soft_wrap=True)
 
 
 def _load_settings(*, run_id: str | None, create: bool) -> Settings:

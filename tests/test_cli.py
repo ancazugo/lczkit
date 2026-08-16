@@ -71,7 +71,7 @@ def test_every_command_has_help_that_does_not_need_data_dir() -> None:
     It is the first thing anyone runs, and a traceback about `DATA_DIR` at that point reads as
     "this package is broken" rather than "you have not set it up yet".
     """
-    for argv in ([], ["run"], ["site"], ["site", "build"], ["site", "serve"]):
+    for argv in ([], ["run"], ["export"], ["site"], ["site", "build"], ["site", "serve"]):
         result = runner.invoke(app, [*argv, "--help"])
         assert result.exit_code == 0, f"lczkit {' '.join(argv)} --help failed:\n{result.output}"
         assert "Traceback" not in result.output
@@ -272,6 +272,35 @@ def test_site_commands_reject_a_path_that_does_not_exist(tmp_path: Path) -> None
     for argv in (["site", "build"], ["site", "serve"]):
         result = runner.invoke(app, [*argv, str(missing)])
         assert result.exit_code != 0
+
+
+# --------------------------------------------------------------------------- export
+
+
+def test_export_writes_a_geopackage_and_names_the_crs(tmp_path: Path) -> None:
+    """It reports the CRS because that is the thing a reader came here missing — a GIS without
+    GDAL's optional Parquet driver reports a correct GeoParquet as having none."""
+    import geopandas as gpd
+    from shapely.geometry import box
+
+    from lczkit.output import GPKG_FILE, UNITS_FILE
+
+    gpd.GeoDataFrame(
+        {"unit_id": ["grid_0"]}, geometry=[box(0.0, 0.0, 100.0, 100.0)], crs="EPSG:32633"
+    ).set_index("unit_id").to_parquet(tmp_path / UNITS_FILE)
+
+    result = runner.invoke(app, ["export", str(tmp_path)])
+
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / GPKG_FILE).exists()
+    assert "EPSG:32633" in result.output
+
+
+def test_export_refuses_a_directory_that_is_not_a_run(tmp_path: Path) -> None:
+    result = runner.invoke(app, ["export", str(tmp_path)])
+    assert result.exit_code == EXIT_CONFIG
+    # Whitespace-collapsed: rich wraps the message, and where it wraps depends on the path length.
+    assert "not a run directory" in " ".join(result.output.split())
 
 
 # --------------------------------------------------------------------------- the drift guard

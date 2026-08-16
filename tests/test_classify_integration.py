@@ -37,7 +37,7 @@ from lczkit.heights.completeness import height_metrics
 from lczkit.heights.inherit import inherit_heights
 from lczkit.heights.tiers import build_cascade
 from lczkit.landcover.local import LocalRasterSource
-from lczkit.output import MANIFEST_FILE, UNITS_FILE, VIZ_FILE, write_run
+from lczkit.output import GPKG_FILE, GPKG_LAYER, MANIFEST_FILE, UNITS_FILE, VIZ_FILE, write_run
 from lczkit.ucp import PARAMETER_COLUMNS, compute_parameters
 from lczkit.units.grid import GridUnits
 from lczkit.validation import agreement, reference_lcz
@@ -227,6 +227,7 @@ def test_a_full_run_writes_its_three_files_and_a_validation_report(
         UNITS_FILE,
         VIZ_FILE,
         MANIFEST_FILE,
+        GPKG_FILE,
     }
 
     stored = gpd.read_parquet(outputs.units)
@@ -234,6 +235,14 @@ def test_a_full_run_writes_its_three_files_and_a_validation_report(
     assert set(PARAMETER_COLUMNS) <= set(stored.columns)
     assert {"height_completeness", "frac_impervious", "reference_lcz"} <= set(stored.columns)
     assert stored.crs == grid_units.crs
+
+    # End to end, on a real extent: the derived UTM CRS survives into both spatial artefacts and
+    # into the manifest, which is the only one of the three a reader without a GeoParquet driver
+    # can open.
+    assert outputs.units_gpkg is not None
+    epsg = grid_units.crs.to_epsg()
+    assert gpd.read_file(outputs.units_gpkg, layer=GPKG_LAYER).crs.to_epsg() == epsg
+    assert outputs.manifest.crs == f"EPSG:{epsg}"
 
     viz = pd.read_parquet(outputs.units_viz)
     assert viz.index.equals(grid_units.index)

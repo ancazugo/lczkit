@@ -17,6 +17,7 @@ See `CLAUDE.md` for the full project specification and phase plan.
 ```sh
 lczkit run --bbox 13.29,52.45,13.52,52.59      # any window, needs nothing on disk
 lczkit run --city berlin --extent-km 4         # a So2Sat city, shrunk to try it out
+lczkit export <run_dir>                        # add units.gpkg to a run written before it existed
 lczkit site build <run_dir>                    # rebuild the map site from a finished run
 lczkit site serve <run_dir>                    # then open the address it prints
 ```
@@ -291,9 +292,23 @@ returns a bare LCZ integer.
 ```
 output/lczkit/<run_id>/
 ├── units.parquet       # GeoParquet: geometry, parameters, labels, provenance, land cover
+├── units.gpkg          # the same table, in the format every GDAL build reads
 ├── units_viz.parquet   # no geometry, floats to 3 s.f., distances as scaled int16
 └── manifest.json       # config, versions, reports, prototypes, breaks, legend, validation
 ```
+
+**Opening a run in QGIS: use `units.gpkg`.** `units.parquet` is the archival record and is valid
+GeoParquet carrying the run's CRS as PROJJSON with an EPSG code — but GDAL's Parquet driver is an
+*optional build component*, so a QGIS built without it opens a perfectly correct file as a
+non-spatial table, and the symptom is "this layer has no CRS" rather than "I cannot read this
+format". GeoPackage has no such conditional. Both files are written by default; set
+`output.gis_format = "none"` to skip the GeoPackage, and use `lczkit export <run_dir>` to add one
+to a run written before it existed.
+
+Every geometry in a run is in the projected CRS `estimate_utm_crs()` returned for the extent, so
+the CRS is *derived* and appears nowhere in `config`. `manifest.json` records it as `crs` and
+`crs_wkt` — which is how a reader that cannot open GeoParquet finds out what it is. `units_viz.parquet`
+carries no geometry at all, by design: the map tiles carry it, and that table is only attributes.
 
 Six things about this phase are worth knowing before relying on it:
 

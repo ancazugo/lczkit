@@ -19,6 +19,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
+from pyproj import CRS
 
 from lczkit.classify.classifier import PrototypeClassifier
 from lczkit.classify.labels import DEMUZERE_2022, legend
@@ -161,6 +162,21 @@ class RunManifest(BaseModel):
     before a residual there is called a defect. Measured at 53.2% on the Berlin fixture, which is
     inside the 50-60% band lczkit was being compared against as though it were a target."""
 
+    crs: str | None = None
+    """The CRS every geometry in this run is written in, as an authority code — `"EPSG:32618"`.
+
+    **It is derived, not configured.** CLAUDE.md's locked decision is that internal computation
+    happens in whatever projected CRS `estimate_utm_crs()` returns for the extent, so the answer
+    depends on the bbox and appears nowhere in `config`. Until this field existed a run directory
+    could not say what CRS it was in without a GeoParquet reader — which is precisely the tool a
+    reader who cannot open GeoParquet does not have.
+
+    `None` only where the CRS carries no authority code; `crs_wkt` is the fallback and is always
+    present. `units_viz.parquet` has no geometry at all and so has no CRS."""
+
+    crs_wkt: str | None = None
+    """The same CRS as WKT2, so it is recoverable when no authority code applies."""
+
     outputs: list[str] = Field(default_factory=list)
     """Files written into the run directory, by name."""
 
@@ -179,6 +195,7 @@ def build_manifest(
     validation: AgreementReport | None = None,
     validation_ground_truth: AgreementReport | None = None,
     reference_ceiling: AgreementReport | None = None,
+    crs: CRS | None = None,
     outputs: list[str] | None = None,
 ) -> RunManifest:
     """Assemble the manifest for one run.
@@ -187,6 +204,7 @@ def build_manifest(
     a run that classified a parameter table it was handed has no cleaning report to record, and
     saying so is better than fabricating one.
     """
+    epsg = None if crs is None else crs.to_epsg()
     return RunManifest(
         run_id=settings.run_id,
         created_utc=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -231,5 +249,7 @@ def build_manifest(
         validation=validation,
         validation_ground_truth=validation_ground_truth,
         reference_ceiling=reference_ceiling,
+        crs=None if epsg is None else f"EPSG:{epsg}",
+        crs_wkt=None if crs is None else crs.to_wkt(),
         outputs=outputs or [],
     )

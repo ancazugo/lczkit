@@ -1540,6 +1540,42 @@ that happen to match today is exactly the state it exists to rule out.
 
 ---
 
+### Phase 19 — a run a GIS can open — CONCLUDED
+
+**Reported from outside the repository, which is the only place it was visible.** A run's units
+"had no CRS" in QGIS. They did: every geometry-bearing file every run has ever written is valid
+GeoParquet 1.0.0 carrying the extent's `estimate_utm_crs()` result as PROJJSON *with an EPSG
+authority code* — verified across all ten runs on disk, `EPSG:32618` (Bogotá) through `EPSG:32737`
+(Nairobi), `units.parquet` and all four `layers/*.parquet` alike. Nothing was wrong with the files.
+
+**The format is standard; the reader is optional.** GDAL's Parquet driver is a build component, not
+core, so a QGIS built without it opens a correct file as a non-spatial table — and the symptom is
+"this layer has no CRS", which points at the producer. This is the **`file://` finding again**: an
+artefact that is formally correct and that the recipient's first move fails on. Phase 7 answered
+that by shipping `serve.py`; the answer here is the same shape.
+
+- **`units.gpkg`**, the same unit table, written by default beside the GeoParquet and never instead
+  of it. GeoPackage is SQLite, in GDAL's core, and stores its CRS in a table rather than in file
+  metadata a driver must know how to parse. Measured at four extents on the 116 491-unit Bogotá run
+  before being made the default: 0.22 s / 5.6 MB at 10 000 units to **1.83 s / 67.3 MB at 116 491,
+  exponent 0.86** — sublinear, 0.3% of a ten-minute run. `output.gis_format = "none"` skips it.
+  Units only: the `layers/` context geometry is the site's basemap material and `buildings.parquet`
+  alone is 477 MB on that run.
+- **`manifest.crs` and `crs_wkt`** — a real gap, and the more interesting half. The CRS is *derived
+  from the extent*, so `config` cannot carry it and never did. A run directory could not state its
+  own CRS without a GeoParquet reader, which is precisely the tool the reader who needs telling does
+  not have. The manifest is the run's self-description and this was missing from it.
+- **`lczkit export <run_dir>`** converts a run already on disk: it reads only what the run wrote,
+  adds `units.gpkg`, and backfills the two manifest fields. It edits the manifest **as JSON, not
+  through `RunManifest`** — revalidating an archived run against today's model would fill defaults
+  for fields that run never had and make it look like it came from code that did not produce it.
+  Idempotent, and the parquet is asserted byte-identical afterwards.
+
+All ten runs on disk were converted, ~418 MB added to a 2.1 GB tree. No measurement moved: no
+parameter is recomputed, no geometry is transformed, and the archival GeoParquet is untouched.
+
+---
+
 ### STOP RULE — applies after Phase 13
 
 **No further diagnostic phases.** Thirteen phases in, the finding rate remains high but the returns
@@ -1562,8 +1598,11 @@ Remaining work, in order:
 6. ~~**Phase 18 — Overture semantic evidence.**~~ **Concluded**, on explicit request. The evidence
    layer and its coverage columns ship; both functional rules ship **disabled** pending a threshold
    sweep, per the standing calibrate-don't-pick ruling.
-7. **The paper.**
-8. **Cleanup** — docs, release.
+7. ~~**Phase 19 — a run a GIS can open.**~~ **Concluded**, on a report from outside the repository.
+   Packaging, not measurement: `units.gpkg` and the manifest's derived CRS. Nothing recomputed, no
+   stored figure moved.
+8. **The paper.**
+9. **Cleanup** — docs, release.
 
 **`OA_w` was blocked and is now closed.** Bechtel, Demuzere & Stewart (2020) supplied both the
 class-similarity matrix and the definition; the matrix is transcribed in
@@ -1923,6 +1962,8 @@ reconcile silently.** That flagging behaviour is working; keep it.
 | Nothing asserted that a clipped raster covers its window | The silent variant was one line away and would not have raised: `clip_raster` windows with `from_bounds` and `read(window=…)`, which **returns a smaller array** rather than erroring, and `LocalRasterSource.fractions` turns uncovered units into **all-`NaN`** by design. Two correct behaviours composing into a quarter-missing map. `clip_worldcover` now reopens what it wrote and raises, naming the short side; `coverage_shortfall` ignores sub-pixel gaps because every real clip has one. The last `WORLDCOVER_URL` call sites were retired — Berlin-only, so no stored result moves. | 4, 7, 13 |
 | Pooling a partial sweep against a complete stored record | Reported the difference between two city lists as a pipeline deviation (6.6%). Stability comparisons now intersect the city sets; restricted, the deviation is 0.0%. | 13 |
 | Superseded text left in concluded phase blocks | Phase 8's block opened with a nine-minute runtime and later asserted the package could not process a city; Phase 3 still carried the corrected-away axis pairing; deferred still listed SVF first. **Concluded phases keep measurements and rulings and drop imperatives.** | 3, 6, 8, 13 |
+| Run outputs reported as having no CRS in QGIS | **Not a defect in the files, and checked before anything was changed.** All ten runs on disk carry valid GeoParquet 1.0.0 with the extent's UTM CRS as PROJJSON *and an EPSG authority code*, in `units.parquet` and every `layers/*.parquet` — `EPSG:32618` Bogotá through `EPSG:32737` Nairobi. GDAL's Parquet driver is an **optional build component**, so a QGIS without it opens a correct file as a non-spatial table and the symptom names the producer. `units.gpkg` ships beside the GeoParquet by default (measured 0.86 exponent, 1.83 s / 67.3 MB at 116 491 units), never instead of it. **The archival GeoParquet and its CRS are unchanged** — the export CRS was *not* switched to lat/lon, because that would move every stored run's geometry and make every area statistic in this file incomparable. | 6, 19 |
+| The run CRS recorded nowhere | Derived by `estimate_utm_crs()` from the extent, so it is in no config and was in no manifest — a run directory could state its own CRS only through the file format the complaining reader could not open. `manifest.crs` and `crs_wkt` added; `lczkit export` backfills them for runs already written, editing the JSON directly rather than round-tripping through `RunManifest`, which would fill today's defaults into an archived run. | 0, 6, 19 |
 
 ---
 
@@ -2118,3 +2159,14 @@ city where the class exists *and* is tagged, and the coverage table suggests the
   of its syntax: a syntax error stops the IIFE running, so the error handler that would have
   reported it never installs, and the page is blank in silence. A delimiter balance and a
   producer/consumer key check are weak, cheap, and caught a real defect the first time they ran.
+- **A correct file is not a readable file, and correctness is not what the recipient measures.**
+  Twice now an artefact has been formally right and unopenable: the site's PMTiles over `file://`,
+  and `units.parquet` in a QGIS whose GDAL lacks the *optional* Parquet driver. Both report as a
+  defect in the producer — an unexplained network error, a layer "with no CRS" — because the
+  recipient cannot see which half failed. Ship the format whose reader is unconditional, and when a
+  capability is conditional in the consumer, do not treat validity in the producer as the test.
+- **A derived property has to be recorded somewhere the derivation is not.** The run CRS comes from
+  `estimate_utm_crs()` on the extent, so it is in no config, no preset and no argument — and it was
+  in no manifest either, leaving a run directory unable to state its own CRS except through the one
+  file format the reader could not open. Anything computed at runtime that a consumer must know is
+  a manifest field, not an implicit property of an artefact.

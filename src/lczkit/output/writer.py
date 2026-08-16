@@ -41,6 +41,16 @@ VIZ_FILE = "units_viz.parquet"
 MANIFEST_FILE = "manifest.json"
 LAYERS_DIR = "layers"
 
+GPKG_FILE = "units.gpkg"
+GPKG_LAYER = "units"
+"""The GeoPackage copy of the unit table, written when `output.gis_format` asks for it.
+
+Not a replacement for `units.parquet`, which stays the archival record and stays what the site
+build reads. It exists because GeoParquet's *reader* is conditional in a way its *format* is not:
+GDAL's Parquet driver is an optional build component, so a correct file with an EPSG code in its
+`geo` metadata can still land in a GIS as a table with no CRS. See `OutputConfig.gis_format` for
+the measurement and the cost."""
+
 #: Context layers `write_run` will persist, in the order the site draws them. Restricted to a known
 #: set so a caller cannot quietly grow the run directory by an arbitrary GeoDataFrame, and so a
 #: reader of a run knows what a file called `layers/streets.parquet` contains.
@@ -61,6 +71,9 @@ class RunOutputs:
     units_viz: Path
     manifest_path: Path
     manifest: RunManifest
+    units_gpkg: Path | None = None
+    """The GeoPackage copy of the unit table. `None` where `output.gis_format` is `"none"`."""
+
     layers: dict[str, Path] = field(default_factory=dict)
     """Context layers persisted under `layers/`, by name. Empty unless the caller asked for them."""
 
@@ -126,6 +139,7 @@ def write_run(
     manifest_path = run_dir / MANIFEST_FILE
 
     written = _write_layers(run_dir, layers)
+    gpkg_path = None if settings.output.gis_format == "none" else write_gpkg(run_dir, table)
     manifest = build_manifest(
         settings,
         classifier,
@@ -137,10 +151,12 @@ def write_run(
         height_source_availability=height_source_availability,
         tag_availability=tag_availability,
         validation=validation,
+        crs=units.crs,
         outputs=[
             UNITS_FILE,
             VIZ_FILE,
             MANIFEST_FILE,
+            *([] if gpkg_path is None else [GPKG_FILE]),
             *(str(path.relative_to(run_dir)) for path in written.values()),
         ],
     )
@@ -155,8 +171,25 @@ def write_run(
         units_viz=viz_path,
         manifest_path=manifest_path,
         manifest=manifest,
+        units_gpkg=gpkg_path,
         layers=written,
     )
+
+
+def write_gpkg(run_dir: Path, table: gpd.GeoDataFrame) -> Path:
+    """Write the unit table as `units.gpkg`, returning its path.
+
+    `unit_id` is reset into a column first. A GeoPackage has no index, so leaving it as one would
+    drop the join key every other artefact in the run is keyed on — the single thing that would
+    make this copy useless rather than merely redundant.
+
+    Called before the manifest is built, so a failure raises rather than leaving a manifest
+    advertising a file that is not there.
+    """
+    path = run_dir / GPKG_FILE
+    path.unlink(missing_ok=True)
+    table.reset_index().to_file(path, driver="GPKG", layer=GPKG_LAYER)
+    return path
 
 
 def _write_layers(run_dir: Path, layers: Mapping[str, gpd.GeoDataFrame] | None) -> dict[str, Path]:

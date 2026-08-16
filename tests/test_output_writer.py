@@ -18,7 +18,15 @@ from shapely.geometry import box
 
 from lczkit.classify import PrototypeClassifier
 from lczkit.config import Settings
-from lczkit.output import MANIFEST_FILE, UNITS_FILE, VIZ_FILE, viz_table, write_run
+from lczkit.output import (
+    GPKG_FILE,
+    GPKG_LAYER,
+    MANIFEST_FILE,
+    UNITS_FILE,
+    VIZ_FILE,
+    viz_table,
+    write_run,
+)
 
 CRS = "EPSG:32633"
 
@@ -77,7 +85,7 @@ def run(settings: Settings, extras: pd.DataFrame | None = None):
     )
 
 
-def test_a_run_writes_exactly_three_files_and_only_inside_its_own_directory(
+def test_a_run_writes_a_known_set_of_files_and_only_inside_its_own_directory(
     settings: Settings,
 ) -> None:
     """CLAUDE.md: never write outside `output/lczkit/<run_id>/`. `output/` is shared with other
@@ -87,7 +95,7 @@ def test_a_run_writes_exactly_three_files_and_only_inside_its_own_directory(
     _, _, outputs = run(settings)
 
     written = {path for path in settings.data_dir.rglob("*") if path.is_file()} - before
-    assert {path.name for path in written} == {UNITS_FILE, VIZ_FILE, MANIFEST_FILE}
+    assert {path.name for path in written} == {UNITS_FILE, VIZ_FILE, MANIFEST_FILE, GPKG_FILE}
     assert all(path.parent == settings.run_dir for path in written)
     assert outputs.run_dir == settings.run_dir
     assert not any(path.is_relative_to(settings.input_dir) for path in written)
@@ -158,8 +166,67 @@ def test_the_manifest_is_valid_json_and_names_what_was_written(settings: Setting
     loaded = json.loads(outputs.manifest_path.read_text(encoding="utf-8"))
 
     assert loaded["run_id"] == "test-run"
-    assert set(loaded["outputs"]) == {UNITS_FILE, VIZ_FILE, MANIFEST_FILE}
+    assert set(loaded["outputs"]) == {UNITS_FILE, VIZ_FILE, MANIFEST_FILE, GPKG_FILE}
     assert loaded["config"]["classification"]["weight_preset"] == "bernard2024_partial"
+
+
+def test_the_manifest_records_the_crs_the_run_was_computed_in(settings: Settings) -> None:
+    """The CRS comes from `estimate_utm_crs()` on the extent, so it is nowhere in `config` — and
+    a run directory that cannot say what CRS it is in without a GeoParquet reader is unreadable
+    by exactly the reader that needs to be told."""
+    _, _, outputs = run(settings)
+
+    loaded = json.loads(outputs.manifest_path.read_text(encoding="utf-8"))
+
+    assert loaded["crs"] == CRS
+    assert "UTM zone 33N" in loaded["crs_wkt"]
+    assert CRS not in json.dumps(loaded["config"]), "config cannot carry a CRS it never chose"
+
+
+def test_the_geopackage_carries_the_crs_as_an_authority_code_and_keeps_the_join_key(
+    settings: Settings,
+) -> None:
+    """Why this file exists: GeoParquet is correct here, but its driver is optional in GDAL, so a
+    GIS without it reports a valid file as having no CRS. A GeoPackage stores the CRS in a table
+    rather than in metadata a driver must know how to parse."""
+    units, _, outputs = run(settings)
+
+    assert outputs.units_gpkg is not None
+    stored = gpd.read_file(outputs.units_gpkg, layer=GPKG_LAYER)
+
+    assert stored.crs.to_epsg() == 32633
+    assert "unit_id" in stored.columns, "a GeoPackage has no index; unit_id must be a column"
+    assert sorted(stored["unit_id"]) == sorted(units.index)
+    archival = gpd.read_parquet(outputs.units)
+    assert stored["lcz_primary"].to_list() == archival["lcz_primary"].to_list()
+
+
+def test_the_geopackage_can_be_switched_off_and_the_manifest_stops_claiming_it(
+    settings: Settings,
+) -> None:
+    settings.output.gis_format = "none"
+
+    _, _, outputs = run(settings)
+
+    assert outputs.units_gpkg is None
+    assert not (settings.run_dir / GPKG_FILE).exists()
+    assert GPKG_FILE not in outputs.manifest.outputs
+
+
+def test_the_archival_geoparquet_still_carries_the_crs_in_its_own_metadata(
+    settings: Settings,
+) -> None:
+    """The GeoPackage is a second copy, not a replacement. `units.parquet` stays the archival
+    record and the site build still reads it, so its `geo` metadata must keep the EPSG code."""
+    import pyarrow.parquet as pq
+
+    _, _, outputs = run(settings)
+
+    geo = json.loads(pq.read_schema(outputs.units).metadata[b"geo"])
+    column = geo["columns"][geo["primary_column"]]
+
+    assert column["crs"]["id"] == {"authority": "EPSG", "code": 32633}
+    assert gpd.read_parquet(outputs.units).crs.to_epsg() == 32633
 
 
 def test_breaks_cover_the_continuous_columns_and_skip_the_categorical_ones(

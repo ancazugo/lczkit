@@ -1061,6 +1061,26 @@ class OutputConfig(BaseModel):
     `units_viz.parquet`. Distances are small positive reals, so 1000 keeps three decimal places
     inside the int16 range."""
 
+    gis_format: Literal["none", "gpkg"] = "gpkg"
+    """A second copy of the unit table in a format every GDAL build reads, written beside the
+    GeoParquet rather than instead of it.
+
+    **`units.parquet` is not the problem this solves.** It is valid GeoParquet 1.0.0 and carries
+    the run's CRS as PROJJSON with an EPSG authority code — verified on the published Bogota and
+    Nairobi runs, both `EPSG:32618`/`EPSG:32737`. What varies is the *reader*: GDAL's Parquet
+    driver is an optional build component, so a QGIS built without it opens the file as a
+    non-spatial table or not at all, and the failure looks like a missing CRS rather than a
+    missing driver. GeoPackage has no such conditional — it is SQLite, in GDAL's core, and its
+    CRS lives in a table rather than in file metadata a driver has to know how to parse.
+
+    Cost, measured on the 116 491-unit Bogota run at four extents before this was made the
+    default: 0.22 s / 5.6 MB at 10 000 units to **1.83 s / 67.3 MB at 116 491**, exponent 0.86 —
+    sublinear, and 0.3% of a run that takes ten minutes. Set `"none"` to skip it.
+
+    Only the unit table. The context layers under `layers/` stay GeoParquet-only: they are the
+    site's basemap material, they carry the same CRS, and `buildings.parquet` alone is 477 MB on
+    that run."""
+
     @model_validator(mode="after")
     def _check(self) -> OutputConfig:
         if self.break_count < 2:
