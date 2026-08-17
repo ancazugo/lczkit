@@ -39,6 +39,68 @@ def test_constructor_raises_without_release(tmp_path: Path) -> None:
         OvertureSource(settings)
 
 
+def test_the_progress_bar_is_never_switched_off_by_assignment() -> None:
+    """`SET enable_progress_bar` takes the whole source out of a Jupyter kernel.
+
+    DuckDB reinitialises its display when that setting is *assigned*, so inside a kernel without
+    `ipywidgets` it raises — and `OvertureSource.__init__` raises with it, which takes every code
+    path that reads Overture with it. `PRAGMA disable_progress_bar` does the same job without
+    touching the display.
+
+    This is a source assertion because the failure is invisible everywhere a test normally runs:
+    under pytest there is no kernel, DuckDB draws no progress bar, and the assignment succeeds.
+    Only an interactive kernel sees it, and nothing in CI is one.
+
+    It reads the module's *string literals* rather than its lines, so the docstring above — which
+    has to name the forbidden form in order to explain it — is not itself a finding.
+    """
+    import ast
+
+    module = ast.parse(
+        (Path(__file__).resolve().parents[1] / "src/lczkit/sources/overture.py").read_text(
+            encoding="utf-8"
+        )
+    )
+    docstrings = {
+        id(node.body[0].value)
+        for node in ast.walk(module)
+        if isinstance(node, ast.Module | ast.FunctionDef | ast.ClassDef)
+        and node.body
+        and isinstance(node.body[0], ast.Expr)
+        and isinstance(node.body[0].value, ast.Constant)
+    }
+    offenders = [
+        node.value
+        for node in ast.walk(module)
+        if isinstance(node, ast.Constant)
+        and isinstance(node.value, str)
+        and id(node) not in docstrings
+        and "enable_progress_bar" in node.value
+    ]
+    assert offenders == [], offenders
+
+
+def test_silencing_the_progress_bar_survives_a_connection_that_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A cosmetic setting must not decide whether the source can be constructed."""
+    import duckdb
+
+    from lczkit.sources import overture
+
+    real_execute = duckdb.DuckDBPyConnection.execute
+
+    def refuse(self: duckdb.DuckDBPyConnection, query: str, *args: object, **kwargs: object):  # type: ignore[no-untyped-def]
+        if "progress_bar" in query:
+            raise duckdb.InvalidInputException("required package 'ipywidgets' is missing")
+        return real_execute(self, query, *args, **kwargs)
+
+    monkeypatch.setattr(duckdb.DuckDBPyConnection, "execute", refuse)
+
+    source = overture.OvertureSource(_settings(tmp_path))
+    assert source._con.execute("SELECT current_setting('s3_region')").fetchone()[0] == "us-west-2"
+
+
 def test_cache_hit_never_touches_network(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     settings = _settings(tmp_path)
     source = OvertureSource(settings)

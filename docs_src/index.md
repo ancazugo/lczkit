@@ -53,6 +53,12 @@ cleaning report.
 
 ## What this documentation covers
 
+The [demonstration](demo/bogota.ipynb) runs the whole pipeline over a window of Bogotá, twice —
+once on the 100 m grid and once on organic patch units — and embeds the map site each run
+produced. Bogotá is there because it is close to the worst case for the constraint this package
+exists to report: **0.50%** of its building heights come from Overture, and a 90 m radar mosaic
+answers for the rest.
+
 The [API reference](api/index.md) is generated from the source and is the reference for every
 public class and function.
 

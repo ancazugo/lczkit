@@ -22,6 +22,12 @@ validation:
   unrecognized_links: warn
   anchors: warn
 
+# The demonstration map sites are copied in whole and are reached from an `<iframe>`, not from the
+# nav. Without this every markdown file inside one — the vendored bundles' `LICENSES.md` — is an
+# "exists but is not in nav" warning, and `strict: true` makes each of those fail the build.
+not_in_nav: |
+  demo/*/**
+
 theme:
   name: material
   features:
@@ -51,8 +57,19 @@ theme:
 
 plugins:
   - search
-  # Wired for notebooks; there are none in the repository yet, so it currently renders nothing.
-  - mkdocs-jupyter
+  # `execute: false` is the default and is set explicitly because it is load-bearing rather than
+  # incidental. The docs workflow runs `uv sync --only-group docs`, so the build environment has
+  # neither lczkit nor the geo stack nor a DATA_DIR — it could not execute the demonstration
+  # notebook if it tried, and would fail the deploy attempting it. The notebook is committed with
+  # its outputs, produced by a local run against real data.
+  - mkdocs-jupyter:
+      execute: false
+      include_source: true
+      # Narrowed from the plugin's default `["*.py", "*.ipynb", "*.md"]`. A demonstration run's
+      # map site is copied into `docs_src/demo/` whole, and it ships a `serve.py` — which the
+      # default pattern matches, so mkdocs-jupyter *converted it to a page* and rewrote it to
+      # `demo/<site>/serve/serve.py`, moving a file the site loads by relative path.
+      include: ["*.ipynb"]
   - mkdocstrings:
       default_handler: python
       handlers:
@@ -97,6 +114,7 @@ markdown_extensions:
 
 nav:
   - Home: index.md
+  - Demonstration: demo/bogota.ipynb
   - API reference:
       - Overview: api/index.md
       - Protocols: api/protocols.md

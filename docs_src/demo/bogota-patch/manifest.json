@@ -1,0 +1,2896 @@
+{
+  "run_id": "docs-bogota-patch",
+  "created_utc": "2026-08-17T12:58:08Z",
+  "config": {
+    "data_dir": "/maps/acz25/phd-thesis-data",
+    "run_id": "docs-bogota-patch",
+    "overture": {
+      "release": "2026-07-22.0",
+      "source_dir_name": "Overture_Maps"
+    },
+    "cleaning": {
+      "building_max_area_m2": 100000.0,
+      "building_min_area_m2": 20.0,
+      "building_road_buffer_m": 4.0,
+      "building_road_overlap_limit": 0.5,
+      "building_merge_limit_m2": 50.0,
+      "building_overlap_limit": 0.1,
+      "street_tile_size_m": 2000.0,
+      "street_tile_buffer_m": 600.0,
+      "street_tile_workers": null,
+      "street_artifact_threshold": null
+    },
+    "heights": {
+      "storey_height_m": 3.0,
+      "overture_height_confidence": 0.9,
+      "overture_num_floors_confidence": 0.6,
+      "areal_tiers": [
+        {
+          "name": "gob25d",
+          "source_dir_name": "GOB25D",
+          "enabled": false,
+          "filename": null,
+          "band": 1,
+          "scale": 1.0,
+          "nodata": null,
+          "min_height_m": 0.0,
+          "confidence": 0.5
+        },
+        {
+          "name": "wsf3d",
+          "source_dir_name": "WSF3D",
+          "enabled": true,
+          "filename": null,
+          "band": 1,
+          "scale": 0.1,
+          "nodata": -32767.0,
+          "min_height_m": 0.0,
+          "confidence": 0.35
+        },
+        {
+          "name": "ghsl",
+          "source_dir_name": "GHSL",
+          "enabled": true,
+          "filename": null,
+          "band": 1,
+          "scale": 1.0,
+          "nodata": 255.0,
+          "min_height_m": 0.0,
+          "confidence": 0.25
+        }
+      ]
+    },
+    "height_products": {
+      "wsf3d": {
+        "tier_name": "wsf3d",
+        "source_dir_name": "WSF3D",
+        "version": "V02",
+        "filename": "WSF3D_V02_BuildingHeight.tif",
+        "url": "https://download.geoservice.dlr.de/WSF3D/files/global/WSF3D_V02_BuildingHeight.tif"
+      },
+      "ghsl": {
+        "tier_name": "ghsl",
+        "source_dir_name": "GHSL",
+        "release": "R2023A",
+        "epoch": "E2018",
+        "product": "ANBH",
+        "crs": "ESRI:54009",
+        "tile_template": "GHS_BUILT_H_ANBH_E2018_GLOBE_R2023A_54009_100_V1_0_R{row}_C{column}",
+        "url_template": "https://jeodpp.jrc.ec.europa.eu/ftp/jrc-opendata/GHSL/GHS_BUILT_H_GLOBE_R2023A/GHS_BUILT_H_ANBH_E2018_GLOBE_R2023A_54009_100/V1-0/tiles/{name}.zip",
+        "citation": "Pesaresi, M. & Politis, P. (2023), GHS-BUILT-H R2023A, JRC"
+      },
+      "gob25d": {
+        "tier_name": "gob25d",
+        "source_dir_name": "GOB25D",
+        "collection": "GOOGLE/Research/open-buildings-temporal/v1",
+        "band": "building_height",
+        "year": 2023,
+        "scale_m": 4.0,
+        "max_pixels_per_request": 50331648,
+        "max_bytes_per_request": 33554432
+      }
+    },
+    "land_cover": {
+      "datasets": [
+        {
+          "name": "worldcover",
+          "source_dir_name": "ESA_WorldCover",
+          "filename": null,
+          "band": 1,
+          "column_prefix": "frac_",
+          "classes": [
+            "tree",
+            "pervious",
+            "impervious",
+            "water"
+          ],
+          "value_classes": {
+            "10": "tree",
+            "20": "pervious",
+            "30": "pervious",
+            "40": "pervious",
+            "50": "impervious",
+            "60": "pervious",
+            "70": "pervious",
+            "80": "water",
+            "90": "water",
+            "95": "water",
+            "100": "pervious"
+          },
+          "bins": null,
+          "bin_classes": null,
+          "nodata": 0.0,
+          "nodata_policy": "exclude",
+          "nodata_class": null,
+          "unmapped_policy": "raise",
+          "unmapped_class": null,
+          "gee": {
+            "collection_id": "ESA/WorldCover/v200",
+            "asset_type": "image_collection",
+            "band": "Map",
+            "start_date": "2021-01-01",
+            "end_date": "2022-01-01",
+            "scale_m": 10.0
+          }
+        },
+        {
+          "name": "eth_canopy",
+          "source_dir_name": "ETH_CanopyHeight",
+          "filename": null,
+          "band": 1,
+          "column_prefix": "canopy_frac_",
+          "classes": [
+            "tree",
+            "non_tree"
+          ],
+          "value_classes": null,
+          "bins": [
+            3.0
+          ],
+          "bin_classes": [
+            "non_tree",
+            "tree"
+          ],
+          "nodata": 255.0,
+          "nodata_policy": "assign",
+          "nodata_class": "non_tree",
+          "unmapped_policy": "raise",
+          "unmapped_class": null,
+          "gee": {
+            "collection_id": "users/nlang/ETH_GlobalCanopyHeight_2020_10m_v1",
+            "asset_type": "image",
+            "band": "b1",
+            "start_date": "2020-01-01",
+            "end_date": "2021-01-01",
+            "scale_m": 10.0
+          }
+        }
+      ],
+      "gee_project": null,
+      "gee_batch_size": 2000,
+      "gee_max_units": null,
+      "max_raster_cells": 200000000
+    },
+    "units": {
+      "strategy": "patch",
+      "cell_size_m": 100.0,
+      "patch_min_area_m2": 50000.0,
+      "patch_max_area_m2": 500000.0,
+      "patch_merge_on_morphology": true,
+      "drop_pedestrian_barriers": true
+    },
+    "ucp": {
+      "street_profile_distance_m": 10.0,
+      "street_profile_tick_length_m": 50.0,
+      "min_building_height_m": 0.1,
+      "land_cover_dataset": "worldcover",
+      "tree_classes": [
+        "tree"
+      ],
+      "pervious_classes": [
+        "pervious"
+      ],
+      "impervious_classes": [
+        "impervious"
+      ],
+      "water_classes": [
+        "water"
+      ],
+      "industrial_building_subtypes": [
+        "industrial"
+      ],
+      "industrial_building_classes": [
+        "industrial"
+      ],
+      "industrial_land_use_subtypes": [],
+      "industrial_land_use_classes": [
+        "industrial"
+      ],
+      "semantic_groups": [
+        {
+          "name": "lightweight",
+          "lcz_hint": "7",
+          "building_subtypes": [
+            "outbuilding"
+          ],
+          "building_classes": [
+            "hut",
+            "shed",
+            "cabin",
+            "roof",
+            "kiosk",
+            "carport",
+            "guardhouse"
+          ],
+          "land_use_subtypes": [],
+          "land_use_classes": []
+        },
+        {
+          "name": "large_lowrise",
+          "lcz_hint": "8",
+          "building_subtypes": [],
+          "building_classes": [
+            "warehouse",
+            "retail",
+            "supermarket",
+            "hangar",
+            "stadium",
+            "train_station",
+            "transportation",
+            "parking",
+            "sports_centre",
+            "sports_hall",
+            "service"
+          ],
+          "land_use_subtypes": [],
+          "land_use_classes": [
+            "retail"
+          ]
+        },
+        {
+          "name": "heavy_industry",
+          "lcz_hint": "10",
+          "building_subtypes": [
+            "industrial"
+          ],
+          "building_classes": [
+            "industrial",
+            "storage_tank",
+            "silo"
+          ],
+          "land_use_subtypes": [],
+          "land_use_classes": [
+            "industrial",
+            "works"
+          ]
+        },
+        {
+          "name": "residential",
+          "lcz_hint": "1-6 context",
+          "building_subtypes": [
+            "residential"
+          ],
+          "building_classes": [
+            "apartments",
+            "house",
+            "detached",
+            "semidetached_house",
+            "terrace",
+            "bungalow",
+            "residential",
+            "dormitory",
+            "allotment_house"
+          ],
+          "land_use_subtypes": [
+            "residential"
+          ],
+          "land_use_classes": [
+            "residential"
+          ]
+        },
+        {
+          "name": "commercial",
+          "lcz_hint": "1-3, 8 context",
+          "building_subtypes": [
+            "commercial"
+          ],
+          "building_classes": [
+            "commercial",
+            "office",
+            "retail",
+            "hotel",
+            "supermarket"
+          ],
+          "land_use_subtypes": [
+            "developed"
+          ],
+          "land_use_classes": [
+            "commercial",
+            "retail"
+          ]
+        }
+      ]
+    },
+    "classification": {
+      "weight_preset": "bernard2024_partial",
+      "built_min_building_fraction": 0.1,
+      "reachable_natural_classes": [
+        "A",
+        "B",
+        "D",
+        "E",
+        "G"
+      ],
+      "natural_dominant_fraction": 0.5,
+      "semantic_rules": [
+        {
+          "name": "large_lowrise",
+          "lcz": 8,
+          "column": "sem_large_lowrise_buildings_of_building_area",
+          "min_fraction": 0.5,
+          "enabled": false,
+          "min_mean_building_area_m2": 1000.0,
+          "max_mean_building_area_m2": null,
+          "reason": "LCZ 8 fails by construction, not by tuning (Phase 14): its building-surface band overlaps LCZ 3 and 6, its Hr band is identical to LCZ 3, 6 and 9, so aspect ratio is its only separator in the metric — and aspect ratio is null exactly where large setbacks stop streets reaching buildings, which is most of an LCZ 8 unit. Measured 0.0% agreement over 224 Rotterdam cells. A functional route is the only evidence available that does not depend on a parameter the class nullifies."
+        },
+        {
+          "name": "lightweight",
+          "lcz": 7,
+          "column": "sem_lightweight_buildings_of_building_area",
+          "min_fraction": 0.5,
+          "enabled": false,
+          "min_mean_building_area_m2": null,
+          "max_mean_building_area_m2": 100.0,
+          "reason": "LCZ 7 reaches its published building-surface range in 8.2% of cells (Phase 13), low on both tails across five non-European cities, and it is the class the founding premise is most about. **This rule will mostly not fire where it matters**: Overture has no slum/shanty/ger/tent value, and tagged building area runs 13.6% outside Europe and North America against 48.6% inside — Rio at 3.1%. That is a result to report, not a reason to omit the rule, and `building_tag_coverage` is what makes the non-firing legible rather than invisible."
+        }
+      ],
+      "natural_negligible_fraction": 0.1,
+      "lcz10_industrial_column": "industrial_fraction_of_building_area",
+      "lcz10_min_industrial_fraction": 0.45,
+      "lcz1_min_height_m": null
+    },
+    "output": {
+      "break_count": 7,
+      "break_method": "quantile",
+      "viz_significant_figures": 3,
+      "viz_distance_scale": 1000,
+      "gis_format": "gpkg"
+    },
+    "validation": {
+      "reference": {
+        "name": "demuzere_lcz",
+        "source_dir_name": "Demuzere_2022_complete",
+        "filename": null,
+        "band": 1,
+        "column_prefix": "ref_",
+        "classes": [
+          "lcz_1",
+          "lcz_2",
+          "lcz_3",
+          "lcz_4",
+          "lcz_5",
+          "lcz_6",
+          "lcz_7",
+          "lcz_8",
+          "lcz_9",
+          "lcz_10",
+          "lcz_11",
+          "lcz_12",
+          "lcz_13",
+          "lcz_14",
+          "lcz_15",
+          "lcz_16",
+          "lcz_17",
+          "nodata"
+        ],
+        "value_classes": {
+          "1": "lcz_1",
+          "2": "lcz_2",
+          "3": "lcz_3",
+          "4": "lcz_4",
+          "5": "lcz_5",
+          "6": "lcz_6",
+          "7": "lcz_7",
+          "8": "lcz_8",
+          "9": "lcz_9",
+          "10": "lcz_10",
+          "11": "lcz_11",
+          "12": "lcz_12",
+          "13": "lcz_13",
+          "14": "lcz_14",
+          "15": "lcz_15",
+          "16": "lcz_16",
+          "17": "lcz_17"
+        },
+        "bins": null,
+        "bin_classes": null,
+        "nodata": 0.0,
+        "nodata_policy": "assign",
+        "nodata_class": "nodata",
+        "unmapped_policy": "raise",
+        "unmapped_class": null,
+        "gee": {
+          "collection_id": null,
+          "asset_type": "image_collection",
+          "band": null,
+          "start_date": null,
+          "end_date": null,
+          "scale_m": null
+        }
+      },
+      "reference_citation": "10.5194/essd-14-3835-2022",
+      "ground_truth_citation": "10.1109/MGRS.2020.2964708",
+      "wudapt": {
+        "source_dir_name": "WUDAPT",
+        "filename": "LCZ-Generator_training_areas_2024-10-01.gpkg",
+        "layer": "LCZ-Generator_training_areas_2024-10-01",
+        "class_column": "class",
+        "require_qc": false,
+        "min_oa": null,
+        "min_area_m2": 0.0,
+        "max_area_m2": null,
+        "citation": "10.3390/ijgi4010199"
+      },
+      "min_reference_coverage": 0.5,
+      "height_completeness_deciles": 10
+    },
+    "viz": {
+      "unit_min_zoom": 10,
+      "unit_max_zoom": 14,
+      "basemap_min_zoom": 9,
+      "basemap_max_zoom": 13,
+      "basemap_simplification": 10,
+      "basemap_layers": [
+        "water",
+        "streets"
+      ],
+      "building_min_zoom": 14,
+      "building_max_zoom": 16,
+      "include_buildings": false,
+      "render_columns": [
+        "lcz_primary",
+        "lcz_secondary",
+        "uniqueness",
+        "height_completeness",
+        "building_surface_fraction",
+        "impervious_surface_fraction",
+        "pervious_surface_fraction",
+        "tree_fraction",
+        "water_fraction",
+        "height_of_roughness_elements_m",
+        "aspect_ratio",
+        "street_openness",
+        "mean_building_area_m2",
+        "industrial_fraction_of_building_area"
+      ],
+      "render_column_prefixes": [
+        "height_frac_"
+      ],
+      "detail_max_features": 200000,
+      "online_basemaps": [],
+      "online_basemap": null
+    }
+  },
+  "versions": {
+    "lczkit": "0.1.0",
+    "geopandas": "1.1.4",
+    "shapely": "2.1.2",
+    "pandas": "3.0.5",
+    "numpy": "2.5.1",
+    "pyarrow": "25.0.0",
+    "pyogrio": "0.13.0",
+    "momepy": "1.0.0",
+    "libpysal": "4.15.0",
+    "neatnet": "0.1.6",
+    "geoplanar": "0.6.0",
+    "duckdb": "1.5.5",
+    "exactextract": "0.3.0",
+    "rasterio": "1.5.0",
+    "pydantic": "2.13.4",
+    "earthengine-api": "1.7.38"
+  },
+  "overture_release": "2026-07-22.0",
+  "earth_engine_assets": {
+    "worldcover": {
+      "collection_id": "ESA/WorldCover/v200",
+      "asset_type": "image_collection",
+      "band": "Map",
+      "start_date": "2021-01-01",
+      "end_date": "2022-01-01",
+      "scale_m": 10.0
+    },
+    "eth_canopy": {
+      "collection_id": "users/nlang/ETH_GlobalCanopyHeight_2020_10m_v1",
+      "asset_type": "image",
+      "band": "b1",
+      "start_date": "2020-01-01",
+      "end_date": "2021-01-01",
+      "scale_m": 10.0
+    }
+  },
+  "parameters": [
+    {
+      "name": "building_surface_fraction",
+      "label": "Building surface fraction",
+      "unit": "fraction",
+      "description": "Building footprint area within the unit, over unit area. Footprints are split at unit boundaries, so a building straddling two units contributes to both in proportion. Zero — not null — for a unit holding no buildings.",
+      "reference": "10.1175/BAMS-D-11-00019.1"
+    },
+    {
+      "name": "impervious_surface_fraction",
+      "label": "Impervious surface fraction",
+      "unit": "fraction",
+      "description": "Impervious land-cover fraction with the building share removed, clipped at zero. A raster's built-up class contains the roofs, and Stewart & Oke's building, impervious and pervious fractions partition the surface between them.",
+      "reference": "10.1175/BAMS-D-11-00019.1"
+    },
+    {
+      "name": "pervious_surface_fraction",
+      "label": "Pervious surface fraction",
+      "unit": "fraction",
+      "description": "Pervious land-cover fraction with tree cover and water folded back in. Stewart & Oke put both LCZ A (dense trees) and LCZ G (water) at 90%+ pervious, so neither class is reachable unless both count here.",
+      "reference": "10.1175/BAMS-D-11-00019.1"
+    },
+    {
+      "name": "tree_fraction",
+      "label": "Tree cover fraction",
+      "unit": "fraction",
+      "description": "Tree-covered fraction of the unit, from the Phase 4 land-cover table. Also counted inside `pervious_surface_fraction`; kept separately because it separates LCZ A and B from the other pervious classes.",
+      "reference": "10.5194/gmd-17-2077-2024"
+    },
+    {
+      "name": "water_fraction",
+      "label": "Water fraction",
+      "unit": "fraction",
+      "description": "Water-covered fraction of the unit, from the Phase 4 land-cover table. Also counted inside `pervious_surface_fraction`; kept separately because it is the only route to LCZ G.",
+      "reference": "10.5194/gmd-17-2077-2024"
+    },
+    {
+      "name": "height_of_roughness_elements_m",
+      "label": "Height of roughness elements",
+      "unit": "m",
+      "description": "Stewart & Oke's Hr: the unweighted GEOMETRIC mean of building height, exp(mean(log h)), over every building with a resolved height intersecting the unit. Heights are floored at a small positive value before the log. Buildings the Phase 3 cascade left unresolved are excluded. Null for a unit holding no building with a height.",
+      "reference": "10.5194/gmd-17-2077-2024"
+    },
+    {
+      "name": "h_geometric_area_weighted",
+      "label": "Height, geometric mean, area-weighted",
+      "unit": "m",
+      "description": "SECONDARY, not for classification. The same geometric mean as Hr, but weighted by footprint area, so a 5 m2 shed no longer counts as much as a tower block. Hr itself stays unweighted because Bernard et al. (2024) Table 1 specifies that form and the Stewart & Oke ranges were defined for it — weighting it would change the definition silently. Emitted so the size of the difference is measurable: Phase 10 established that Hr's sensitivity to dispersion is what made the most accurate height product degrade the map, and the same mechanism acts on the unweighted mean itself.",
+      "reference": "computed here"
+    },
+    {
+      "name": "h_mean_area_weighted",
+      "label": "Height, arithmetic mean, area-weighted",
+      "unit": "m",
+      "description": "SECONDARY, not for classification. Arithmetic mean building height weighted by footprint area inside the unit. It is not Hr and sits above it wherever a unit mixes tall and short buildings; the Stewart & Oke ranges were defined for the geometric mean. Retained because the deferred roughness work (Macdonald, Kanda) needs it.",
+      "reference": "computed here"
+    },
+    {
+      "name": "h_std",
+      "label": "Height, standard deviation",
+      "unit": "m",
+      "description": "SECONDARY, not for classification. Area-weighted population standard deviation of building height, over the same weights and buildings as `h_mean_area_weighted`. Zero for a unit holding one building. Retained for the deferred roughness work, where Kanda et al. (2013) needs a height spread.",
+      "reference": "computed here"
+    },
+    {
+      "name": "aspect_ratio",
+      "label": "Aspect ratio (H/W)",
+      "unit": "dimensionless",
+      "description": "Street canyon height-to-width ratio: the street-length-weighted mean of `momepy.street_profile()`'s `hw_ratio` over the segments crossing the unit. Null where no street segment reaching a building crosses it.",
+      "reference": "10.1175/BAMS-D-11-00019.1"
+    },
+    {
+      "name": "street_openness",
+      "label": "Street openness",
+      "unit": "fraction",
+      "description": "Street-length-weighted mean of `momepy.street_profile()`'s `openness` — the share of perpendicular ticks along a segment that reach no building within the tick length. 1.0 is a street with no built frontage.",
+      "reference": "10.21105/joss.01807"
+    },
+    {
+      "name": "street_width_m",
+      "label": "Street width",
+      "unit": "m",
+      "description": "Street-length-weighted mean of `momepy.street_profile()`'s `width` — the mean building-to-building distance across the street. A segment reaching no building reports the tick length as a theoretical maximum.",
+      "reference": "10.21105/joss.01807"
+    },
+    {
+      "name": "building_count",
+      "label": "Building count",
+      "unit": "count",
+      "description": "Buildings whose representative point falls inside the unit. Whole buildings, unlike the area quantities: half a building is not a building. Zero — not null — for a unit holding none.",
+      "reference": "computed here"
+    },
+    {
+      "name": "mean_building_area_m2",
+      "label": "Mean building area",
+      "unit": "m2",
+      "description": "Mean footprint area of the buildings counted by `building_count`, measured over the whole footprint rather than the part inside the unit. Null for a unit holding none.",
+      "reference": "computed here"
+    },
+    {
+      "name": "industrial_fraction_of_building_area",
+      "label": "Industrial share of building area",
+      "unit": "fraction",
+      "description": "Share of the unit's BUILDING area that is industrial — footprint falling inside the dissolved industrial evidence, over all footprint. Bernard et al. (2024)'s FIND/B, so their published 0.33 threshold transfers to this column and not to the unit-area one. Null where the unit holds no buildings: a share of nothing is undefined, not zero. Functional, not morphological — Phase 6 applies it after the prototype distance.",
+      "reference": "10.5194/gmd-17-2077-2024"
+    },
+    {
+      "name": "industrial_fraction_of_unit_area",
+      "label": "Industrial share of unit area",
+      "unit": "fraction",
+      "description": "Share of the unit's GROUND that is industrial: industrial building footprints or industrial land-use parcels, the two dissolved into one geometry so overlapping evidence counts once. Sensitive to how much of the cell is built at all, which is why Bernard's threshold does not transfer to it.",
+      "reference": "computed here"
+    },
+    {
+      "name": "industrial_fraction",
+      "label": "Industrial share (deprecated alias)",
+      "unit": "fraction",
+      "description": "DEPRECATED alias for `industrial_fraction_of_unit_area`, kept for one release. The bare name is the one whose denominator this repository contradicted itself about in three places at once; read one of the two named columns instead.",
+      "reference": "computed here"
+    },
+    {
+      "name": "industrial_fraction_buildings",
+      "label": "Industrial share, from building class",
+      "unit": "fraction",
+      "description": "Unit area share covered by industrial building footprints alone.",
+      "reference": "computed here"
+    },
+    {
+      "name": "industrial_fraction_land_use",
+      "label": "Industrial share, from land use",
+      "unit": "fraction",
+      "description": "Unit area share covered by industrial land-use parcels alone.",
+      "reference": "computed here"
+    },
+    {
+      "name": "industrial_evidence",
+      "label": "Industrial evidence source",
+      "unit": "category",
+      "description": "Which sources contributed area to `industrial_fraction`: 'none', 'buildings', 'land_use' or 'both'. CLAUDE.md requires recording which evidence source fired, because the two are very differently reliable.",
+      "reference": "computed here"
+    },
+    {
+      "name": "sem_lightweight_buildings_of_building_area",
+      "label": "Lightweight share of building area",
+      "unit": "fraction",
+      "description": "Share of the unit's building area whose Overture `subtype` or `class` places it in the 'lightweight' group. Evidence for LCZ 7. Null where the unit holds no building area. Bernard et al.'s FIND/B quantity, generalised beyond industry. Groups are not a partition and these do not sum to one.",
+      "reference": "10.5194/gmd-17-2077-2024"
+    },
+    {
+      "name": "sem_large_lowrise_buildings_of_building_area",
+      "label": "Large lowrise share of building area",
+      "unit": "fraction",
+      "description": "Share of the unit's building area whose Overture `subtype` or `class` places it in the 'large_lowrise' group. Evidence for LCZ 8. Null where the unit holds no building area. Bernard et al.'s FIND/B quantity, generalised beyond industry. Groups are not a partition and these do not sum to one.",
+      "reference": "10.5194/gmd-17-2077-2024"
+    },
+    {
+      "name": "sem_heavy_industry_buildings_of_building_area",
+      "label": "Heavy industry share of building area",
+      "unit": "fraction",
+      "description": "Share of the unit's building area whose Overture `subtype` or `class` places it in the 'heavy_industry' group. Evidence for LCZ 10. Null where the unit holds no building area. Bernard et al.'s FIND/B quantity, generalised beyond industry. Groups are not a partition and these do not sum to one.",
+      "reference": "10.5194/gmd-17-2077-2024"
+    },
+    {
+      "name": "sem_residential_buildings_of_building_area",
+      "label": "Residential share of building area",
+      "unit": "fraction",
+      "description": "Share of the unit's building area whose Overture `subtype` or `class` places it in the 'residential' group. Evidence for LCZ 1-6 context. Null where the unit holds no building area. Bernard et al.'s FIND/B quantity, generalised beyond industry. Groups are not a partition and these do not sum to one.",
+      "reference": "10.5194/gmd-17-2077-2024"
+    },
+    {
+      "name": "sem_commercial_buildings_of_building_area",
+      "label": "Commercial share of building area",
+      "unit": "fraction",
+      "description": "Share of the unit's building area whose Overture `subtype` or `class` places it in the 'commercial' group. Evidence for LCZ 1-3, 8 context. Null where the unit holds no building area. Bernard et al.'s FIND/B quantity, generalised beyond industry. Groups are not a partition and these do not sum to one.",
+      "reference": "10.5194/gmd-17-2077-2024"
+    },
+    {
+      "name": "sem_lightweight_parcels_of_unit_area",
+      "label": "Lightweight share of unit area",
+      "unit": "fraction",
+      "description": "Share of the unit's area under land-use parcels of the 'lightweight' group, dissolved before measuring. Evidence for LCZ 7. A different numerator *and* denominator from the building column of the same group; the two are not comparable and their names say so.",
+      "reference": "computed here"
+    },
+    {
+      "name": "sem_large_lowrise_parcels_of_unit_area",
+      "label": "Large lowrise share of unit area",
+      "unit": "fraction",
+      "description": "Share of the unit's area under land-use parcels of the 'large_lowrise' group, dissolved before measuring. Evidence for LCZ 8. A different numerator *and* denominator from the building column of the same group; the two are not comparable and their names say so.",
+      "reference": "computed here"
+    },
+    {
+      "name": "sem_heavy_industry_parcels_of_unit_area",
+      "label": "Heavy industry share of unit area",
+      "unit": "fraction",
+      "description": "Share of the unit's area under land-use parcels of the 'heavy_industry' group, dissolved before measuring. Evidence for LCZ 10. A different numerator *and* denominator from the building column of the same group; the two are not comparable and their names say so.",
+      "reference": "computed here"
+    },
+    {
+      "name": "sem_residential_parcels_of_unit_area",
+      "label": "Residential share of unit area",
+      "unit": "fraction",
+      "description": "Share of the unit's area under land-use parcels of the 'residential' group, dissolved before measuring. Evidence for LCZ 1-6 context. A different numerator *and* denominator from the building column of the same group; the two are not comparable and their names say so.",
+      "reference": "computed here"
+    },
+    {
+      "name": "sem_commercial_parcels_of_unit_area",
+      "label": "Commercial share of unit area",
+      "unit": "fraction",
+      "description": "Share of the unit's area under land-use parcels of the 'commercial' group, dissolved before measuring. Evidence for LCZ 1-3, 8 context. A different numerator *and* denominator from the building column of the same group; the two are not comparable and their names say so.",
+      "reference": "computed here"
+    },
+    {
+      "name": "building_tag_coverage",
+      "label": "Building attribute coverage",
+      "unit": "fraction",
+      "description": "Share of the unit's building area whose Overture `subtype` or `class` is present and not 'unknown'. **Read every semantic fraction against this.** Building attributes are 48.6% of building area across Europe and North America and 13.6% elsewhere — Rio reaches 3.1% — so a semantic fraction of 0.0 usually means 'untagged', not 'absent'. Wherever an ML source wins the footprints its tagged share is exactly 0.0%. The role `height_completeness` plays for the height cascade, on a second attribute that collapses in the same places.",
+      "reference": "computed here"
+    },
+    {
+      "name": "land_use_coverage",
+      "label": "Land-use parcel coverage",
+      "unit": "fraction",
+      "description": "Share of the unit's area under any Overture land-use parcel, dissolved so self-overlapping parcels count once. Holds 30-65% in the cities where building tags are near-absent, which is why parcel and building evidence are reported apart.",
+      "reference": "computed here"
+    }
+  ],
+  "not_computed": {
+    "sky_view_factor": "Deferred by CLAUDE.md. The single most expensive component, and strongly correlated with aspect ratio, which this phase does compute. Bernard et al. (2018), 10.3390/cli6030060, is the preferred route when it is picked up: vector ray-launching, no DSM required.",
+    "terrain_roughness_class": "Deferred. CLAUDE.md asks for it via the Davenport et al. (2000) lookup, but that table maps a roughness class to a roughness length z0, and computing z0 from morphology is on the same document's deferred list. Bernard et al. (2024) weight z0 at 0.5 against 8 for building fraction and 6 for mean height, so it is the least influential parameter in their scheme — deferring it costs the classification little."
+  },
+  "limitations": {
+    "industrial_fraction": "Overture exposes a single 'industrial' value with no heavy/light split. GeoClimate keys LCZ 10 on OSM's HEAVY INDUSTRY against light industry and commercial, and that distinction does not survive Overture's schema normalisation — the same normalisation that removes the need for a tag-mapping table also discards the semantic detail OSM carried. A light-industrial estate and a refinery are therefore indistinguishable here, so Phase 6's LCZ 10 threshold is set to under-trigger: a missing LCZ 10 is a visible gap, whereas a light-industrial estate mislabelled as heavy industry is an invisible error that propagates into any model consuming the map. 'warehouse' is excluded from the industrial vocabulary; it is an LCZ 8 example.",
+    "h_mean_area_weighted, h_std": "Secondary columns. They are not Stewart & Oke's height of roughness elements and must not be used for classification — Hr is the geometric mean, and the LCZ property ranges were defined for it. These exist for the deferred roughness work (Macdonald, Kanda)."
+  },
+  "unused_lcz_properties": {
+    "sky_view_factor": "Deferred in Phase 5 as the single most expensive component, and strongly correlated with aspect ratio, which is computed. Its absence is the main reason the published table cannot separate LCZ A, B, C and D: it is one of only three dimensions distinguishing them, and the other two are also building-derived. Bernard et al. (2024) weight it at 4 of 21.5, second only to building surface fraction.",
+    "terrain_roughness_class": "Deferred in Phase 5. Davenport et al. (2000) map the class to a roughness length z0, and deriving z0 from morphology (Macdonald, Kanda) is itself deferred, so the lookup has no input. Bernard et al. (2024) weight z0 at 0.5 of 21.5, the least influential dimension in their scheme.",
+    "surface_admittance": "A thermal property of the materials, not a morphological one. Nothing in the open vector or raster data this package ingests measures it, and no proxy for it is proposed. Stewart & Oke publish it as a descriptive attribute of each class rather than as a classification input, and Bernard et al. (2024) assign it no weight.",
+    "surface_albedo": "As for surface admittance: a radiative property of the materials. Deriving it would need a multispectral product and a narrowband-to-broadband conversion, which is a different package.",
+    "anthropogenic_heat_output": "An energy-use quantity, not a surface one. Estimating it needs population, traffic and building-energy data none of which this package ingests. Note that it is the only property in the published table that would separate LCZ 10 from LCZ 8 directly - 300+ W m-2 against at most 50 - which is why the LCZ 10 rule has to reach for a functional attribute instead."
+  },
+  "unapplied_weights": [
+    {
+      "property": "sky_view_factor",
+      "weight": 4.0,
+      "reason": "deferred in Phase 5"
+    },
+    {
+      "property": "effective_terrain_roughness_length",
+      "weight": 0.5,
+      "reason": "deferred in Phase 5"
+    }
+  ],
+  "classification": {
+    "weight_preset": "bernard2024_partial",
+    "weight_preset_description": "Bernard et al. (2024) Sect. 2.5 defaults for the built types: H/W 3, FB 8, FI 0, FP 0, Hr 6. Impervious and pervious fractions carry zero weight on their stated grounds that they are secondary characteristics and often inaccurate in urban areas. Their SVF (4) and z0 (0.5) weights cannot be applied because this package computes neither, so the effective built metric has three non-zero dimensions rather than five. The natural vector is uniform and is lczkit's own: the paper classifies the natural types by a land-cover decision tree and defines no distance metric for them. Named `_partial` because 17 of the published 21.5 weight units are applied: it is not Bernard's metric, and FB carries roughly 47% of what remains.",
+    "weights": {
+      "built": {
+        "aspect_ratio": 3.0,
+        "building_surface_fraction": 8.0,
+        "impervious_surface_fraction": 0.0,
+        "pervious_surface_fraction": 0.0,
+        "height_of_roughness_elements_m": 6.0,
+        "tree_fraction": 0.0,
+        "water_fraction": 0.0
+      },
+      "natural": {
+        "aspect_ratio": 1.0,
+        "building_surface_fraction": 1.0,
+        "impervious_surface_fraction": 1.0,
+        "pervious_surface_fraction": 1.0,
+        "height_of_roughness_elements_m": 1.0,
+        "tree_fraction": 1.0,
+        "water_fraction": 1.0
+      }
+    },
+    "normalisation": {
+      "aspect_ratio": {
+        "mean": 0.6857142857142859,
+        "std": 0.5924912812585067
+      },
+      "building_surface_fraction": {
+        "mean": 0.3259259259259259,
+        "std": 0.22042482987209647
+      },
+      "impervious_surface_fraction": {
+        "mean": 0.324,
+        "std": 0.19652989594461195
+      },
+      "pervious_surface_fraction": {
+        "mean": 0.5045454545454546,
+        "std": 0.28994869879667384
+      },
+      "height_of_roughness_elements_m": {
+        "mean": 9.711538461538462,
+        "std": 8.991366667877193
+      },
+      "tree_fraction": {
+        "mean": 0.2,
+        "std": 0.17320508075688773
+      },
+      "water_fraction": {
+        "mean": 0.15714285714285717,
+        "std": 0.13997084244475305
+      }
+    },
+    "prototypes": [
+      {
+        "code": 1,
+        "dimension": "aspect_ratio",
+        "property": "aspect_ratio",
+        "min": 2.0,
+        "max": null,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 1,
+        "dimension": "building_surface_fraction",
+        "property": "building_surface_fraction",
+        "min": 0.4,
+        "max": 0.6,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 1,
+        "dimension": "impervious_surface_fraction",
+        "property": "impervious_surface_fraction",
+        "min": 0.4,
+        "max": 0.6,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 1,
+        "dimension": "pervious_surface_fraction",
+        "property": "pervious_surface_fraction",
+        "min": null,
+        "max": 0.1,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 1,
+        "dimension": "height_of_roughness_elements_m",
+        "property": "height_of_roughness_elements",
+        "min": 25.0,
+        "max": null,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 2,
+        "dimension": "aspect_ratio",
+        "property": "aspect_ratio",
+        "min": 0.75,
+        "max": 2.0,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 2,
+        "dimension": "building_surface_fraction",
+        "property": "building_surface_fraction",
+        "min": 0.4,
+        "max": 0.7000000000000001,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 2,
+        "dimension": "impervious_surface_fraction",
+        "property": "impervious_surface_fraction",
+        "min": 0.3,
+        "max": 0.5,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 2,
+        "dimension": "pervious_surface_fraction",
+        "property": "pervious_surface_fraction",
+        "min": null,
+        "max": 0.2,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 2,
+        "dimension": "height_of_roughness_elements_m",
+        "property": "height_of_roughness_elements",
+        "min": 10.0,
+        "max": 25.0,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 3,
+        "dimension": "aspect_ratio",
+        "property": "aspect_ratio",
+        "min": 0.75,
+        "max": 1.5,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 3,
+        "dimension": "building_surface_fraction",
+        "property": "building_surface_fraction",
+        "min": 0.4,
+        "max": 0.7000000000000001,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 3,
+        "dimension": "impervious_surface_fraction",
+        "property": "impervious_surface_fraction",
+        "min": 0.2,
+        "max": 0.5,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 3,
+        "dimension": "pervious_surface_fraction",
+        "property": "pervious_surface_fraction",
+        "min": null,
+        "max": 0.3,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 3,
+        "dimension": "height_of_roughness_elements_m",
+        "property": "height_of_roughness_elements",
+        "min": 3.0,
+        "max": 10.0,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 4,
+        "dimension": "aspect_ratio",
+        "property": "aspect_ratio",
+        "min": 0.75,
+        "max": 1.25,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 4,
+        "dimension": "building_surface_fraction",
+        "property": "building_surface_fraction",
+        "min": 0.2,
+        "max": 0.4,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 4,
+        "dimension": "impervious_surface_fraction",
+        "property": "impervious_surface_fraction",
+        "min": 0.3,
+        "max": 0.4,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 4,
+        "dimension": "pervious_surface_fraction",
+        "property": "pervious_surface_fraction",
+        "min": 0.3,
+        "max": 0.4,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 4,
+        "dimension": "height_of_roughness_elements_m",
+        "property": "height_of_roughness_elements",
+        "min": 25.0,
+        "max": null,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 5,
+        "dimension": "aspect_ratio",
+        "property": "aspect_ratio",
+        "min": 0.3,
+        "max": 0.75,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 5,
+        "dimension": "building_surface_fraction",
+        "property": "building_surface_fraction",
+        "min": 0.2,
+        "max": 0.4,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 5,
+        "dimension": "impervious_surface_fraction",
+        "property": "impervious_surface_fraction",
+        "min": 0.3,
+        "max": 0.5,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 5,
+        "dimension": "pervious_surface_fraction",
+        "property": "pervious_surface_fraction",
+        "min": 0.2,
+        "max": 0.4,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 5,
+        "dimension": "height_of_roughness_elements_m",
+        "property": "height_of_roughness_elements",
+        "min": 10.0,
+        "max": 25.0,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 6,
+        "dimension": "aspect_ratio",
+        "property": "aspect_ratio",
+        "min": 0.3,
+        "max": 0.75,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 6,
+        "dimension": "building_surface_fraction",
+        "property": "building_surface_fraction",
+        "min": 0.2,
+        "max": 0.4,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 6,
+        "dimension": "impervious_surface_fraction",
+        "property": "impervious_surface_fraction",
+        "min": 0.2,
+        "max": 0.5,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 6,
+        "dimension": "pervious_surface_fraction",
+        "property": "pervious_surface_fraction",
+        "min": 0.3,
+        "max": 0.6,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 6,
+        "dimension": "height_of_roughness_elements_m",
+        "property": "height_of_roughness_elements",
+        "min": 3.0,
+        "max": 10.0,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 7,
+        "dimension": "aspect_ratio",
+        "property": "aspect_ratio",
+        "min": 1.0,
+        "max": 2.0,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 7,
+        "dimension": "building_surface_fraction",
+        "property": "building_surface_fraction",
+        "min": 0.6,
+        "max": 0.9,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 7,
+        "dimension": "impervious_surface_fraction",
+        "property": "impervious_surface_fraction",
+        "min": null,
+        "max": 0.2,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 7,
+        "dimension": "pervious_surface_fraction",
+        "property": "pervious_surface_fraction",
+        "min": null,
+        "max": 0.3,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 7,
+        "dimension": "height_of_roughness_elements_m",
+        "property": "height_of_roughness_elements",
+        "min": 2.0,
+        "max": 4.0,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 8,
+        "dimension": "aspect_ratio",
+        "property": "aspect_ratio",
+        "min": 0.1,
+        "max": 0.3,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 8,
+        "dimension": "building_surface_fraction",
+        "property": "building_surface_fraction",
+        "min": 0.3,
+        "max": 0.5,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 8,
+        "dimension": "impervious_surface_fraction",
+        "property": "impervious_surface_fraction",
+        "min": 0.4,
+        "max": 0.5,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 8,
+        "dimension": "pervious_surface_fraction",
+        "property": "pervious_surface_fraction",
+        "min": null,
+        "max": 0.2,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 8,
+        "dimension": "height_of_roughness_elements_m",
+        "property": "height_of_roughness_elements",
+        "min": 3.0,
+        "max": 10.0,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 9,
+        "dimension": "aspect_ratio",
+        "property": "aspect_ratio",
+        "min": 0.1,
+        "max": 0.25,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 9,
+        "dimension": "building_surface_fraction",
+        "property": "building_surface_fraction",
+        "min": 0.1,
+        "max": 0.2,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 9,
+        "dimension": "impervious_surface_fraction",
+        "property": "impervious_surface_fraction",
+        "min": null,
+        "max": 0.2,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 9,
+        "dimension": "pervious_surface_fraction",
+        "property": "pervious_surface_fraction",
+        "min": 0.6,
+        "max": 0.8,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 9,
+        "dimension": "height_of_roughness_elements_m",
+        "property": "height_of_roughness_elements",
+        "min": 3.0,
+        "max": 10.0,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 10,
+        "dimension": "aspect_ratio",
+        "property": "aspect_ratio",
+        "min": 0.2,
+        "max": 0.5,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 10,
+        "dimension": "building_surface_fraction",
+        "property": "building_surface_fraction",
+        "min": 0.2,
+        "max": 0.3,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 10,
+        "dimension": "impervious_surface_fraction",
+        "property": "impervious_surface_fraction",
+        "min": 0.2,
+        "max": 0.4,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 10,
+        "dimension": "pervious_surface_fraction",
+        "property": "pervious_surface_fraction",
+        "min": 0.4,
+        "max": 0.5,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 10,
+        "dimension": "height_of_roughness_elements_m",
+        "property": "height_of_roughness_elements",
+        "min": 5.0,
+        "max": 15.0,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 11,
+        "dimension": "aspect_ratio",
+        "property": "aspect_ratio",
+        "min": 1.0,
+        "max": null,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 11,
+        "dimension": "building_surface_fraction",
+        "property": "building_surface_fraction",
+        "min": null,
+        "max": 0.1,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 11,
+        "dimension": "impervious_surface_fraction",
+        "property": "impervious_surface_fraction",
+        "min": null,
+        "max": 0.1,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 11,
+        "dimension": "pervious_surface_fraction",
+        "property": "pervious_surface_fraction",
+        "min": 0.9,
+        "max": null,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 11,
+        "dimension": "height_of_roughness_elements_m",
+        "property": "height_of_roughness_elements",
+        "min": 3.0,
+        "max": 30.0,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 11,
+        "dimension": "tree_fraction",
+        "property": "tree_fraction",
+        "min": 0.5,
+        "max": null,
+        "source": "lczkit"
+      },
+      {
+        "code": 11,
+        "dimension": "water_fraction",
+        "property": "water_fraction",
+        "min": null,
+        "max": 0.1,
+        "source": "lczkit"
+      },
+      {
+        "code": 12,
+        "dimension": "aspect_ratio",
+        "property": "aspect_ratio",
+        "min": 0.25,
+        "max": 0.75,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 12,
+        "dimension": "building_surface_fraction",
+        "property": "building_surface_fraction",
+        "min": null,
+        "max": 0.1,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 12,
+        "dimension": "impervious_surface_fraction",
+        "property": "impervious_surface_fraction",
+        "min": null,
+        "max": 0.1,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 12,
+        "dimension": "pervious_surface_fraction",
+        "property": "pervious_surface_fraction",
+        "min": 0.9,
+        "max": null,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 12,
+        "dimension": "height_of_roughness_elements_m",
+        "property": "height_of_roughness_elements",
+        "min": 3.0,
+        "max": 15.0,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 12,
+        "dimension": "tree_fraction",
+        "property": "tree_fraction",
+        "min": 0.1,
+        "max": 0.5,
+        "source": "lczkit"
+      },
+      {
+        "code": 12,
+        "dimension": "water_fraction",
+        "property": "water_fraction",
+        "min": null,
+        "max": 0.1,
+        "source": "lczkit"
+      },
+      {
+        "code": 13,
+        "dimension": "aspect_ratio",
+        "property": "aspect_ratio",
+        "min": 0.25,
+        "max": 1.0,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 13,
+        "dimension": "building_surface_fraction",
+        "property": "building_surface_fraction",
+        "min": null,
+        "max": 0.1,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 13,
+        "dimension": "impervious_surface_fraction",
+        "property": "impervious_surface_fraction",
+        "min": null,
+        "max": 0.1,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 13,
+        "dimension": "pervious_surface_fraction",
+        "property": "pervious_surface_fraction",
+        "min": 0.9,
+        "max": null,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 13,
+        "dimension": "height_of_roughness_elements_m",
+        "property": "height_of_roughness_elements",
+        "min": null,
+        "max": 2.0,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 13,
+        "dimension": "tree_fraction",
+        "property": "tree_fraction",
+        "min": null,
+        "max": 0.1,
+        "source": "lczkit"
+      },
+      {
+        "code": 13,
+        "dimension": "water_fraction",
+        "property": "water_fraction",
+        "min": null,
+        "max": 0.1,
+        "source": "lczkit"
+      },
+      {
+        "code": 14,
+        "dimension": "aspect_ratio",
+        "property": "aspect_ratio",
+        "min": null,
+        "max": 0.1,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 14,
+        "dimension": "building_surface_fraction",
+        "property": "building_surface_fraction",
+        "min": null,
+        "max": 0.1,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 14,
+        "dimension": "impervious_surface_fraction",
+        "property": "impervious_surface_fraction",
+        "min": null,
+        "max": 0.1,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 14,
+        "dimension": "pervious_surface_fraction",
+        "property": "pervious_surface_fraction",
+        "min": 0.9,
+        "max": null,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 14,
+        "dimension": "height_of_roughness_elements_m",
+        "property": "height_of_roughness_elements",
+        "min": null,
+        "max": 1.0,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 14,
+        "dimension": "tree_fraction",
+        "property": "tree_fraction",
+        "min": null,
+        "max": 0.1,
+        "source": "lczkit"
+      },
+      {
+        "code": 14,
+        "dimension": "water_fraction",
+        "property": "water_fraction",
+        "min": null,
+        "max": 0.1,
+        "source": "lczkit"
+      },
+      {
+        "code": 15,
+        "dimension": "aspect_ratio",
+        "property": "aspect_ratio",
+        "min": null,
+        "max": 0.1,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 15,
+        "dimension": "building_surface_fraction",
+        "property": "building_surface_fraction",
+        "min": null,
+        "max": 0.1,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 15,
+        "dimension": "impervious_surface_fraction",
+        "property": "impervious_surface_fraction",
+        "min": 0.9,
+        "max": null,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 15,
+        "dimension": "pervious_surface_fraction",
+        "property": "pervious_surface_fraction",
+        "min": null,
+        "max": 0.1,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 15,
+        "dimension": "height_of_roughness_elements_m",
+        "property": "height_of_roughness_elements",
+        "min": null,
+        "max": 0.25,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 15,
+        "dimension": "tree_fraction",
+        "property": "tree_fraction",
+        "min": null,
+        "max": 0.1,
+        "source": "lczkit"
+      },
+      {
+        "code": 15,
+        "dimension": "water_fraction",
+        "property": "water_fraction",
+        "min": null,
+        "max": 0.1,
+        "source": "lczkit"
+      },
+      {
+        "code": 16,
+        "dimension": "aspect_ratio",
+        "property": "aspect_ratio",
+        "min": null,
+        "max": 0.1,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 16,
+        "dimension": "building_surface_fraction",
+        "property": "building_surface_fraction",
+        "min": null,
+        "max": 0.1,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 16,
+        "dimension": "impervious_surface_fraction",
+        "property": "impervious_surface_fraction",
+        "min": null,
+        "max": 0.1,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 16,
+        "dimension": "pervious_surface_fraction",
+        "property": "pervious_surface_fraction",
+        "min": 0.9,
+        "max": null,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 16,
+        "dimension": "height_of_roughness_elements_m",
+        "property": "height_of_roughness_elements",
+        "min": null,
+        "max": 0.25,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 16,
+        "dimension": "tree_fraction",
+        "property": "tree_fraction",
+        "min": null,
+        "max": 0.1,
+        "source": "lczkit"
+      },
+      {
+        "code": 16,
+        "dimension": "water_fraction",
+        "property": "water_fraction",
+        "min": null,
+        "max": 0.1,
+        "source": "lczkit"
+      },
+      {
+        "code": 17,
+        "dimension": "aspect_ratio",
+        "property": "aspect_ratio",
+        "min": null,
+        "max": 0.1,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 17,
+        "dimension": "building_surface_fraction",
+        "property": "building_surface_fraction",
+        "min": null,
+        "max": 0.1,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 17,
+        "dimension": "impervious_surface_fraction",
+        "property": "impervious_surface_fraction",
+        "min": null,
+        "max": 0.1,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 17,
+        "dimension": "pervious_surface_fraction",
+        "property": "pervious_surface_fraction",
+        "min": 0.9,
+        "max": null,
+        "source": "10.1175/BAMS-D-11-00019.1"
+      },
+      {
+        "code": 17,
+        "dimension": "tree_fraction",
+        "property": "tree_fraction",
+        "min": null,
+        "max": 0.1,
+        "source": "lczkit"
+      },
+      {
+        "code": 17,
+        "dimension": "water_fraction",
+        "property": "water_fraction",
+        "min": 0.5,
+        "max": null,
+        "source": "lczkit"
+      }
+    ],
+    "semantic_rules": [
+      {
+        "name": "large_lowrise",
+        "lcz": 8,
+        "column": "sem_large_lowrise_buildings_of_building_area",
+        "min_fraction": 0.5,
+        "enabled": false,
+        "reason": "LCZ 8 fails by construction, not by tuning (Phase 14): its building-surface band overlaps LCZ 3 and 6, its Hr band is identical to LCZ 3, 6 and 9, so aspect ratio is its only separator in the metric — and aspect ratio is null exactly where large setbacks stop streets reaching buildings, which is most of an LCZ 8 unit. Measured 0.0% agreement over 224 Rotterdam cells. A functional route is the only evidence available that does not depend on a parameter the class nullifies.",
+        "units_assigned": 0
+      },
+      {
+        "name": "lightweight",
+        "lcz": 7,
+        "column": "sem_lightweight_buildings_of_building_area",
+        "min_fraction": 0.5,
+        "enabled": false,
+        "reason": "LCZ 7 reaches its published building-surface range in 8.2% of cells (Phase 13), low on both tails across five non-European cities, and it is the class the founding premise is most about. **This rule will mostly not fire where it matters**: Overture has no slum/shanty/ger/tent value, and tagged building area runs 13.6% outside Europe and North America against 48.6% inside — Rio at 3.1%. That is a result to report, not a reason to omit the rule, and `building_tag_coverage` is what makes the non-firing legible rather than invisible.",
+        "units_assigned": 0
+      }
+    ],
+    "thresholds": {
+      "built_min_building_fraction": 0.1,
+      "lcz10_industrial_column": "industrial_fraction_of_building_area",
+      "lcz10_min_industrial_fraction": 0.45,
+      "lcz1_min_height_m": null,
+      "natural_dominant_fraction": 0.5,
+      "natural_negligible_fraction": 0.1
+    },
+    "unreachable_classes": {
+      "13": "Excluded by configuration: not separable from LCZ D with the parameters this package computes, where no building stands. The published table distinguishes them only by sky view factor, aspect ratio and height of roughness elements, all building-derived, and the default land-cover mapping folds shrubland, grassland and bare ground into one pervious class. Distances to it are reported but it is never assigned. See docs/references/tables/lczkit_natural_class_ranges.md.",
+      "16": "Dominated: the LCZ F prototype box is contained in LCZ D's in every dimension, so its distance can never be strictly smaller and ties break to the lower code. Unreachable by arithmetic rather than by configuration - adding it to reachable_natural_classes would not make it assignable. Reaching it needs a land-cover mapping that emits bare ground separately. Distances to it are reported but it is never assigned. See docs/references/tables/lczkit_natural_class_ranges.md.",
+      "10": "Functional only: removed from the distance metric per Bernard et al. (2024) and assigned solely by the industrial rule, above 0.45 of industrial_fraction_of_building_area. The morphological rule it replaced was measured inert on the Rotterdam fixture at every threshold from 0.05 to 0.5 - port plots are sparsely built, so building surface fraction places them on LCZ 9 and LCZ 10 never came within reach of the argmin. Its distance is still computed and reported as lcz_d10."
+    }
+  },
+  "classification_summary": {
+    "n_units": 251,
+    "n_unlabelled": 0,
+    "labels": {
+      "1": 8,
+      "2": 16,
+      "3": 53,
+      "4": 3,
+      "5": 12,
+      "6": 40,
+      "8": 100,
+      "9": 11,
+      "15": 8
+    },
+    "label_route": {
+      "distance_built": 243,
+      "distance_natural": 8,
+      "industrial_rule": 0,
+      "semantic_rule": 0
+    },
+    "lcz10_rule_applied": 0,
+    "median_uniqueness": 0.5174564273426735,
+    "median_n_params_used": 3.0
+  },
+  "legend": {
+    "1": {
+      "code": 1,
+      "label": "1",
+      "name": "Compact high-rise",
+      "colour": "#8c0000"
+    },
+    "2": {
+      "code": 2,
+      "label": "2",
+      "name": "Compact midrise",
+      "colour": "#d10000"
+    },
+    "3": {
+      "code": 3,
+      "label": "3",
+      "name": "Compact low-rise",
+      "colour": "#ff0000"
+    },
+    "4": {
+      "code": 4,
+      "label": "4",
+      "name": "Open high-rise",
+      "colour": "#bf4d00"
+    },
+    "5": {
+      "code": 5,
+      "label": "5",
+      "name": "Open midrise",
+      "colour": "#ff6600"
+    },
+    "6": {
+      "code": 6,
+      "label": "6",
+      "name": "Open low-rise",
+      "colour": "#ff9955"
+    },
+    "7": {
+      "code": 7,
+      "label": "7",
+      "name": "Lightweight low-rise",
+      "colour": "#faee05"
+    },
+    "8": {
+      "code": 8,
+      "label": "8",
+      "name": "Large low-rise",
+      "colour": "#bcbcbc"
+    },
+    "9": {
+      "code": 9,
+      "label": "9",
+      "name": "Sparsely built",
+      "colour": "#ffccaa"
+    },
+    "10": {
+      "code": 10,
+      "label": "10",
+      "name": "Heavy industry",
+      "colour": "#555555"
+    },
+    "11": {
+      "code": 11,
+      "label": "A",
+      "name": "Dense trees",
+      "colour": "#006a00"
+    },
+    "12": {
+      "code": 12,
+      "label": "B",
+      "name": "Scattered trees",
+      "colour": "#00aa00"
+    },
+    "13": {
+      "code": 13,
+      "label": "C",
+      "name": "Bush, scrub",
+      "colour": "#648525"
+    },
+    "14": {
+      "code": 14,
+      "label": "D",
+      "name": "Low plants",
+      "colour": "#b9db79"
+    },
+    "15": {
+      "code": 15,
+      "label": "E",
+      "name": "Bare rock or paved",
+      "colour": "#000000"
+    },
+    "16": {
+      "code": 16,
+      "label": "F",
+      "name": "Bare soil or sand",
+      "colour": "#fbf7ae"
+    },
+    "17": {
+      "code": 17,
+      "label": "G",
+      "name": "Water",
+      "colour": "#6a6aff"
+    }
+  },
+  "legend_citation": "10.5194/essd-14-3835-2022",
+  "breaks": [
+    {
+      "column": "building_surface_fraction",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        0.0,
+        0.2601989488928285,
+        0.3541272291984299,
+        0.43602305526263546,
+        0.4984140679862165,
+        0.563366152071138,
+        0.6193844235717044,
+        0.7542184062495773
+      ],
+      "n_valid": 251,
+      "minimum": 0.0,
+      "maximum": 0.7542184062495773
+    },
+    {
+      "column": "impervious_surface_fraction",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        0.1515905864199828,
+        0.3707295918319829,
+        0.4246204743138459,
+        0.46522646095477554,
+        0.5207229500633358,
+        0.5614637230183936,
+        0.6454586180524117,
+        0.9274672982981692
+      ],
+      "n_valid": 251,
+      "minimum": 0.1515905864199828,
+      "maximum": 0.9274672982981692
+    },
+    {
+      "column": "pervious_surface_fraction",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        0.0,
+        0.0017034643914361396,
+        0.009126844796673906,
+        0.03609498133947727,
+        0.12617730179661116,
+        0.7273705392111494
+      ],
+      "n_valid": 251,
+      "minimum": 0.0,
+      "maximum": 0.7273705392111494
+    },
+    {
+      "column": "tree_fraction",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        0.0,
+        0.0026848333217657206,
+        0.012976260620406252,
+        0.06067979306339743,
+        0.633225212939566
+      ],
+      "n_valid": 251,
+      "minimum": 0.0,
+      "maximum": 0.633225212939566
+    },
+    {
+      "column": "water_fraction",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        0.0,
+        0.007584047791515978
+      ],
+      "n_valid": 251,
+      "minimum": 0.0,
+      "maximum": 0.007584047791515978
+    },
+    {
+      "column": "height_of_roughness_elements_m",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        3.37837204532167,
+        4.212654145727292,
+        4.954691501624225,
+        5.53880984328676,
+        6.214419701184254,
+        7.377147867679414,
+        10.509275405418467,
+        55.810475662190996
+      ],
+      "n_valid": 250,
+      "minimum": 3.37837204532167,
+      "maximum": 55.810475662190996
+    },
+    {
+      "column": "h_geometric_area_weighted",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        2.9050043440039377,
+        4.433710008928451,
+        5.072983861777342,
+        5.714696074539786,
+        6.417972282554929,
+        7.739689112162762,
+        10.155441320554429,
+        59.21072941693879
+      ],
+      "n_valid": 250,
+      "minimum": 2.9050043440039377,
+      "maximum": 59.21072941693879
+    },
+    {
+      "column": "h_mean_area_weighted",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        3.5095415451569667,
+        4.634303584366918,
+        5.457958833307019,
+        6.113099307116291,
+        6.937463691099851,
+        8.626605027830413,
+        12.54641798973386,
+        76.6031585150348
+      ],
+      "n_valid": 250,
+      "minimum": 3.5095415451569667,
+      "maximum": 76.6031585150348
+    },
+    {
+      "column": "h_std",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        0.056531237607881694,
+        1.1967960476548418,
+        1.6399378066565469,
+        2.2037565695081396,
+        2.7999695490625522,
+        4.128934907856424,
+        9.947630419721069,
+        68.29007877441785
+      ],
+      "n_valid": 250,
+      "minimum": 0.056531237607881694,
+      "maximum": 68.29007877441785
+    },
+    {
+      "column": "aspect_ratio",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        0.14539812302516936,
+        0.23889674704044064,
+        0.28362232945097093,
+        0.3110327833653449,
+        0.3595192770032939,
+        0.4214480814226151,
+        0.6282503065537848,
+        2.542991025701584
+      ],
+      "n_valid": 251,
+      "minimum": 0.14539812302516936,
+      "maximum": 2.542991025701584
+    },
+    {
+      "column": "street_openness",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        0.19494039225887758,
+        0.31156873096585735,
+        0.3460864811982871,
+        0.4011420712146702,
+        0.444486406628751,
+        0.5235700230793673,
+        0.6066592076259327,
+        0.9181636114944262
+      ],
+      "n_valid": 251,
+      "minimum": 0.19494039225887758,
+      "maximum": 0.9181636114944262
+    },
+    {
+      "column": "street_width_m",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        11.0401687870081,
+        17.086601797473463,
+        18.643168661301956,
+        21.5705929848943,
+        23.702729994921985,
+        26.710925934294288,
+        30.666727767260493,
+        45.79619528678234
+      ],
+      "n_valid": 251,
+      "minimum": 11.0401687870081,
+      "maximum": 45.79619528678234
+    },
+    {
+      "column": "building_count",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        0.0,
+        93.42857142857143,
+        171.0,
+        264.2857142857143,
+        372.57142857142856,
+        575.4285714285712,
+        879.7142857142856,
+        2925.0
+      ],
+      "n_valid": 251,
+      "minimum": 0.0,
+      "maximum": 2925.0
+    },
+    {
+      "column": "mean_building_area_m2",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        31.13996207576591,
+        48.85182245984644,
+        73.74719126650533,
+        96.83336972933397,
+        150.6961656638575,
+        215.07500029471305,
+        353.2147603668177,
+        10754.110033995366
+      ],
+      "n_valid": 250,
+      "minimum": 31.13996207576591,
+      "maximum": 10754.110033995366
+    },
+    {
+      "column": "industrial_fraction_of_building_area",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        0.0,
+        0.27453053564082724
+      ],
+      "n_valid": 250,
+      "minimum": 0.0,
+      "maximum": 0.27453053564082724
+    },
+    {
+      "column": "industrial_fraction_of_unit_area",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        0.0,
+        0.011214499118381141,
+        0.924739862568989
+      ],
+      "n_valid": 251,
+      "minimum": 0.0,
+      "maximum": 0.924739862568989
+    },
+    {
+      "column": "industrial_fraction",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        0.0,
+        0.011214499118381141,
+        0.924739862568989
+      ],
+      "n_valid": 251,
+      "minimum": 0.0,
+      "maximum": 0.924739862568989
+    },
+    {
+      "column": "industrial_fraction_buildings",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        0.0,
+        0.07767311927402451
+      ],
+      "n_valid": 251,
+      "minimum": 0.0,
+      "maximum": 0.07767311927402451
+    },
+    {
+      "column": "industrial_fraction_land_use",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        0.0,
+        0.0016009373112101319,
+        0.924739862568989
+      ],
+      "n_valid": 251,
+      "minimum": 0.0,
+      "maximum": 0.924739862568989
+    },
+    {
+      "column": "sem_lightweight_buildings_of_building_area",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        0.0,
+        0.004591180273528442,
+        0.11483275603108481
+      ],
+      "n_valid": 250,
+      "minimum": 0.0,
+      "maximum": 0.11483275603108481
+    },
+    {
+      "column": "sem_large_lowrise_buildings_of_building_area",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        0.0,
+        0.0004816118124656986,
+        0.016424029249555976,
+        0.5778986496833196
+      ],
+      "n_valid": 250,
+      "minimum": 0.0,
+      "maximum": 0.5778986496833196
+    },
+    {
+      "column": "sem_heavy_industry_buildings_of_building_area",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        0.0,
+        0.27453053564082724
+      ],
+      "n_valid": 250,
+      "minimum": 0.0,
+      "maximum": 0.27453053564082724
+    },
+    {
+      "column": "sem_residential_buildings_of_building_area",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        0.0,
+        0.002242535721595225,
+        0.014256535586998716,
+        0.037246869142128415,
+        0.07352954974545223,
+        0.904103478585701
+      ],
+      "n_valid": 250,
+      "minimum": 0.0,
+      "maximum": 0.904103478585701
+    },
+    {
+      "column": "sem_commercial_buildings_of_building_area",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        0.0,
+        0.05149801711850736,
+        0.127412939437894,
+        0.19335667841770382,
+        0.28997370445275766,
+        0.44368717974575606,
+        0.6448159930036412,
+        0.9769166294312619
+      ],
+      "n_valid": 250,
+      "minimum": 0.0,
+      "maximum": 0.9769166294312619
+    },
+    {
+      "column": "sem_lightweight_parcels_of_unit_area",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        0.0
+      ],
+      "n_valid": 251,
+      "minimum": 0.0,
+      "maximum": 0.0
+    },
+    {
+      "column": "sem_large_lowrise_parcels_of_unit_area",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        0.0,
+        0.4644406862110688
+      ],
+      "n_valid": 251,
+      "minimum": 0.0,
+      "maximum": 0.4644406862110688
+    },
+    {
+      "column": "sem_heavy_industry_parcels_of_unit_area",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        0.0,
+        0.001600937311210132,
+        0.924739862568989
+      ],
+      "n_valid": 251,
+      "minimum": 0.0,
+      "maximum": 0.924739862568989
+    },
+    {
+      "column": "sem_residential_parcels_of_unit_area",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        0.0,
+        0.08354099080867472,
+        0.8016779497306729
+      ],
+      "n_valid": 251,
+      "minimum": 0.0,
+      "maximum": 0.8016779497306729
+    },
+    {
+      "column": "sem_commercial_parcels_of_unit_area",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        0.0,
+        0.06618346310473501,
+        0.924739862568989
+      ],
+      "n_valid": 251,
+      "minimum": 0.0,
+      "maximum": 0.924739862568989
+    },
+    {
+      "column": "building_tag_coverage",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        0.0,
+        0.14516394859632167,
+        0.24770985678377466,
+        0.3540358436694167,
+        0.4682194890581066,
+        0.5739167036234926,
+        0.7303061286150181,
+        0.9769166294312619
+      ],
+      "n_valid": 250,
+      "minimum": 0.0,
+      "maximum": 0.9769166294312619
+    },
+    {
+      "column": "land_use_coverage",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        0.0,
+        0.004150251539033208,
+        0.03486529436222331,
+        0.09356910563219452,
+        0.2293390183442423,
+        0.3808200622819217,
+        0.5874133467847509,
+        0.9338527875511391
+      ],
+      "n_valid": 251,
+      "minimum": 0.0,
+      "maximum": 0.9338527875511391
+    },
+    {
+      "column": "min_distance",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        0.0,
+        0.03890643024797578,
+        0.10374036415579378,
+        0.20421727692031855,
+        0.26706698746573515,
+        0.9298695403485826
+      ],
+      "n_valid": 251,
+      "minimum": 0.0,
+      "maximum": 0.9298695403485826
+    },
+    {
+      "column": "uniqueness",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        0.0003179424156070824,
+        0.1108802108205893,
+        0.21691429986488397,
+        0.365429804150493,
+        0.6974318938793576,
+        1.0
+      ],
+      "n_valid": 251,
+      "minimum": 0.0003179424156070824,
+      "maximum": 1.0
+    },
+    {
+      "column": "n_params_used",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        3.0,
+        7.0
+      ],
+      "n_valid": 251,
+      "minimum": 3.0,
+      "maximum": 7.0
+    },
+    {
+      "column": "n_params_available",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        3.0,
+        7.0
+      ],
+      "n_valid": 251,
+      "minimum": 3.0,
+      "maximum": 7.0
+    },
+    {
+      "column": "frac_tree",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        0.0,
+        0.0026848333217657206,
+        0.012976260620406252,
+        0.06067979306339743,
+        0.633225212939566
+      ],
+      "n_valid": 251,
+      "minimum": 0.0,
+      "maximum": 0.633225212939566
+    },
+    {
+      "column": "frac_pervious",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        0.0,
+        0.0013073594083023174,
+        0.0069553735779800145,
+        0.028639567147510377,
+        0.3711410932290442
+      ],
+      "n_valid": 251,
+      "minimum": 0.0,
+      "maximum": 0.3711410932290442
+    },
+    {
+      "column": "frac_impervious",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        0.2726294607888506,
+        0.8738226982033889,
+        0.9639050186605227,
+        0.9908731552033261,
+        0.9982965356085639,
+        1.0
+      ],
+      "n_valid": 251,
+      "minimum": 0.2726294607888506,
+      "maximum": 1.0
+    },
+    {
+      "column": "frac_water",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        0.0,
+        0.007584047791515978
+      ],
+      "n_valid": 251,
+      "minimum": 0.0,
+      "maximum": 0.007584047791515978
+    },
+    {
+      "column": "height_completeness",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        0.0,
+        0.0006725093120526025,
+        0.011334029992325446,
+        0.10170578000688339,
+        0.9332926862219757
+      ],
+      "n_valid": 250,
+      "minimum": 0.0,
+      "maximum": 0.9332926862219757
+    },
+    {
+      "column": "height_frac_overture_height",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        0.0,
+        0.22112488932951274
+      ],
+      "n_valid": 250,
+      "minimum": 0.0,
+      "maximum": 0.22112488932951274
+    },
+    {
+      "column": "height_frac_overture_num_floors",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        0.0,
+        0.010631437076966656,
+        0.09773393194667174,
+        0.904103478585701
+      ],
+      "n_valid": 250,
+      "minimum": 0.0,
+      "maximum": 0.904103478585701
+    },
+    {
+      "column": "height_frac_wsf3d",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        0.06670731377802439,
+        0.8880658960820309,
+        0.9824134601679999,
+        0.9979842456034352,
+        1.0
+      ],
+      "n_valid": 250,
+      "minimum": 0.06670731377802439,
+      "maximum": 1.0
+    },
+    {
+      "column": "height_frac_ghsl",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        0.0,
+        0.5199911512857873
+      ],
+      "n_valid": 250,
+      "minimum": 0.0,
+      "maximum": 0.5199911512857873
+    },
+    {
+      "column": "height_frac_unresolved",
+      "method": "quantile",
+      "k": 7,
+      "breaks": [
+        0.0,
+        0.0026165374906157715
+      ],
+      "n_valid": 250,
+      "minimum": 0.0,
+      "maximum": 0.0026165374906157715
+    }
+  ],
+  "cleaning": {
+    "steps": [
+      {
+        "stage": "ingestion",
+        "operation": "clip_unprojectable_features",
+        "n_in": 126769,
+        "n_out": 126768,
+        "area_in_m2": 0.0,
+        "area_out_m2": 0.0,
+        "detail": {
+          "land_use": 1
+        },
+        "area_retained": null
+      },
+      {
+        "stage": "buildings",
+        "operation": "assign_feature_id",
+        "n_in": 114875,
+        "n_out": 114875,
+        "area_in_m2": 11062392.832458619,
+        "area_out_m2": 11062392.832458619,
+        "detail": {},
+        "area_retained": 1.0
+      },
+      {
+        "stage": "buildings",
+        "operation": "fix_invalid_geometries",
+        "n_in": 114875,
+        "n_out": 114875,
+        "area_in_m2": 11062392.832458619,
+        "area_out_m2": 11062392.832458619,
+        "detail": {
+          "n_invalid_before": 0
+        },
+        "area_retained": 1.0
+      },
+      {
+        "stage": "buildings",
+        "operation": "explode_multipolygons",
+        "n_in": 114875,
+        "n_out": 114945,
+        "area_in_m2": 11062392.832458619,
+        "area_out_m2": 11062392.832458619,
+        "detail": {},
+        "area_retained": 1.0
+      },
+      {
+        "stage": "buildings",
+        "operation": "drop_non_polygons",
+        "n_in": 114945,
+        "n_out": 114945,
+        "area_in_m2": 11062392.832458619,
+        "area_out_m2": 11062392.832458619,
+        "detail": {},
+        "area_retained": 1.0
+      },
+      {
+        "stage": "buildings",
+        "operation": "drop_oversized",
+        "n_in": 114945,
+        "n_out": 114945,
+        "area_in_m2": 11062392.832458619,
+        "area_out_m2": 11062392.832458619,
+        "detail": {
+          "max_area_m2": 100000.0
+        },
+        "area_retained": 1.0
+      },
+      {
+        "stage": "buildings",
+        "operation": "assign_building_id",
+        "n_in": 114945,
+        "n_out": 114945,
+        "area_in_m2": 11062392.832458619,
+        "area_out_m2": 11062392.832458619,
+        "detail": {},
+        "area_retained": 1.0
+      },
+      {
+        "stage": "buildings_area",
+        "operation": "trim_overlaps",
+        "n_in": 114945,
+        "n_out": 114945,
+        "area_in_m2": 11062392.832458619,
+        "area_out_m2": 11061382.482896917,
+        "detail": {},
+        "area_retained": 0.9999086680813993
+      },
+      {
+        "stage": "buildings_topo",
+        "operation": "resolve_overlaps",
+        "n_in": 114945,
+        "n_out": 114556,
+        "area_in_m2": 11062392.832458619,
+        "area_out_m2": 11040023.426890459,
+        "detail": {
+          "merge_limit_m2": 50.0,
+          "overlap_limit": 0.1
+        },
+        "area_retained": 0.9979778872521571
+      },
+      {
+        "stage": "buildings_topo",
+        "operation": "absorb_small_buildings",
+        "n_in": 114556,
+        "n_out": 77750,
+        "area_in_m2": 11040023.426890459,
+        "area_out_m2": 11040023.426890457,
+        "detail": {
+          "min_area_m2": 20.0,
+          "n_small": 40875,
+          "n_dissolved": 38052,
+          "n_isolated_retained": 2823
+        },
+        "area_retained": 0.9999999999999998
+      },
+      {
+        "stage": "buildings_topo",
+        "operation": "enforce_planarity",
+        "n_in": 77750,
+        "n_out": 77750,
+        "area_in_m2": 11040023.426890457,
+        "area_out_m2": 11040023.377078779,
+        "detail": {
+          "eps_m": 1e-6,
+          "eps_final_m": 0.001,
+          "n_passes": 5,
+          "n_residual_pairs": 62,
+          "n_dropped_unresolvable": 0,
+          "area_removed_m2": 0.049811678007245064
+        },
+        "area_retained": 0.9999999954880823
+      },
+      {
+        "stage": "buildings_topo",
+        "operation": "validate_planarity",
+        "n_in": 77750,
+        "n_out": 77750,
+        "area_in_m2": 11040023.377078779,
+        "area_out_m2": 11040023.377078779,
+        "detail": {
+          "is_planar_enforced": true
+        },
+        "area_retained": 1.0
+      },
+      {
+        "stage": "land_use",
+        "operation": "fix_invalid_geometries",
+        "n_in": 1888,
+        "n_out": 1888,
+        "area_in_m2": 0.0,
+        "area_out_m2": 0.0,
+        "detail": {
+          "n_invalid_before": 0
+        },
+        "area_retained": null
+      },
+      {
+        "stage": "streets",
+        "operation": "simplify_streets_tiled",
+        "n_in": 9931,
+        "n_out": 8226,
+        "area_in_m2": 0.0,
+        "area_out_m2": 0.0,
+        "detail": {
+          "tiled": true,
+          "n_tiles": 49,
+          "tile_size_m": 2000.0,
+          "buffer_m": 600.0,
+          "workers": 49,
+          "cache_dir_configured": true,
+          "n_tiles_reused": 49,
+          "n_tiles_unsimplified": 10,
+          "tiles_unsimplified": {
+            "tile_297_254": "KeyError",
+            "tile_298_253": "KeyError",
+            "tile_298_254": "KeyError",
+            "tile_298_255": "ValueError",
+            "tile_298_256": "KeyError",
+            "tile_300_252": "KeyError",
+            "tile_302_256": "KeyError",
+            "tile_302_257": "KeyError",
+            "tile_302_258": "KeyError",
+            "tile_303_258": "KeyError"
+          },
+          "artifact_threshold": 6.217929636965504,
+          "threshold_source": "pooled",
+          "threshold_fallback_used": false,
+          "threshold_n_faces": 7801,
+          "threshold_n_faces_dropped": 0,
+          "threshold_dropped_area_fraction": 0.0,
+          "threshold_n_tiles_indexed": 9
+        },
+        "area_retained": null
+      },
+      {
+        "stage": "buildings_topo",
+        "operation": "resolve_buildings_on_streets",
+        "n_in": 77750,
+        "n_out": 76151,
+        "area_in_m2": 11040023.377078779,
+        "area_out_m2": 10770302.296140183,
+        "detail": {
+          "road_buffer_m": 4.0,
+          "overlap_limit": 0.5,
+          "n_dropped": 1599,
+          "n_trimmed": 12155,
+          "area_dropped_m2": 67379.36040480522,
+          "median_dropped_footprint_m2": 27.950759348073227
+        },
+        "area_retained": 0.975568794401415
+      },
+      {
+        "stage": "buildings_topo",
+        "operation": "drop_buildings_on_waterbodies",
+        "n_in": 76151,
+        "n_out": 76151,
+        "area_in_m2": 10770302.296140183,
+        "area_out_m2": 10770302.296140183,
+        "detail": {},
+        "area_retained": 1.0
+      },
+      {
+        "stage": "topology",
+        "operation": "drop_waterlines_through_buildings",
+        "n_in": 22,
+        "n_out": 21,
+        "area_in_m2": 0.0,
+        "area_out_m2": 0.0,
+        "detail": {},
+        "area_retained": null
+      }
+    ],
+    "footprints": {
+      "raw_summed_area_m2": 11062392.832458619,
+      "raw_union_area_m2": 11040023.426890638,
+      "area_summed_m2": 11061382.482896917,
+      "area_union_m2": 11040023.426890612,
+      "raw_self_overlap_fraction": 0.00202211274782671,
+      "residual_self_overlap_fraction": 0.0019309571872531128,
+      "union_retention": 1.0019346929965975,
+      "ground_retention": 0.9999999999999977
+    }
+  },
+  "units": {
+    "n_seeds": 2882,
+    "n_patches": 251,
+    "n_merges": 2631,
+    "n_isolates": 0,
+    "n_below_minimum": 0,
+    "n_blocked_by_max_area": 0,
+    "min_area_m2": 50000.0,
+    "max_area_m2": 500000.0,
+    "seed_area_quantiles": {
+      "p10": 4.600563829156841,
+      "p50": 5761.937212014813,
+      "p90": 17000.530601786253
+    },
+    "patch_area_quantiles": {
+      "p10": 54086.999338384674,
+      "p50": 86142.78822896049,
+      "p90": 156743.2725443427
+    }
+  },
+  "height_fill": {
+    "n_buildings": 114945,
+    "n_resolved": 114944,
+    "n_unresolved": 1,
+    "tiers": [
+      {
+        "tier": "overture",
+        "n_candidates": 114945,
+        "n_filled": 602,
+        "filled_by_source": {
+          "overture_num_floors": 570,
+          "overture_height": 32
+        }
+      },
+      {
+        "tier": "wsf3d",
+        "n_candidates": 114343,
+        "n_filled": 114177,
+        "filled_by_source": {
+          "wsf3d": 114177
+        }
+      },
+      {
+        "tier": "ghsl",
+        "n_candidates": 166,
+        "n_filled": 165,
+        "filled_by_source": {
+          "ghsl": 165
+        }
+      }
+    ],
+    "height_sources": [
+      "overture_height",
+      "overture_num_floors",
+      "wsf3d",
+      "ghsl",
+      "unresolved"
+    ]
+  },
+  "height_source_availability": {
+    "n_buildings": 114945,
+    "n_with_height": 32,
+    "n_with_num_floors": 600,
+    "by_footprint_dataset": [
+      {
+        "dataset": "Esri Community Maps",
+        "n_buildings": 103821,
+        "n_with_height": 0,
+        "n_with_num_floors": 0
+      },
+      {
+        "dataset": "OpenStreetMap",
+        "n_buildings": 7970,
+        "n_with_height": 32,
+        "n_with_num_floors": 600
+      },
+      {
+        "dataset": "Google Open Buildings",
+        "n_buildings": 2699,
+        "n_with_height": 0,
+        "n_with_num_floors": 0
+      },
+      {
+        "dataset": "Microsoft ML Buildings",
+        "n_buildings": 455,
+        "n_with_height": 0,
+        "n_with_num_floors": 0
+      }
+    ],
+    "by_height_dataset": [
+      {
+        "dataset": "OpenStreetMap",
+        "n_with_height": 32
+      }
+    ]
+  },
+  "tag_availability": {
+    "n_buildings": 114945,
+    "n_with_subtype": 41176,
+    "n_with_class": 40757,
+    "n_with_either": 41176,
+    "area_m2": 11061382.482896917,
+    "area_with_either_m2": 4854044.374385636,
+    "tagged_area_fraction": 0.43882800200526,
+    "n_land_use_parcels": 1888,
+    "land_use_summed_area_m2": 140147842.1869895,
+    "by_footprint_dataset": [
+      {
+        "dataset": "Esri Community Maps",
+        "n_buildings": 103821,
+        "n_with_subtype": 38282,
+        "n_with_class": 38282,
+        "n_with_either": 38282,
+        "area_m2": 7117051.126500302,
+        "area_with_either_m2": 3385458.4738761075
+      },
+      {
+        "dataset": "OpenStreetMap",
+        "n_buildings": 7970,
+        "n_with_subtype": 2894,
+        "n_with_class": 2475,
+        "n_with_either": 2894,
+        "area_m2": 3702954.64676147,
+        "area_with_either_m2": 1468585.9005095284
+      },
+      {
+        "dataset": "Google Open Buildings",
+        "n_buildings": 2699,
+        "n_with_subtype": 0,
+        "n_with_class": 0,
+        "n_with_either": 0,
+        "area_m2": 177023.97058385223,
+        "area_with_either_m2": 0.0
+      },
+      {
+        "dataset": "Microsoft ML Buildings",
+        "n_buildings": 455,
+        "n_with_subtype": 0,
+        "n_with_class": 0,
+        "n_with_either": 0,
+        "area_m2": 64352.739051292476,
+        "area_with_either_m2": 0.0
+      }
+    ],
+    "distinct_values": {
+      "subtype": [
+        "civic",
+        "commercial",
+        "education",
+        "entertainment",
+        "industrial",
+        "medical",
+        "outbuilding",
+        "religious",
+        "residential",
+        "service",
+        "transportation"
+      ],
+      "class": [
+        "apartments",
+        "cathedral",
+        "chapel",
+        "church",
+        "civic",
+        "college",
+        "commercial",
+        "detached",
+        "dormitory",
+        "fire_station",
+        "garage",
+        "government",
+        "guardhouse",
+        "hospital",
+        "hotel",
+        "house",
+        "hut",
+        "industrial",
+        "kindergarten",
+        "kiosk",
+        "library",
+        "manufacture",
+        "office",
+        "parking",
+        "post_office",
+        "public",
+        "residential",
+        "retail",
+        "roof",
+        "school",
+        "service",
+        "stadium",
+        "supermarket",
+        "temple",
+        "terrace",
+        "train_station",
+        "university",
+        "warehouse"
+      ]
+    }
+  },
+  "validation": null,
+  "validation_ground_truth": null,
+  "reference_ceiling": null,
+  "crs": "EPSG:32618",
+  "crs_wkt": "PROJCRS[\"WGS 84 / UTM zone 18N\",BASEGEOGCRS[\"WGS 84\",ENSEMBLE[\"World Geodetic System 1984 ensemble\",MEMBER[\"World Geodetic System 1984 (Transit)\"],MEMBER[\"World Geodetic System 1984 (G730)\"],MEMBER[\"World Geodetic System 1984 (G873)\"],MEMBER[\"World Geodetic System 1984 (G1150)\"],MEMBER[\"World Geodetic System 1984 (G1674)\"],MEMBER[\"World Geodetic System 1984 (G1762)\"],MEMBER[\"World Geodetic System 1984 (G2139)\"],MEMBER[\"World Geodetic System 1984 (G2296)\"],ELLIPSOID[\"WGS 84\",6378137,298.257223563,LENGTHUNIT[\"metre\",1]],ENSEMBLEACCURACY[2.0]],PRIMEM[\"Greenwich\",0,ANGLEUNIT[\"degree\",0.0174532925199433]],ID[\"EPSG\",4326]],CONVERSION[\"UTM zone 18N\",METHOD[\"Transverse Mercator\",ID[\"EPSG\",9807]],PARAMETER[\"Latitude of natural origin\",0,ANGLEUNIT[\"degree\",0.0174532925199433],ID[\"EPSG\",8801]],PARAMETER[\"Longitude of natural origin\",-75,ANGLEUNIT[\"degree\",0.0174532925199433],ID[\"EPSG\",8802]],PARAMETER[\"Scale factor at natural origin\",0.9996,SCALEUNIT[\"unity\",1],ID[\"EPSG\",8805]],PARAMETER[\"False easting\",500000,LENGTHUNIT[\"metre\",1],ID[\"EPSG\",8806]],PARAMETER[\"False northing\",0,LENGTHUNIT[\"metre\",1],ID[\"EPSG\",8807]]],CS[Cartesian,2],AXIS[\"(E)\",east,ORDER[1],LENGTHUNIT[\"metre\",1]],AXIS[\"(N)\",north,ORDER[2],LENGTHUNIT[\"metre\",1]],USAGE[SCOPE[\"Navigation and medium accuracy spatial referencing.\"],AREA[\"Between 78°W and 72°W, northern hemisphere between equator and 84°N, onshore and offshore. Bahamas. Canada - Nunavut; Ontario; Quebec. Colombia. Cuba. Ecuador. Greenland. Haiti. Jamaica. Panama. Turks and Caicos Islands. United States (USA). Venezuela.\"],BBOX[0,-78,84,-72]],ID[\"EPSG\",32618]]",
+  "outputs": [
+    "units.parquet",
+    "units_viz.parquet",
+    "manifest.json",
+    "units.gpkg",
+    "layers/land_use.parquet",
+    "layers/water.parquet",
+    "layers/streets.parquet",
+    "layers/buildings.parquet"
+  ]
+}

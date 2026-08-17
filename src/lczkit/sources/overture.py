@@ -135,6 +135,27 @@ def _canonical_order(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     return gdf.sort_values("id", kind="stable").reset_index(drop=True)
 
 
+def _silence_progress_bar(con: duckdb.DuckDBPyConnection) -> None:
+    """Turn DuckDB's query progress bar off, without letting that decide whether ingestion runs.
+
+    `SET enable_progress_bar = false` looks like the obvious way and **cannot be used here**:
+    inside a Jupyter kernel DuckDB reinitialises its display when the setting is assigned, and
+    raises `InvalidInputException: required package 'ipywidgets' is missing` — for an assignment
+    whose whole purpose is to not draw anything. Measured on duckdb 1.5.5: assigning it fails,
+    assigning `enable_progress_bar_print` first fails, and passing it in `duckdb.connect(config=)`
+    fails differently ("cannot be set as a global option"). The `PRAGMA` form does not touch the
+    display and succeeds.
+
+    The `except` is not defensive habit. A cosmetic setting took `OvertureSource.__init__` — and
+    with it every code path that reads Overture — out of an entire execution environment, and the
+    correct behaviour when a progress bar cannot be switched off is to carry on without one.
+    """
+    try:
+        con.execute("PRAGMA disable_progress_bar;")
+    except duckdb.Error:  # pragma: no cover - depends on the host's display environment
+        pass
+
+
 class OvertureSource:
     """Reads the five Overture layers this package ingests, from a pinned release.
 
@@ -158,7 +179,8 @@ class OvertureSource:
         self._cache_dir = settings.source_dir(settings.overture.source_dir_name)
         self._con = duckdb.connect(":memory:")
         self._con.execute("INSTALL spatial; LOAD spatial; INSTALL httpfs; LOAD httpfs;")
-        self._con.execute(f"SET s3_region = '{_S3_REGION}'; SET enable_progress_bar = false;")
+        self._con.execute(f"SET s3_region = '{_S3_REGION}';")
+        _silence_progress_bar(self._con)
 
     def buildings(self, bbox: BBox) -> gpd.GeoDataFrame:
         """Building footprints intersecting `bbox`.

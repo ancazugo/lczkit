@@ -64,6 +64,17 @@ convention = "google"
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["D"]
 "scripts/**" = ["D"]
+# `scripts/notebooks/` holds jupytext percent scripts, which are notebooks rather than modules:
+# `# %%` separates cells and their order is the document's order. E402 asks for every import at
+# the top of the file, and the first cell has to install warning filters *before* the imports
+# they apply to — otherwise a `TqdmWarning` about a missing `ipywidgets` is the first thing a
+# reader of the published page sees.
+#
+# The `.ipynb` needs the same exemption for the same reason, and it is not the same path: ruff
+# lints notebooks natively, and `docs_src/demo/bogota.ipynb` is *generated* from the script above.
+# Exempting one and not the other would fail the build on a file nobody edits by hand.
+"scripts/notebooks/**" = ["D", "E402"]
+"docs_src/demo/*.ipynb" = ["D", "E402"]
 
 # `ruff format` reads Python fences inside Markdown, and `docs/references/tables/` holds
 # hand-checked transcriptions that are the authority for every numeric lookup in this package.
@@ -127,6 +138,7 @@ filterwarnings = [
 
 [dependency-groups]
 dev = [
+    "matplotlib>=3.8",
     "mypy>=2.3.0",
     "pandas-stubs>=3.0.5.260730",
     "pre-commit>=4.6.1",

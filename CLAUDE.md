@@ -38,9 +38,11 @@ Read this section before writing any code. Violations here are expensive to unwi
 - Do not build features from the "Deferred" list without being asked.
 - Do not add a web UI, plotting helpers, or notebook tooling in the MVP. **The CLI prohibition was
   lifted by explicit request in Phase 15** and the CLI built. **`mkdocs-jupyter` was added by
-  explicit request in Phase 20** — notebook tooling in the *docs build*, not in the package, and
-  it renders nothing today because the repository holds no notebooks. No web UI and no plotting
-  helpers; the rest of this bullet stands.
+  explicit request in Phase 20**, and **Phase 22 wrote the notebook it renders** — notebook tooling
+  in the *docs build*, not in the package. **matplotlib arrived with it, in the `dev` group**, on
+  the same request: it draws two figures in that notebook and is imported nowhere in `src/`, so
+  the package still ships no plotting helper and the docs build never installs it. No web UI, and
+  no plotting in the package; the rest of this bullet stands.
 - Do not add abstraction for plurality that does not yet exist. One implementation per
   protocol is correct for the MVP; the seam is the point, not the number of implementations.
 
@@ -1787,6 +1789,144 @@ configured ground disappear on rebuild with nothing raised.
 
 ---
 
+### Phase 22 — a notebook that runs, and a map inside the page — CONCLUDED
+
+**Built on explicit request, and it is Phase 20's `mkdocs-jupyter` finally rendering something.**
+That phase wired the plugin against a repository holding zero `.ipynb` files and recorded the fact
+rather than dropping the dependency, "so a future notebook has somewhere to go". Not a diagnostic
+phase — it opened no question and moved no measurement. Its value is four defects, three of which
+exist only once a notebook and a documentation build are in the picture.
+
+**`OvertureSource` could not be constructed inside a Jupyter kernel, and had not been since Phase 1.**
+`__init__` ran `SET s3_region = '…'; SET enable_progress_bar = false;`, and DuckDB reinitialises its
+display when that setting is *assigned* — so in a kernel without `ipywidgets` it raises
+`InvalidInputException: required package 'ipywidgets' is missing`, for an assignment whose whole
+purpose is to draw nothing. Every code path that reads Overture went with it.
+
+Measured on duckdb 1.5.5, because the obvious workarounds do not work either:
+
+| form | result |
+|---|---|
+| `SET enable_progress_bar = false` | raises — what shipped |
+| `SET enable_progress_bar_print = false` first, then the above | raises |
+| `duckdb.connect(config={"enable_progress_bar": …})` | raises differently — "cannot be set as a global option" |
+| **`PRAGMA disable_progress_bar`** | **succeeds, and does not touch the display** |
+
+Fixed with the `PRAGMA`, and with failure tolerated: the right response to being unable to switch
+off a progress bar is to carry on without one. The guard is a **source assertion**, because the
+defect is invisible everywhere a test normally runs — under pytest there is no kernel, DuckDB draws
+nothing, and the assignment succeeds. It reads the module's string literals through `ast` rather
+than its lines, so the docstring that must name the forbidden form in order to explain it is not
+itself a finding; verified to fail when the bad form is restored.
+
+> **The probe that diagnosed it first returned the opposite answer.** Run through
+> `jupytext --execute` with no kernel named, it reported `ipywidgets PRESENT` and every form
+> succeeding — because jupytext had silently picked a kernel from *another environment*. A
+> notebook's `kernelspec` decides which interpreter answers, and a probe that does not pin it is
+> measuring an unknown machine. Same shape as the `.env`-dependent test Phase 21 caught:
+> **agreeing with your machine is not passing.**
+
+**Two more defects, both found by building rather than by reasoning.** A run's map site is copied
+into `docs_src/demo/` whole, and two of its files break `mkdocs build --strict`:
+
+- **`serve.py` is matched by mkdocs-jupyter's default `include`** (`["*.py", "*.ipynb", "*.md"]`),
+  so the plugin treated it as a notebook, rendered it as a page and *relocated* it to
+  `demo/<site>/serve/serve.py`. Narrowed to `include: ["*.ipynb"]`.
+- **`README.md` collides with the site's own `index.html`** — mkdocs drops it and warns, which
+  `strict: true` turns into a failed build.
+
+Both are correct in a run directory, which is a copy someone downloads and opens offline; neither
+applies to one already being served. `scripts/publish_demo_sites.py` strips them from the published
+copy only, and a test pins that. `not_in_nav: demo/*/**` covers the vendored `LICENSES.md`.
+
+**`.gitignore`'s `site/` matches at any depth.** Copying `<run_dir>/site/` across under its own name
+would have produced a directory git silently ignores and `gh-deploy` never publishes — a map simply
+absent, with nothing raising. Destinations are `bogota-grid/` and `bogota-patch/`; Phase 20's
+existing `docs_src` gitignore guard is what would have caught it.
+
+**GitHub Pages serves PMTiles, measured rather than assumed** — `HTTP 206`, `accept-ranges: bytes`,
+`access-control-allow-origin: *`. Phase 7 established that `file://` cannot work because the Fetch
+standard leaves `file:` unhandled; a Range-honouring host is what the bundled `serve.py` provides
+locally, and Pages is one. Every reference in a built site is relative (`fetch("style.json")`,
+`pmtiles://./tiles/…`), so a site drops into any subdirectory and works in an `<iframe>` unmodified.
+
+**`mkdocs serve` does not honour Range, so the embedded maps are blank under it — and this is the
+`file://` finding for a third time.** Measured: `200 OK`, whole body, no `Accept-Ranges`. That is
+not a soft degradation, because `pmtiles.js` *raises* rather than guessing — "Server returned no
+content-length header or content-length exceeding request. Check that your storage backend supports
+HTTP Byte Serving." So the published page is correct and the preview a contributor reaches for is
+the thing that fails, which is exactly the shape of the `file://` and QGIS-Parquet findings.
+
+The answer was already in the package: `lczkit.viz.serve` is a generic Range-capable static server,
+and pointing it at the built docs site returns `206` with the right `Content-Range`. The notebook
+says so on the page, next to the maps, because the reader who needs telling is the one looking at
+two blank frames:
+
+```bash
+mkdocs build && python -c "from lczkit.viz import serve; serve('site')"
+```
+
+**mkdocs' Markdown extensions do not reach a notebook's markdown cells.** `!!! note` shipped as
+literal text in the built page, because nbconvert renders those cells with its own Markdown
+renderer before mkdocs sees the result — the same seam that makes `execute: false` safe also means
+`admonition`, `pymdownx.*` and mkdocs' link rewriting are all unavailable inside a cell. Rewritten
+as a blockquote. This is why the page's outgoing link is written as the built URL `../../api/`
+rather than `../api/index.md`: the `.md` form would ship unrewritten and 404.
+
+#### The demonstration
+
+`docs_src/demo/bogota.ipynb`, authored as a jupytext percent script at `scripts/notebooks/bogota.py`
+and committed with its outputs. **`execute: false` is set explicitly because it is load-bearing**:
+the docs workflow runs `uv sync --only-group docs`, so the build environment has neither lczkit nor
+the geo stack nor a `DATA_DIR`, and could not execute it. A test asserts the two files have not
+diverged — the same "two copies of one thing" shape as the twin `CLEANING` constants and the twin
+city registries, fixed the same way.
+
+**Bogotá, and it is not a registry city.** So2Sat covers it with **8 patches, all LCZ 7**, against
+the 500-patch/4-class screen all 28 registry cities pass — so `lczkit run --city bogota` does not
+exist and the notebook supplies GUPPD's `SMOD_ID 30_3370` extent directly. **Bogotá was deliberately
+not added to `CITIES`**: a 29th city changes the population every stored figure is measured over,
+against the standing rule to intersect city sets before differencing records.
+
+The window is `densest_window(WUDAPT Bogotá, side_km=5.0)` — the helper the multi-city sweep uses,
+pointed at the reference so the window lands where the evidence is rather than in the middle of a
+bounding box. Measured alternatives: 4 km → 1 681 cells / 15 polygons, 6 km → 3 721 / 18.
+
+| | grid arm | patch arm |
+|---|---:|---:|
+| units | 2 601 | **251** |
+| median unit area | 1.00 ha | **8.61 ha** (p10 5.41, p90 15.67) |
+| merge | — | 2 882 seeds → 251, 2 631 merges, 0 isolates, 0 blocked |
+| wall time | 2.7 min | 2.6 min |
+
+The patch median lands inside WUDAPT's 2.2–52 ha band and beside So2Sat's 10.24 ha patch, from a
+50 000 m² floor — `min_area_m2` is a floor and not a target, and the overshoot is the mechanism.
+
+**The window reproduces the whole city's founding-premise figure.** Of 114 945 buildings, Overture
+answers for **602 — 0.52%** (570 `num_floors`, 32 `height`), WSF-3D for 114 177 (99.33%),
+GHS-BUILT-H for 165, one unresolved. The full 1 169 km² run on disk reads 0.50% / 97.8%. Bogotá is
+close to the worst case for the constraint this package exists to report, which is why it is the
+example.
+
+**No accuracy claim is made, and none is available.** The notebook calls `agreement()` against
+WUDAPT — 17 polygons inside the window, from two submissions — because `run_pipeline` deliberately
+never runs validation, and it says on the page that this demonstrates the instrument rather than
+producing a result. **No ceiling is reported, because Bogotá's 8 single-class So2Sat patches cannot
+produce one.** Everywhere else this project reports agreement it reports the ceiling beside it;
+here there is nothing honest to put there, and saying so is the point. The polygons covering this
+window are **CC BY-NC-SA 4.0** — non-commercial, printed from the data rather than asserted.
+
+Dependency added: **matplotlib (PSF-style matplotlib licence, permissive — not GPL/LGPL)**, to the
+**dev** group, since CI's docs build is `--only-group docs` and never executes the notebook. This
+narrows the "no plotting helpers" scope bullet again; patched above rather than departed from
+silently, as the CLI was in Phase 15 and `mkdocs-jupyter` in Phase 20.
+
+`scripts/notebooks/**` is exempt from `E402`: a jupytext percent script is a document whose cell
+order is semantic, and its first cell must install warning filters *before* the imports they apply
+to — otherwise a `TqdmWarning` about the same missing `ipywidgets` is the first thing on the page.
+
+---
+
 ### STOP RULE — applies after Phase 13
 
 **No further diagnostic phases.** Thirteen phases in, the finding rate remains high but the returns
@@ -1820,9 +1960,13 @@ Remaining work, in order:
     and packaging, not measurement: six grounds behind a dropdown, no Google tiles on licensing,
     and an API key confined to `style.json` by a field flag and a test. It struck the "no basemap
     requiring an API key" anti-pattern in place rather than working around it.
-10. **The paper.**
-11. **Cleanup** — release. **The docs half landed early as Phase 20**; what is left here is the
-    README split and the release itself.
+10. ~~**Phase 22 — the demonstration notebook.**~~ **Concluded**, on explicit request. Documentation
+    and packaging, not measurement: Bogotá on the grid and on patch units, with both map sites
+    embedded in the page. It found that `OvertureSource` could not be constructed inside a Jupyter
+    kernel at all, and had not been since Phase 1.
+11. **The paper.**
+12. **Cleanup** — release. **The docs half landed early as Phase 20 and the notebook half as
+    Phase 22**; what is left here is the README split and the release itself.
 
 **`OA_w` was blocked and is now closed.** Bechtel, Demuzere & Stewart (2020) supplied both the
 class-similarity matrix and the definition; the matrix is transcribed in
@@ -2200,6 +2344,13 @@ reconcile silently.** That flagging behaviour is working; keep it.
 | A trailing space in a `.env` value | Found by the first verification request failing before it left the machine. Invisible in an editor, and it would otherwise have reached the tile URL and made every request 403 with a symptom that names nothing. `maptiler_key()` strips, and a test passes a value with trailing whitespace. | 21 |
 | Base maps shipped opt-in, and the picker never appeared | **The default was wrong in use, and the report came from outside the repository.** Every ground was off unless `--basemap` named one, so a plain `lczkit site build` produced no picker — and every site on disk predated the change, so none could show one until rebuilt. A feature reachable only through an undocumented flag is not shipped. **Ruling: the CLI offers the keyless grounds by default, the library still offers none.** The line is `requires_key`, derived rather than listed, so a keyed provider cannot join the defaults by being forgotten. Cost, accepted knowingly: an ordinary CLI-built site now names four tile hosts where it named none, and an archival build must pass `--basemap none`. The site still opens and works offline either way, and no key is published unless asked for. | 7, 15, 21 |
 | One guarantee, two defaults | The no-external-reference test now pins `VizConfig()` and `build_site()`, not what the command line produces — a narrowing, so it is written down rather than left to be inferred from a test that kept passing. Both defaults are tested and both are documented; the distinction is that the archival path must be network-clean without being asked, and the interactive one should show a reader a map. **A guarantee that quietly changes scope while its test still passes is the failure this row exists to prevent.** | 7, 21 |
+| `SET enable_progress_bar = false` in `OvertureSource.__init__` | **Took the whole source out of Jupyter, and had since Phase 1.** DuckDB reinitialises its display when that setting is *assigned*, so in a kernel without `ipywidgets` it raises for an assignment whose purpose is to draw nothing — and every code path that reads Overture raised with it. Measured on duckdb 1.5.5: the assignment fails, assigning `enable_progress_bar_print` first fails, and `duckdb.connect(config=…)` fails differently. **`PRAGMA disable_progress_bar` succeeds and does not touch the display**, and the failure is tolerated besides. Guarded by a source assertion over the module's string literals via `ast` — under pytest there is no kernel and the bad form succeeds, so only the source can be checked. | 1, 22 |
+| A probe run without pinning its kernel | **Returned the opposite answer and would have been believed.** `jupytext --execute` with no kernel named picked one from another environment, reporting `ipywidgets PRESENT` and every form working. A notebook's `kernelspec` decides which interpreter answers. Same shape as Phase 21's environment-dependent test: **agreeing with your machine is not passing.** | 21, 22 |
+| A run's `site/` copied into `docs_dir` under its own name | Three ways to be silently wrong at once. `.gitignore`'s `site/` matches **at any depth**, so the directory would be ignored and never published; `README.md` collides with the site's own `index.html` and mkdocs drops it with a warning that `strict` makes fatal; and `serve.py` is matched by **mkdocs-jupyter's default `include`**, which renders it as a page and *moves* it to `<site>/serve/serve.py`. Destinations are renamed, the two archive-only files are stripped from the published copy only, and `include` is narrowed to `*.ipynb`. | 20, 22 |
+| Is a demonstration notebook re-executed at build time? | **No, and it could not be.** The docs workflow runs `uv sync --only-group docs`, so the build environment has neither lczkit nor the geo stack nor `DATA_DIR`. `execute: false` is the plugin default and is set **explicitly**, because here it is load-bearing rather than incidental. The notebook is committed with outputs from a local run, paired with a jupytext percent script, and a test asserts the two have not diverged. | 20, 22 |
+| Bogotá as a 29th registry city | **Refused.** So2Sat covers it with 8 patches of a single class against the 500-patch/4-class screen, so it cannot be validated — and adding a city changes the population every stored figure is measured over, against the standing rule to intersect city sets before differencing records. The notebook supplies GUPPD's `SMOD_ID 30_3370` extent directly and states that it is doing so. | 16, 18, 22 |
+| `mkdocs serve` and the embedded PMTiles maps | **Third instance of "correct artefact, failing reader".** Pages honours Range (`206`, measured); `mkdocs serve` returns `200` with the whole body, and `pmtiles.js` *raises* rather than degrading — so the published page is right and the local preview is two blank frames. The fix was already in the package: `lczkit.viz.serve` is a generic Range-capable server and handles the built docs site. Said on the page beside the maps, because the person who needs it is looking at the failure. | 7, 19, 22 |
+| mkdocs Markdown extensions inside a notebook cell | **Unavailable.** nbconvert renders markdown cells with its own renderer before mkdocs sees them, so `!!! note` shipped as literal text and a `../api/index.md` link would ship unrewritten and 404. Notebook cells get plain Markdown and built-site URLs; the admonition became a blockquote. The same seam that makes `execute: false` safe is what excludes the extensions. | 20, 22 |
 
 ---
 
@@ -2275,14 +2426,13 @@ city where the class exists *and* is tagged, and the coverage table suggests the
 - Don't delete anything under `input/`. To mark a cache entry as superseded, write a
   `<name>.discarded` sidecar next to it; never remove the entry itself.
 - Don't inline data into `index.html` or link a CDN. The **default** site must open with no network
-  and no software the user must install, and remain valid years from now.
-  It is served by its own bundled `serve.py` over loopback — `file://` is not satisfiable, because
-  PMTiles reads byte ranges through `fetch` and the Fetch standard leaves `file:` URLs unhandled.
-  Every built site carries a `README.md` saying so, since the first thing a recipient tries is
-  opening `index.html` and it fails with an unexplained network error. **"Or use a basemap requiring
-  an API key" was struck in Phase 21 by explicit request** — MapTiler is opt-in, off by default, and
-  its key is confined to `style.json` by a test; the default build still names no remote host
-  anywhere.
+  and no software the user must install, and remain valid years from now. It is served by its own
+  bundled `serve.py` over loopback — `file://` is not satisfiable, because PMTiles reads byte ranges
+  through `fetch` and the Fetch standard leaves `file:` URLs unhandled. Every built site carries a
+  `README.md` saying so, since the first thing a recipient tries is opening `index.html` and it
+  fails with an unexplained network error. **"Or use a basemap requiring an API key" was struck in
+  Phase 21 by explicit request** — MapTiler is opt-in, off by default, and its key is confined to
+  `style.json` by a test; the default build still names no remote host anywhere.
 - Don't recompute parameters or classification breaks at site-build time. Phase 7 reads
   `units_viz.parquet` and the manifest; it does not do analysis.
 - Don't hardcode dataset class mappings, thresholds, or storey heights — they go in config.
@@ -2429,3 +2579,25 @@ city where the class exists *and* is tagged, and the coverage table suggests the
   inside Markdown and `ruff check` does not read `.md` at all, so one committed reference
   transcription was a standing format failure that no lint run would ever mention. When adding a
   formatter or linter to a repository, look at what it actually globbed, not at what it is for.
+  **Second instance, and it moved a file rather than just complaining about one:** mkdocs-jupyter's
+  default `include` is `["*.py", "*.ipynb", "*.md"]`, so a copied map site's `serve.py` was
+  rendered as a notebook page and relocated out from under the relative path that loads it.
+- **A whole execution environment can be unsupported without a single test noticing.**
+  `OvertureSource` could not be constructed inside a Jupyter kernel from Phase 1 to Phase 22,
+  because a cosmetic `SET enable_progress_bar = false` raises there when `ipywidgets` is absent.
+  Under pytest there is no kernel, DuckDB draws nothing, and the assignment succeeds — so the
+  entire suite agreed the code was fine. Where a defect is a property of the *host* rather than of
+  the inputs, the only thing a test can check is the source, and that is worth doing.
+- **Pin the kernel before believing a notebook.** A probe written to diagnose the above reported
+  the opposite of the truth, because `jupytext --execute` with no kernel named silently chose one
+  from a different environment with different package versions. `kernelspec` is the notebook's
+  equivalent of which interpreter is on `PATH`, and it is not visible in the output.
+- **Never edit a source file while a tool is reading it.** jupytext refused to write a notebook
+  with `SynchronousModificationError` after the percent script it was executing changed mid-run —
+  which is the good outcome, since the alternative is outputs silently attributed to source that
+  never produced them. Queue the edit; do not race the run.
+- **A document embedded in another renderer keeps its own renderer's rules.** mkdocs' Markdown
+  extensions do not reach a notebook's markdown cells — nbconvert has already turned them into
+  HTML by the time mkdocs sees the page — so `!!! note` ships as literal text and a `.md` link
+  ships unrewritten. The same boundary that makes `execute: false` safe is the one that excludes
+  the extensions, and it is easy to assume it runs only one way.
