@@ -37,7 +37,10 @@ Read this section before writing any code. Violations here are expensive to unwi
 
 - Do not build features from the "Deferred" list without being asked.
 - Do not add a web UI, plotting helpers, or notebook tooling in the MVP. **The CLI prohibition was
-  lifted by explicit request in Phase 15** and the CLI built; the rest of this bullet stands.
+  lifted by explicit request in Phase 15** and the CLI built. **`mkdocs-jupyter` was added by
+  explicit request in Phase 20** — notebook tooling in the *docs build*, not in the package, and
+  it renders nothing today because the repository holds no notebooks. No web UI and no plotting
+  helpers; the rest of this bullet stands.
 - Do not add abstraction for plurality that does not yet exist. One implementation per
   protocol is correct for the MVP; the seam is the point, not the number of implementations.
 
@@ -1576,6 +1579,94 @@ parameter is recomputed, no geometry is transformed, and the archival GeoParquet
 
 ---
 
+### Phase 20 — the API reference — CONCLUDED
+
+**Built on explicit request, and it is item 9's first half arriving early** — "Cleanup — docs,
+release". Not a diagnostic phase: it opened no question and moved no measurement. It arrived as a
+`.github/workflows/docs.yml` added from outside, running `uv sync --group docs` and
+`mkdocs gh-deploy --force` against a repository that had neither a `docs` group nor an
+`mkdocs.yml`. Shipped in `1e4306a`.
+
+**The docstring gap was narrow and shaped, which is the finding.** Module docstrings were already
+80/80 and public classes 93/93; the whole gap was 68 `ruff --select D` violations across 20 files,
+and almost all of it was one pattern:
+
+> **Protocol-implementation members and trivial accessors are undocumented; everything else is
+> documented.** `GridUnits.generate`, `EnclosureUnits.generate`, `PatchUnits.generate`, both
+> `HeightSource.fill`s, all three `HeightProductSource.ensure`s — the single member that *is* the
+> implementation, blank in each case, because the contract is stated once on the Protocol.
+
+**Docstring inheritance does not rescue this, and that was checked rather than assumed.** The
+implementations satisfy the Protocols *structurally* and subclass nothing, so griffe has no base
+to inherit from and a generated page would have shown those methods blank. Written out properly,
+each saying what its implementation does differently rather than restating the interface.
+
+Also 13 `__init__` docstrings, 19 summary-line reflows (clause-preserving — the remainder of a
+wrapped summary moves into the body, nothing is rewritten), and two stubs that something *reads*:
+`cli.main_callback`, which Typer renders as `lczkit --help` output, and `Normalisation.as_dict`,
+which named its consumer instead of its return.
+
+**`D` in CI, with the convention chosen on measurement.** `convention = "google"` takes `src/`
+from 137 to 68 by disabling D401 non-imperative-mood, which fires 67 times against a codebase that
+deliberately opens with a claim about what a thing is rather than with a verb. It also resolves
+D203/D211 and D212/D213 without an explicit ignore list, and it is what mkdocstrings-python
+assumes, so linter and renderer read the docstrings the same way. Measured alternatives: `numpy`
+leaves 123, `pep257` leaves 136. `tests/**` and `scripts/**` are exempt — tests alone carry 1 146
+violations, saying in a docstring what 785 prose-sentence test names already say.
+
+The config was **checked to discriminate rather than assumed to**: `src/lczkit/probe.py` flags
+D103; `tests/probe.py` and `scripts/probe.py` do not. So does `src/lczkit/_probe.py` — ruff treats
+an underscore-prefixed module as private, which is why `cli/_options.py` and `cli/_render.py` are
+outside the enforced surface and the coverage test exempts them by the same rule.
+
+**`docs_dir` is `docs_src/`, not `docs/`, and the reason is containment.** `docs/` is this
+project's internal record and is **205 MB on disk** — 27 gitignored PDFs plus
+`docs/references/datasets/`. A CI checkout sees only the 23 committed files, but a local
+`mkdocs gh-deploy` would push every one of those PDFs to GitHub Pages. **A `docs_dir` that cannot
+contain a PDF is a stronger guarantee than an `exclude_docs` rule that has to stay correct**, and
+the site is API-reference-only, so it shares nothing with that directory anyway.
+
+The reference is organised **per module because it has to be**: `lczkit/__init__.py` is three
+lines with no re-exports, and `cleaning`, `heights`, `landcover` and `sources` have no `__all__`
+at all, so `::: lczkit` renders an empty page. Package docstrings open each page with
+`members: []`, so a re-exported symbol is documented once, under the module that defines it.
+
+`tests/test_docs_api_coverage.py` is the guard, in four parts — every public module reaches a
+page, every page names a module that exists, nothing in `docs_dir` is gitignored, every page is in
+the nav. **It found a real gap on its first run**: eight subpackage docstrings no page carried.
+
+Site builds `--strict` clean: 15 pages, 708 documented symbols, 7.4 MB, zero PDFs. Attribute
+docstrings render, which matters more here than usual — **367 of them carry the majority of this
+package's prose, 119 in `config.py` alone.**
+
+**Two workflow defects, and a third that had been hiding behind one:**
+
+- **`ci.yml` triggered on `main`, which does not exist** — neither locally nor on the remote. The
+  *remote* is named `main` and its only branch is `master`, which is what makes it easy to
+  misread. **CI had therefore only ever fired on pull requests, since Phase 0.**
+- **`ruff format --check .` was already failing**, on two Python files and on
+  `docs/references/tables/osm_lcz_tag_mapping.md` — ruff 0.16 formats Python fences *inside
+  Markdown*. Unseen for exactly the reason above. The Python files are formatted; the table is
+  excluded from the formatter, because its value is that it is a faithful transcription.
+- **`docs.yml` syncs `--only-group docs`, on both steps.** mkdocstrings reads the source
+  statically through griffe and never imports `lczkit`, so the build needs neither the package nor
+  duckdb / geopandas / rasterio / exactextract / neatnet / earthengine-api — verified by loading
+  `lczkit.units.grid` through griffe with `search_paths=["src"]` alone. The flag is repeated on
+  `uv run` deliberately: **`uv run` re-syncs before running**, and without it that re-sync
+  reinstalls everything the sync step exists to skip.
+
+Dependencies added to a new `docs` group: **mkdocs (BSD-2-Clause), mkdocs-material (MIT),
+mkdocstrings[python] (ISC) and mkdocs-jupyter (Apache-2.0)**. All permissive, none GPL/LGPL.
+`mkdocs-jupyter` was requested and is wired, and there are **no notebooks in the repository**, so
+it currently renders nothing — recorded rather than dropped silently.
+
+**Not done, and left for item 9.** The README is untouched: 733 lines, 13 relative links into
+`docs/` that the site does not publish, and a `## Status` section that is 64% of the file.
+`docs_src/index.md` is a purpose-built landing page instead, and the README stays the repository's
+front door. Splitting it is release work, not documentation-build work.
+
+---
+
 ### STOP RULE — applies after Phase 13
 
 **No further diagnostic phases.** Thirteen phases in, the finding rate remains high but the returns
@@ -1601,8 +1692,13 @@ Remaining work, in order:
 7. ~~**Phase 19 — a run a GIS can open.**~~ **Concluded**, on a report from outside the repository.
    Packaging, not measurement: `units.gpkg` and the manifest's derived CRS. Nothing recomputed, no
    stored figure moved.
-8. **The paper.**
-9. **Cleanup** — docs, release.
+8. ~~**Phase 20 — the API reference.**~~ **Concluded**, on explicit request. Documentation and
+   tooling, not measurement: every public symbol documented, `D` enforced in CI, and an MkDocs
+   site published from a `docs_dir` that cannot leak the reference PDFs. It found that CI had
+   never fired on a push.
+9. **The paper.**
+10. **Cleanup** — release. **The docs half landed early as Phase 20**; what is left here is the
+    README split and the release itself.
 
 **`OA_w` was blocked and is now closed.** Bechtel, Demuzere & Stewart (2020) supplied both the
 class-similarity matrix and the definition; the matrix is transcribed in
@@ -1942,6 +2038,7 @@ reconcile silently.** That flagging behaviour is working; keep it.
 | Sidebar and selector labels built as `column.replace("_", " ")` | Produced "height of roughness elements m" and "industrial fraction of building area" on all three published maps. `ParameterSpec.label` puts the display name beside the definition; `DISPLAY_LABELS` covers the classification columns the registry does not describe, and `HEIGHT_SOURCE_LABELS` turns `height_frac_wsf3d` into "WSF-3D, 90 m raster". | 7, 15 |
 | `NODATA_COLOUR` indistinguishable from a low band | A null parameter is a reportable state — `aspect_ratio` is null wherever no street reaches a building, which is most of LCZ 8 — and every layer painted it the same grey with nothing saying what grey meant. Continuous legends now carry an explicit "no value" row; the categorical legend does not, since there the colour would name a class that does not exist. | 6, 15 |
 | No CLI, per MVP scope discipline | **Lifted by explicit request, Phase 15.** Removed from the Deferred list and from the scope bullet, both patched here rather than departed from silently. `lczkit run` and `lczkit site build\|serve`; the rest of that bullet — no web UI, no plotting helpers, no notebook tooling — stands. | 0, 15 |
+| No notebook tooling, per the same bullet | **Partially lifted by explicit request, Phase 20**, and patched here rather than departed from silently. `mkdocs-jupyter` (Apache-2.0) is in the `docs` group, so it is notebook tooling in the *documentation build* and not in the package or its runtime dependencies. It renders nothing today — the repository holds **zero** `.ipynb` files — and is recorded rather than dropped, so a future notebook has somewhere to go. No web UI and no plotting helpers. | 0, 15, 20 |
 | The end-to-end pipeline lived in `scripts/` | **Moved to `lczkit.pipeline.run_pipeline` in Phase 15.** It was unimportable (no `__init__.py`, reached by `sys.path` insertion), outside `mypy src`, and pulled its config constants and land-cover fetcher from two *other* scripts, with three partial re-implementations beside it. A bbox was a module constant, so a new city meant editing a script. `run_and_publish` and `configure` keep their names and delegate, so `publish_sites.py` and the phase write-ups that cite these paths still hold. | 8, 15 |
 | Two `CleaningConfig` constants both named `CLEANING` | `berlin_metropolitan.py` carries the metropolitan values the published sites used (`max_area 100_000`, `merge_limit 50`, plus street tiling); `unit_scale_experiment.py` carries the 9 km² fixture values (`50_000` / `200`, no tiling). `configure()` took the former. `presets.PRESETS["published"]` therefore takes the former, and **a test asserts it still equals it** — taking the other would make `lczkit run` silently irreproducible against every published figure. | 8, 15 |
 | `Settings.load()` created `run_dir` as a side effect | Fine while every caller went on to run a pipeline; wrong as soon as a command exists whose purpose is *not* to act. `create_run_dir=True` by default, `False` for `--dry-run`. | 0, 15 |
@@ -1964,6 +2061,12 @@ reconcile silently.** That flagging behaviour is working; keep it.
 | Superseded text left in concluded phase blocks | Phase 8's block opened with a nine-minute runtime and later asserted the package could not process a city; Phase 3 still carried the corrected-away axis pairing; deferred still listed SVF first. **Concluded phases keep measurements and rulings and drop imperatives.** | 3, 6, 8, 13 |
 | Run outputs reported as having no CRS in QGIS | **Not a defect in the files, and checked before anything was changed.** All ten runs on disk carry valid GeoParquet 1.0.0 with the extent's UTM CRS as PROJJSON *and an EPSG authority code*, in `units.parquet` and every `layers/*.parquet` — `EPSG:32618` Bogotá through `EPSG:32737` Nairobi. GDAL's Parquet driver is an **optional build component**, so a QGIS without it opens a correct file as a non-spatial table and the symptom names the producer. `units.gpkg` ships beside the GeoParquet by default (measured 0.86 exponent, 1.83 s / 67.3 MB at 116 491 units), never instead of it. **The archival GeoParquet and its CRS are unchanged** — the export CRS was *not* switched to lat/lon, because that would move every stored run's geometry and make every area statistic in this file incomparable. | 6, 19 |
 | The run CRS recorded nowhere | Derived by `estimate_utm_crs()` from the extent, so it is in no config and was in no manifest — a run directory could state its own CRS only through the file format the complaining reader could not open. `manifest.crs` and `crs_wkt` added; `lczkit export` backfills them for runs already written, editing the JSON directly rather than round-tripping through `RunManifest`, which would fill today's defaults into an archived run. | 0, 6, 19 |
+| `ci.yml` triggered on a branch that does not exist | `push: branches: [main]` since Phase 0, against a repository whose only branch is `master` — the *remote* is named `main`, which is what makes it misread. **CI had only ever fired on pull requests**, which is why a `ruff format --check` failure sat unnoticed in the tree. Fixed to `master`. A workflow that never runs is indistinguishable from one that passes. | 0, 20 |
+| `ruff format` reads Python fences inside Markdown | ruff 0.16 formats ```` ```python ```` blocks in `.md`, so `docs/references/tables/osm_lcz_tag_mapping.md` — a hand-checked Tier 1 transcription — was a standing `ruff format --check` failure. Excluded via `[tool.ruff.format] exclude`, not reformatted: the file's whole value is that it is a faithful copy, and `ruff check` does not read `.md` at all, so the two commands disagree about what a "Python file" is. | 20 |
+| pydocstyle convention for a prose-docstring codebase | **`google`, chosen on measurement.** No `Args:`/`Parameters` section exists anywhere in the package, so no convention's *section* rules apply and the choice only decides which nuisance rules switch off. `google` leaves 68 in `src/` against `numpy`'s 123 and `pep257`'s 136, by disabling D401 non-imperative-mood — 67 hits against docstrings that deliberately open with a claim rather than a verb — and it is mkdocstrings-python's own default, so linter and renderer read the docstrings the same way. `tests/**` and `scripts/**` exempt. | 20 |
+| Protocol implementations documented only on the Protocol | The one member that *is* the implementation was blank in ten places — `generate`, `fill`, `ensure`, `name`. Defensible as authorial intent, and **not recoverable by a doc generator**: the implementations satisfy the Protocols structurally and subclass nothing, so there is no base to inherit a docstring from. Written out, each stating what it does differently rather than restating the interface. Checked before relying on it, not after. | 20 |
+| `docs/` as the MkDocs `docs_dir` | **Refused.** That directory is the internal record and is 205 MB on disk — 27 gitignored PDFs plus `references/datasets/`. CI sees only the 23 committed files, but a local `gh-deploy` would publish every PDF. `docs_dir` is `docs_src/`, holding the landing page and the API pages only. **A directory that cannot contain a PDF is a stronger guarantee than an `exclude_docs` rule that has to stay correct**, and a test asserts nothing under it is gitignored. | 0, 20 |
+| `uv run` undoing `uv sync --only-group` | `uv run` re-syncs the environment before running, so `uv sync --only-group docs` followed by a bare `uv run mkdocs` reinstalls the project and the whole geo stack the first step exists to skip. The flag is repeated on both steps. mkdocstrings needs neither — griffe reads the source statically via `paths: [src]`, verified by loading a module with `search_paths=["src"]` and nothing installed. | 20 |
 
 ---
 
@@ -2170,3 +2273,23 @@ city where the class exists *and* is tagged, and the coverage table suggests the
   in no manifest either, leaving a run directory unable to state its own CRS except through the one
   file format the reader could not open. Anything computed at runtime that a consumer must know is
   a manifest field, not an implicit property of an artefact.
+- **A check that never runs is indistinguishable from a check that passes.** `ci.yml` triggered on
+  a `main` branch that has never existed in this repository — the *remote* is named `main`, the
+  branch is `master` — so from Phase 0 it fired only on pull requests, and a `ruff format --check`
+  failure sat in the tree unseen. Before trusting a gate, confirm it has actually run: a green
+  history and an empty history look the same from the outside.
+- **Prefer a structure that cannot hold the bad state over a rule that forbids it.** The MkDocs
+  `docs_dir` is `docs_src/` and not `docs/`, because `docs/` holds 205 MB of gitignored reference
+  PDFs and one `mkdocs gh-deploy` from a working tree would publish them. An `exclude_docs` rule
+  would have worked and would have had to keep working, silently, forever. Same shape as the two
+  `CLEANING` constants: the fix is to remove the opportunity, not to document it.
+- **Check whether a generator can recover what the source omits, before relying on it.** Ten
+  members were undocumented because their contract lives on a Protocol, which looks like something
+  `inherited_members` fixes — except the implementations satisfy the Protocols *structurally* and
+  subclass nothing, so there is no base to inherit from and the page would have rendered blank. The
+  question "will the tool fill this in?" has an answer that is cheap to test and expensive to
+  assume.
+- **A tool's idea of which files it owns may not be yours.** `ruff format` reads Python fences
+  inside Markdown and `ruff check` does not read `.md` at all, so one committed reference
+  transcription was a standing format failure that no lint run would ever mention. When adding a
+  formatter or linter to a repository, look at what it actually globbed, not at what it is for.
