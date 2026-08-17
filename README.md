@@ -590,7 +590,7 @@ as a tool. It needs the `viz` extra, which is one pinned wheel:
 ```sh
 uv add --active --optional viz tippecanoe
 lczkit site build <run_dir>
-lczkit site build <run_dir> --basemap osm   # optional online ground, off by default
+lczkit site build <run_dir> --basemap osm --basemap esri-satellite   # optional, off by default
 lczkit site serve <run_dir>                 # then open the address it prints
 ```
 
@@ -629,14 +629,31 @@ Four things about it are worth knowing before relying on it:
   attributable, and show the reader the same linework the classification was computed from. Land use
   is available and off by default: at 9 km² it was 94% of the basemap's bytes, for a wash drawn
   under a translucent fill.
-- **The base map is the run's own linework by default, and an online provider is opt-in.**
-  `--basemap osm` (or `carto-positron`, `carto-dark`) adds a selectable raster ground with its
-  attribution, and it is the only thing in a built site that reaches outside the directory. It is
-  off unless asked for, hidden until selected, and it degrades to a notice rather than a blank map
-  when the tiles do not load — so the offline guarantee survives as the default rather than being
-  traded away. A site built with one is no longer fully archival, and its `README.md` says so.
-  A test asserts the default build names no remote host anywhere, and a second asserts that when a
-  provider *is* configured its URLs appear in `style.json` and in no other file.
+- **A dropdown picks the ground; the run's own linework is a separate checkbox drawn over it.** So
+  streets can sit over satellite rather than instead of it. `--basemap` is repeatable and takes
+  `osm`, `carto-positron`, `carto-dark`, `esri-satellite`, `maptiler-hybrid`, `maptiler-topo`,
+  `all`, or `none`. Nothing is selected until a reader picks it, and a ground degrades to a notice
+  rather than a blank map when its tiles do not load.
+- **The command line offers the keyless grounds by default; the library offers none.** `lczkit run`
+  and `lczkit site build` give you OSM, both Cartos and Esri satellite unless you pass
+  `--basemap none`; `VizConfig()` and `build_site(run_dir)` reach no network unless asked. The line
+  is drawn at whether a provider needs an API key, derived from the provider table rather than
+  listed, so a keyed ground cannot become a default by being forgotten. **An archival site now
+  means passing `--basemap none`** — that is the cost of this default and the one thing here that
+  got worse. What did not change: the site still opens and works offline either way, since the
+  grounds are hidden until chosen and the run's own linework needs no network. A test pins the
+  library default, and a second asserts that when a provider *is* configured its URLs appear in
+  `style.json` and in no other file.
+- **No Google tiles, and that is a licensing decision rather than an oversight.** The endpoint
+  people use for "Google satellite" is undocumented and using it outside a Google Maps API breaks
+  their terms, so it cannot record a licence — and every ground here records one. Esri World
+  Imagery covers satellite without a key; MapTiler covers hybrid and topo with one.
+- **A MapTiler key travels with the site it builds.** MapLibre fetches tiles from the browser, so
+  the key is in `style.json` in plain text and whoever holds the directory holds the key. It is
+  read from `MAPTILER_API_KEY` and deliberately excluded from the run manifest — which the site
+  also carries a copy of — so it reaches one file rather than three; a test greps every file a
+  build wrote. That bounds the exposure and does not remove it: restrict the key by origin, or
+  build with a keyless ground when the site is going to be handed on.
 - **Height provenance is the second layer in the selector, above the urban canopy parameters.**
   `height_completeness` and the `height_frac_*` tier fractions are first-class layers rather than
   diagnostics — they are the visible form of the package's central result. The tier fractions reach

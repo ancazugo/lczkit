@@ -11,7 +11,13 @@ from pydantic import ValidationError
 
 from lczkit.cities import BY_KEY, shrink, so2sat_window
 from lczkit.cities import city as lookup_city
-from lczkit.cli._options import apply_config_file, parse_bbox
+from lczkit.cli._options import (
+    BASEMAP_HELP,
+    apply_basemaps,
+    apply_config_file,
+    parse_basemaps,
+    parse_bbox,
+)
 from lczkit.cli._render import EXIT_MISSING_TOOL, StageProgress, console, fail, out, report_site
 from lczkit.cli._render import stage_table as render_stages
 from lczkit.config import Settings
@@ -19,7 +25,6 @@ from lczkit.pipeline import PipelineResult, run_pipeline
 from lczkit.presets import DEFAULT_PRESET, PRESETS, apply_preset
 from lczkit.protocols import BBox
 from lczkit.viz import TippecanoeMissingError
-from lczkit.viz.basemaps import PROVIDERS
 
 
 def run(
@@ -74,15 +79,8 @@ def run(
         ),
     ] = False,
     basemap: Annotated[
-        str | None,
-        typer.Option(
-            "--basemap",
-            metavar="KEY",
-            help=(
-                f"Add a selectable online base map ({', '.join(sorted(PROVIDERS))}). "
-                "Off by default: the site otherwise reaches no network."
-            ),
-        ),
+        list[str] | None,
+        typer.Option("--basemap", metavar="KEY", help=BASEMAP_HELP),
     ] = None,
     dry_run: Annotated[
         bool,
@@ -114,14 +112,7 @@ def run(
     if config is not None:
         apply_config_file(settings, config)
     settings.viz.include_buildings = buildings
-    if basemap is not None:
-        if basemap not in PROVIDERS:
-            fail(f"unknown basemap {basemap!r}; choose from {', '.join(sorted(PROVIDERS))}")
-        settings.viz.online_basemap = basemap
-        chosen = PROVIDERS[basemap]
-        console.print(f"base map: [bold]{chosen.label}[/bold] — {chosen.licence}")
-        if chosen.terms:
-            console.print(f"[yellow]note[/yellow] {chosen.terms}")
+    apply_basemaps(settings.viz, parse_basemaps(basemap))
 
     if bbox is not None:
         parsed = parse_bbox(bbox)

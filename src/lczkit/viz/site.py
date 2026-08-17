@@ -31,8 +31,9 @@ import geopandas as gpd
 import pandas as pd
 
 from lczkit.classify.classifier import DISTANCE_COLUMNS
-from lczkit.config import VizConfig
+from lczkit.config import VizConfig, maptiler_key
 from lczkit.output.writer import LAYERS_DIR, MANIFEST_FILE, UNITS_FILE, VIZ_FILE
+from lczkit.viz import basemaps
 from lczkit.viz import style as style_module
 from lczkit.viz.tiles import TilesetReport, build_tileset, copy_tree
 
@@ -196,7 +197,8 @@ def build_site(run_dir: Path | str, *, config: VizConfig | None = None) -> SiteR
         has_detail=has_detail,
         basemap_layers=tuple(basemap),
         has_buildings=has_buildings,
-        online_basemap=config.online_basemap,
+        online_basemaps=config.basemap_keys,
+        maptiler_key=_resolve_api_key(config),
     )
 
     # `index.html` sits at the root because that is where a browser looks; everything it pulls in
@@ -224,6 +226,24 @@ def build_site(run_dir: Path | str, *, config: VizConfig | None = None) -> SiteR
         json.dumps(report.as_dict(), indent=2) + "\n", encoding="utf-8"
     )
     return report
+
+
+def _resolve_api_key(config: VizConfig) -> str | None:
+    """The MapTiler key for this build: the configured one, else the environment, else `None`.
+
+    The environment fallback is what makes rebuilding an archived run work. `VizConfig.maptiler_key`
+    is excluded from serialisation on purpose, so a manifest never carries the key and a config
+    validated back out of one always has `None` there — the run recorded which grounds it wanted
+    but not the credential for them, which is the intended split.
+
+    Returning `None` is not an error here even when a keyed provider is configured: `build_style`
+    raises, with the variable named, at the point the key would have been substituted.
+    """
+    if config.maptiler_key:
+        return config.maptiler_key
+    if any(basemaps.provider(key).requires_key for key in config.basemap_keys):
+        return maptiler_key()
+    return None
 
 
 def _render_columns(columns: list[str], config: VizConfig) -> list[str]:

@@ -12,8 +12,90 @@ from pathlib import Path
 import typer
 from pydantic import ValidationError
 
-from lczkit.config import Settings
+from lczkit.cli._render import console
+from lczkit.config import Settings, VizConfig
 from lczkit.protocols import BBox
+from lczkit.viz.basemaps import DEFAULT_BASEMAP_KEYS, PROVIDERS
+
+BASEMAP_HELP = (
+    f"Online base map to offer, repeatable ({', '.join(sorted(PROVIDERS))}), "
+    f"or 'all', or 'none'. Defaults to the keyless grounds "
+    f"({', '.join(DEFAULT_BASEMAP_KEYS)}); the MapTiler ones must be asked for, because they "
+    "write an API key into the built site."
+)
+
+
+def parse_basemaps(values: list[str] | None) -> list[str] | None:
+    """`--basemap` occurrences resolved to provider keys, or `None` when the flag was not given.
+
+    `None` and `[]` are different answers and both are reachable: not passing the flag defers to
+    the run and then to `DEFAULT_BASEMAP_KEYS`, while `--basemap none` asks for a site that reaches
+    no network. Returning the same value for both would make the flag unable to turn a ground off —
+    which is the difference between "I did not say" and "I said no", and only one of those is an
+    instruction. `apply_basemaps` is where the two are resolved.
+
+    Shared by `run` and `site build` because it is one flag with one meaning. They previously
+    validated it two different ways — one checking `PROVIDERS` directly, the other round-tripping
+    the config — and only one of them accepted `none`, so the same argument was an error in one
+    command and a instruction in the other.
+    """
+    if values is None:
+        return None
+    keys: list[str] = []
+    for value in values:
+        for part in value.split(","):
+            part = part.strip()
+            if not part or part == "none":
+                continue
+            if part == "all":
+                keys.extend(PROVIDERS)
+            elif part in PROVIDERS:
+                keys.append(part)
+            else:
+                raise typer.BadParameter(
+                    f"unknown basemap {part!r}; choose from {', '.join(sorted(PROVIDERS))}, "
+                    "or 'all', or 'none'"
+                )
+    return list(dict.fromkeys(keys))
+
+
+def apply_basemaps(config: VizConfig, keys: list[str] | None) -> None:
+    """Put the chosen grounds on `config` and print what they oblige the caller to.
+
+    `keys` is what `parse_basemaps` returned, so `None` means the flag was absent. That falls back
+    to `DEFAULT_BASEMAP_KEYS` **only when the run has no grounds of its own** — rebuilding a site
+    must not quietly change what the run was built with, and a run that recorded a ground has
+    already answered this question.
+
+    Usage terms are printed for providers the caller *named* and summarised for the defaults. A
+    provider selected on purpose is one whose policy the caller is taking on knowingly — the OSMF
+    tile servers are a donated resource, and MapTiler publishes a key — while four blocks of terms
+    on every ordinary run is the kind of output people stop reading.
+    """
+    explicit = keys is not None
+    if keys is None:
+        keys = list(config.basemap_keys) or list(DEFAULT_BASEMAP_KEYS)
+    config.online_basemaps = keys
+    # The deprecated singular would otherwise survive alongside the list and reappear in the picker.
+    config.online_basemap = None
+
+    if not keys:
+        console.print("  base maps: [bold]none[/bold] — this site will reach no network")
+        return
+    chosen = [PROVIDERS[key] for key in keys]
+    if explicit:
+        for entry in chosen:
+            console.print(f"  base map: [bold]{entry.label}[/bold] — {entry.licence}")
+            if entry.terms:
+                console.print(f"  [yellow]note[/yellow] {entry.terms}")
+        return
+    console.print(
+        "  base maps: [bold]" + "[/bold], [bold]".join(e.label for e in chosen) + "[/bold]"
+    )
+    console.print(
+        "  [dim]each carries its provider's usage terms, shown when you name one; "
+        "--basemap none to build a site that reaches no network[/dim]"
+    )
 
 
 def parse_bbox(value: str) -> BBox:

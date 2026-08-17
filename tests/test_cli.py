@@ -25,6 +25,7 @@ from typer.testing import CliRunner
 from lczkit.cli import app
 from lczkit.cli._render import EXIT_CONFIG
 from lczkit.config import Settings
+from lczkit.output import MANIFEST_FILE
 from lczkit.presets import PRESETS, apply_preset
 
 runner = CliRunner()
@@ -249,6 +250,143 @@ def test_a_config_file_with_an_unknown_section_says_what_is_valid(
     assert result.exit_code != 0
     assert "unknown settings" in result.output
     assert "classification" in result.output
+
+
+# --------------------------------------------------------------------------- base maps
+
+
+def _dry_run_config(data_dir: Path, *argv: str) -> dict:
+    result = runner.invoke(
+        app, ["run", "--bbox", "13.0,52.0,13.1,52.1", "--run-id", "dry", "--dry-run", *argv]
+    )
+    assert result.exit_code == 0, result.output
+    return json.loads(result.stdout[result.stdout.index("{") :])["config"]["viz"]
+
+
+def test_no_basemap_flag_offers_the_keyless_grounds(data_dir: Path) -> None:
+    """The command-line default, which is deliberately *not* the library default.
+
+    `VizConfig()` is still empty and `build_site()` still reaches no network unasked — that is the
+    property the no-external-reference test pins. What differs is the command a person types to
+    look at a map: a keyless ground costs them nothing and publishes nothing, so making them ask
+    for it twice bought a guarantee that only the library needed.
+    """
+    from lczkit.viz.basemaps import DEFAULT_BASEMAP_KEYS
+
+    assert _dry_run_config(data_dir)["online_basemaps"] == list(DEFAULT_BASEMAP_KEYS)
+
+
+def test_the_default_grounds_publish_no_api_key(data_dir: Path) -> None:
+    """The line between the two defaults, and the reason it is drawn at `requires_key`.
+
+    A keyed provider writes an API key into every site built with it, so it cannot be something a
+    caller gets without asking. Derived from `requires_key` rather than listed, so a keyed provider
+    added later cannot join the defaults by being forgotten.
+    """
+    from lczkit.viz.basemaps import PROVIDERS
+
+    for key in _dry_run_config(data_dir)["online_basemaps"]:
+        assert not PROVIDERS[key].requires_key, key
+
+
+def test_basemap_none_asks_for_a_site_that_reaches_no_network(data_dir: Path) -> None:
+    """ "I did not say" and "I said no" are different, and only one of them is an instruction."""
+    assert _dry_run_config(data_dir, "--basemap", "none")["online_basemaps"] == []
+
+
+def test_the_basemap_flag_repeats_and_keeps_its_order(data_dir: Path) -> None:
+    """Order is what the reader's dropdown is built in, so it is a decision and not incidental."""
+    viz = _dry_run_config(data_dir, "--basemap", "carto-dark", "--basemap", "osm")
+
+    assert viz["online_basemaps"] == ["carto-dark", "osm"]
+
+
+def test_the_basemap_flag_takes_a_comma_separated_list(data_dir: Path) -> None:
+    viz = _dry_run_config(data_dir, "--basemap", "osm,esri-satellite")
+
+    assert viz["online_basemaps"] == ["osm", "esri-satellite"]
+
+
+def test_basemap_all_offers_every_provider(data_dir: Path) -> None:
+    from lczkit.viz.basemaps import PROVIDERS
+
+    viz = _dry_run_config(data_dir, "--basemap", "all")
+
+    assert set(viz["online_basemaps"]) == set(PROVIDERS)
+
+
+def test_the_licence_and_the_terms_are_printed_when_a_basemap_is_chosen(data_dir: Path) -> None:
+    """Selecting a provider takes on its usage policy, and for MapTiler it publishes an API key in
+    the built site. Both belong at the moment the choice is made, not in the output afterwards."""
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--bbox",
+            "13.0,52.0,13.1,52.1",
+            "--run-id",
+            "dry",
+            "--dry-run",
+            "--basemap",
+            "osm",
+            "--basemap",
+            "maptiler-topo",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "OpenStreetMap" in result.output
+    assert "donated resource" in result.output  # the OSMF tile policy
+    assert "plain text" in result.output  # the key travels with the site
+
+
+@pytest.mark.parametrize("command", [["run", "--bbox", "13.0,52.0,13.1,52.1"], None])
+def test_an_unknown_basemap_is_refused_the_same_way_by_both_commands(
+    data_dir: Path, tmp_path: Path, command: list[str] | None
+) -> None:
+    """One flag, one meaning. `run` used to check `PROVIDERS` directly while `site build`
+    round-tripped the config, and only `site build` accepted `none` — so the same argument was an
+    error in one command and an instruction in the other."""
+    if command is None:
+        (tmp_path / MANIFEST_FILE).write_text(json.dumps({"config": {"viz": {}}}))
+        argv = ["site", "build", str(tmp_path)]
+    else:
+        argv = [*command, "--dry-run"]
+
+    result = runner.invoke(app, [*argv, "--basemap", "nonesuch"])
+
+    assert result.exit_code != 0
+    assert "unknown basemap" in result.output
+    assert "esri-satellite" in result.output
+
+
+def test_an_absent_flag_and_an_explicit_none_stay_distinguishable() -> None:
+    """The distinction `apply_basemaps` resolves. Collapsing them would make a ground unremovable
+    on rebuild, or make every rebuild silently re-add one."""
+    from lczkit.cli._options import parse_basemaps
+
+    assert parse_basemaps(None) is None
+    assert parse_basemaps(["none"]) == []
+    assert parse_basemaps(["osm", "none"]) == ["osm"]
+
+
+def test_rebuilding_a_run_does_not_change_the_grounds_it_recorded() -> None:
+    """A rebuild reproduces a site; it does not redecide it.
+
+    The default fills a gap — an older run recorded nothing, and rebuilding it is exactly when a
+    reader wants grounds — but a run that recorded a choice has already answered, and quietly
+    adding three more to it would make a rebuilt site disagree with the one it replaced.
+    """
+    from lczkit.cli._options import apply_basemaps
+    from lczkit.config import VizConfig
+
+    recorded = VizConfig(online_basemaps=["carto-dark"])
+    apply_basemaps(recorded, None)
+    assert recorded.online_basemaps == ["carto-dark"]
+
+    # And the deprecated singular counts as a recorded choice, since that is what old runs wrote.
+    archived = VizConfig(online_basemap="osm")
+    apply_basemaps(archived, None)
+    assert archived.online_basemaps == ["osm"]
 
 
 # --------------------------------------------------------------------------- site

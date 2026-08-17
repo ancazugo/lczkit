@@ -20,6 +20,7 @@ moves.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 from lczkit.classify.classifier import DISTANCE_COLUMNS
@@ -67,8 +68,13 @@ view is a paint change over tiles already in memory, which is what CLAUDE.md ask
 HEIGHT_COMPLETENESS_COLUMN = "height_completeness"
 UNIQUENESS_COLUMN = "uniqueness"
 
-RASTER_BASEMAP_SOURCE = "basemap-raster"
-RASTER_BASEMAP_LAYER = "basemap-raster"
+RASTER_BASEMAP_PREFIX = "basemap-raster-"
+"""Leading string of every remote raster's source and layer id, which are the same string.
+
+**Only `raster_id` may use it, and nothing may match on it.** The site's own linework layers are
+also `basemap-*`, and collecting them by prefix once put the remote raster into the choice that
+exists precisely to avoid the network. Both sets are built from the decision that separates them —
+see `metadata.lczkit.basemap` below."""
 
 GROUP_CLASSIFICATION = "Classification"
 GROUP_PROVENANCE = "Height provenance"
@@ -298,6 +304,15 @@ def build_views(
     return views
 
 
+def raster_id(entry: basemaps.BasemapProvider) -> str:
+    """The style id of `entry`'s source and layer, which are deliberately the same string.
+
+    One id per provider, because each carries its own tile size and maximum zoom and a MapLibre
+    source carries both — so several grounds cannot share one source whose tiles are swapped.
+    """
+    return f"{RASTER_BASEMAP_PREFIX}{entry.key}"
+
+
 def build_style(
     manifest: dict[str, Any],
     *,
@@ -307,7 +322,8 @@ def build_style(
     has_detail: bool,
     basemap_layers: tuple[str, ...],
     has_buildings: bool,
-    online_basemap: str | None = None,
+    online_basemaps: Sequence[str] = (),
+    maptiler_key: str | None = None,
 ) -> dict[str, Any]:
     """The complete style document, ready to be written as `style.json`.
 
@@ -317,12 +333,14 @@ def build_style(
     `source-layer` that is not in the tileset renders nothing and reports nothing, which is the
     hardest kind of blank map to diagnose.
 
-    `online_basemap`, when set, adds a remote raster ground beneath everything. It is the only thing
-    in this document that reaches outside the directory, and it is off unless a caller asks — see
-    `lczkit.viz.basemaps` for why that default is load-bearing rather than cautious.
+    `online_basemaps` names remote raster grounds to add beneath everything, in picker order. They
+    are the only thing in this document that reaches outside the directory, and there are none
+    unless a caller asks — see `lczkit.viz.basemaps` for why that default is load-bearing rather
+    than cautious. Each gets its own source and layer rather than sharing one whose tiles are
+    swapped: tile size and maximum zoom differ per provider and a source carries both.
     """
     has_basemap = bool(basemap_layers)
-    raster = basemaps.provider(online_basemap) if online_basemap else None
+    rasters = [basemaps.provider(key) for key in online_basemaps]
     views = build_views(manifest.get("breaks", []), columns, manifest.get("parameters", []))
 
     sources: dict[str, Any] = {
@@ -348,28 +366,32 @@ def build_style(
             "type": "vector",
             "url": "pmtiles://./tiles/buildings.pmtiles",
         }
-    if raster is not None:
-        sources[RASTER_BASEMAP_SOURCE] = {
+    for entry in rasters:
+        sources[raster_id(entry)] = {
             "type": "raster",
-            "tiles": list(raster.tiles),
-            "tileSize": raster.tile_size,
-            "maxzoom": raster.max_zoom,
+            # Raises rather than shipping an unsubstituted `{key}`, which would 403 per tile and
+            # look like an empty base map instead of a missing key.
+            "tiles": basemaps.tile_urls(entry, maptiler_key),
+            "tileSize": entry.tile_size,
+            "maxzoom": entry.max_zoom,
             # MapLibre's attribution control reads this. Every provider here requires attribution,
             # which is why configuring one also switches that control on in the front end.
-            "attribution": raster.attribution,
+            "attribution": entry.attribution,
         }
 
     layers: list[dict[str, Any]] = [
         {"id": "background", "type": "background", "paint": {"background-color": BACKGROUND_COLOUR}}
     ]
-    if raster is not None:
-        # Beneath everything, and hidden at first: the run's own linework is the default ground, so
-        # an archived site opened offline looks the way it always did until a reader asks for tiles.
+    for entry in rasters:
+        # Beneath everything, and all hidden at first: the run's own linework is the default ground,
+        # so an archived site opened offline looks the way it always did until a reader asks for
+        # tiles. They sit in one block directly above the background, so whichever the reader picks
+        # is under the classification rather than over it.
         layers.append(
             {
-                "id": RASTER_BASEMAP_LAYER,
+                "id": raster_id(entry),
                 "type": "raster",
-                "source": RASTER_BASEMAP_SOURCE,
+                "source": raster_id(entry),
                 "layout": {"visibility": "none"},
                 "paint": {"raster-opacity": 1.0},
             }
@@ -495,18 +517,29 @@ def build_style(
                 "centre": list(centre),
                 "nodata_code": NODATA_CODE,
                 "nodata_colour": NODATA_COLOUR,
-                # Which grounds the reader can choose between. `run` is always present because the
-                # run persisted its own water and streets; `raster` appears only when a caller
-                # configured one, and the page shows no base picker at all without it.
+                # Which grounds the reader can choose between. `run_layers` is always present
+                # because the run persisted its own water and streets, and it is an *overlay*: it
+                # composes over whichever raster is chosen rather than replacing it. `rasters` is
+                # empty unless a caller configured one, and an empty list is what makes the page
+                # show no base-map picker at all.
                 "basemap": {
                     # Collected as they were appended rather than matched on the "basemap-" prefix,
-                    # which the raster layer also carries — prefix-matching here put the remote
+                    # which the raster layers also carry — prefix-matching here put the remote
                     # tiles into the offline choice and made "run's own linework" fetch the network.
                     "run_layers": run_basemap_layers,
-                    "raster_layer": RASTER_BASEMAP_LAYER if raster is not None else None,
-                    "raster_label": raster.label if raster is not None else None,
-                    "raster_licence": raster.licence if raster is not None else None,
-                    "raster_dark": raster.dark if raster is not None else None,
+                    "rasters": [
+                        {
+                            "id": raster_id(entry),
+                            "key": entry.key,
+                            "label": entry.label,
+                            "licence": entry.licence,
+                            # Drives the front end's opacity floor: the LCZ palette is a light
+                            # figure on a dark ground, so over a light or busy ground the unit fill
+                            # has to be drawn more opaquely to stay readable.
+                            "dark": entry.dark,
+                        }
+                        for entry in rasters
+                    ],
                 },
                 # The sidebar renders one row per parameter and used to title each with its column
                 # name. These are `ParameterSpec.label`, plus the classification and provenance

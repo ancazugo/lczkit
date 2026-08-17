@@ -20,7 +20,7 @@ from __future__ import annotations
 import pytest
 
 from lczkit.viz.site import ASSETS_DIR
-from lczkit.viz.style import DISPLAY_LABELS, HEIGHT_SOURCE_LABELS
+from lczkit.viz.style import DISPLAY_LABELS, HEIGHT_SOURCE_LABELS, build_style
 
 APP_JS = ASSETS_DIR / "app.js"
 INDEX_HTML = ASSETS_DIR / "index.html"
@@ -94,7 +94,9 @@ def test_app_js_stays_a_single_iife_with_no_globals() -> None:
         "view-description",
         "hover-readout",
         "legend",
-        "base-options",
+        "base-picker",
+        "base-select",
+        "base-linework",
         "base-note",
         "opacity",
         "opacity-value",
@@ -139,6 +141,34 @@ def test_the_script_reads_only_metadata_the_style_module_emits() -> None:
         "centre",
     ):
         assert f"meta.{key}" in source or f'"{key}"' in source, key
+
+
+def test_the_page_reads_the_basemap_keys_the_style_module_actually_writes() -> None:
+    """Computed from the producer rather than listed, so a renamed key cannot pass by being
+    forgotten here too.
+
+    This is the shape that has already failed twice in this repository: `app.js` explaining
+    `label_route` values the classifier never emits, and the tile type the paint expression could
+    not match. A consumer guessing at a producer's vocabulary fails in silence — here it would be a
+    base-map dropdown that lists nothing, on a site built specifically to have one.
+    """
+    document = build_style(
+        {},
+        columns=["unit_id"],
+        bounds=(13.0, 52.3, 13.8, 52.7),
+        centre=(13.4, 52.5),
+        has_detail=False,
+        basemap_layers=("water",),
+        has_buildings=False,
+        online_basemaps=["osm"],
+    )
+    base = document["metadata"]["lczkit"]["basemap"]
+    source = APP_JS.read_text(encoding="utf-8")
+
+    for key in base:
+        assert f'"{key}"' in source or f".{key}" in source, f"basemap.{key}"
+    for key in base["rasters"][0]:
+        assert f'"{key}"' in source or f".{key}" in source, f"basemap.rasters[].{key}"
 
 
 def test_the_height_source_labels_cover_every_tier_the_cascade_can_report() -> None:

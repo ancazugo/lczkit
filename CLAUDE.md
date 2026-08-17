@@ -1667,6 +1667,126 @@ front door. Splitting it is release work, not documentation-build work.
 
 ---
 
+### Phase 21 — base maps a reader can choose — CONCLUDED
+
+**Built on explicit request, and it strikes a committed anti-pattern rather than working around
+it.** The request was for more grounds — OSM, satellite, MapTiler hybrid and topo — behind a
+dropdown. "Don't use a basemap requiring an API key" had been in the anti-pattern list since Phase
+0; it is struck above, in place, per the Canonical spec rule, and the guarantee it was protecting is
+unchanged: **the default build still names no remote host anywhere, and the test that says so is
+untouched.** Not a diagnostic phase; it moved no measurement.
+
+**No Google tiles, and the refusal is the licensing decision this package's first rule implies.**
+`mt{0-3}.google.com/vt` is undocumented and using it outside a Google Maps API breaks Google's
+terms, so it can record no licence — and every entry in the provider table records one, which is
+what the table is for. Satellite comes from **Esri World Imagery** (no key, attribution-required)
+and **MapTiler**. A test asserts every provider carries a licence and an attribution, so the next
+person to add a ground has to answer the same question.
+
+**The measurement that set three constants, taken before they were written.** One request per
+template, since a wrong map ID 404s per tile rather than raising:
+
+| provider | tiles | max zoom, and why |
+|---|---|---|
+| `esri-satellite` | 256 px, `{z}/{y}/{x}` | **19** — z21 and z22 return an identical 2 521-byte placeholder |
+| `maptiler-hybrid` | 256 px | **20** — imagery; z21+ are served but are server-side upsampling |
+| `maptiler-topo` | 256 px | **22** — rendered from vector data, so every level is a real render |
+
+**Esri's axis order was settled by reading pixels, because both orderings return 200.** It is the
+one URL here that is not `{z}/{x}/{y}`, and transposing it returns valid imagery of the wrong place
+— which renders cleanly, raises nothing, and defeats a status-code check. At z5 the shipped
+`{z}/{y}/{x}` gives mean RGB (1, 53, 73) mid-Pacific and (238, 208, 158) over the Sahara — ocean and
+sand; the transposition puts the Sahara at (1, 45, 66), in the sea. Pinned by its own test.
+
+**One source and one layer per provider, which is forced rather than chosen.** `maxzoom` and
+`tileSize` live on a MapLibre source and differ per provider, so several grounds cannot share one
+source whose tiles are swapped at runtime. The rasters therefore form a contiguous hidden block
+directly above the background. `test_the_raster_basemap_is_hidden_until_a_reader_asks_for_it`
+pinned `index == 1`; it now pins the block, which is the same guarantee — nothing paints over the
+classification — generalised rather than relaxed.
+
+**The key is confined by a field flag, not by a promise.** MapLibre fetches tiles from the browser,
+so a MapTiler key must be in `style.json` in plain text; the question was how many files it reaches.
+The manifest is `settings.model_dump()` verbatim and `build_site` copies it into the site, so an
+ordinary config field would have published it three times. `VizConfig.maptiler_key` is
+`exclude=True`, and a test greps every file a build wrote. **That bounds the exposure and does not
+remove it** — the built directory still carries the key, and `.env.example`, the site's own
+`README.md` and the CLI's `terms` output all say so at the moment it matters.
+
+- **A trailing space in `.env`, found by the first request failing.** `MAPTILER_API_KEY` had one;
+  the URL was rejected before it reached MapTiler. Invisible in an editor, and it would otherwise
+  have reached the tile URL and made every request 403 for no readable reason. `maptiler_key()`
+  strips, and a test passes `"a-key  "`.
+- **`Settings.load` could not be the only reader.** `lczkit site build` takes a run directory and
+  must keep working without `DATA_DIR`, which `Settings.load` raises without. `config.maptiler_key()`
+  is the single definition both call.
+- **An excluded field cannot round-trip, and `test_json_round_trip` asserted it would.** It passed
+  only because the variable happens not to be exported in a shell; exporting it fails the test with
+  a diff that names no cause. It now clears the variable and says why, beside a test that states
+  the non-round-trip as the intended behaviour.
+
+**Two seams that were guessing at each other, both now checked against the producer.** `app.js` read
+four `raster_*` scalars that no longer exist, and its tile-failure handler matched the source id
+`"basemap-raster"` as a literal. The replacement checks **membership in the ids the style declared**
+rather than their shared prefix — the run's own layers are `basemap-*` too, and collecting a set by
+prefix once already put the remote raster into the choice that exists to avoid the network. The new
+test builds a style and asserts `app.js` mentions every key it emits, computed from the producer so
+a renamed key cannot pass by being forgotten in the test as well.
+
+**The two `--basemap` implementations were one flag with two meanings**, found by needing to change
+both: `run` checked `PROVIDERS` directly, `site build` round-tripped the config, and only `site
+build` accepted `none` — so the same argument was an error in one command and an instruction in the
+other. Both go through `cli._options.parse_basemaps` now, which is repeatable, comma-separated,
+`all`, and `none`. `None` and `[]` stay distinguishable: not passing the flag leaves what the run
+recorded alone, `--basemap none` clears it, and a flag that could not express the first would make
+an online ground unremovable on rebuild.
+
+**The run's own linework became an overlay rather than a competing choice**, on the user's call: the
+dropdown picks the ground, a checkbox draws the run's water and streets over it. Satellite tells a
+reader what is there, the run's linework tells them what the classification was computed from, and
+the old exclusive radios could not show both.
+
+#### The default was flipped afterwards, and the guarantee narrowed with it
+
+**Shipped opt-in first, and that was wrong in use.** Every ground was off unless `--basemap` named
+one, which preserved the offline property exactly — and meant a plain `lczkit site build` produced
+no picker at all. Reported from outside as "the dropdown is not available", on a site built the
+ordinary way. **A feature reachable only through a flag nobody was told about is not shipped**, and
+the opt-in default had been chosen to protect a guarantee rather than to serve a reader.
+
+The ruling, on the user's call: **the command line offers the keyless grounds by default; the
+library does not.**
+
+| | default | reaches a tile host |
+|---|---|---|
+| `VizConfig()` / `build_site(run_dir)` | none | no — test unchanged |
+| `lczkit run`, `lczkit site build` | OSM, Carto ×2, Esri | yes |
+| `--basemap none` | none | no |
+
+**The line is drawn at `requires_key`, and derived rather than listed.** `DEFAULT_BASEMAP_KEYS` is
+`tuple(k for k, p in PROVIDERS.items() if not p.requires_key)`, so a keyless ground added later
+joins the defaults by being keyless and a keyed one **cannot join by being forgotten** — which is
+the property that matters, since a keyed ground publishes an API key into every site built with it.
+A test asserts no default provider requires a key.
+
+**What was given up, stated plainly rather than argued away.** A site built by the ordinary command
+now names four tile hosts in its `style.json`, where before it named none. What is *not* given up:
+the site still opens and works offline — the grounds are hidden until chosen and the run's own
+linework is still the ground that draws without a network — and no key is published unless asked
+for. The no-external-reference test is untouched and still passes, because it pins the library
+default, which is now what that guarantee means. **Anyone building an archival site must pass
+`--basemap none`,** and that is a real regression in defaults for archival use, accepted knowingly.
+
+**Rebuilding does not redecide.** A run that recorded grounds keeps them; the default fills in only
+where a run recorded none, which is the case that made this visible — every site on disk predated
+the change and none of them could show a picker until it was rebuilt.
+
+No dependency was added. The deprecated `online_basemap` singular is kept and folded into
+`basemap_keys`: pydantic ignores unknown fields, so dropping it would make an archived run's
+configured ground disappear on rebuild with nothing raised.
+
+---
+
 ### STOP RULE — applies after Phase 13
 
 **No further diagnostic phases.** Thirteen phases in, the finding rate remains high but the returns
@@ -1696,8 +1816,12 @@ Remaining work, in order:
    tooling, not measurement: every public symbol documented, `D` enforced in CI, and an MkDocs
    site published from a `docs_dir` that cannot leak the reference PDFs. It found that CI had
    never fired on a push.
-9. **The paper.**
-10. **Cleanup** — release. **The docs half landed early as Phase 20**; what is left here is the
+9. ~~**Phase 21 — base maps a reader can choose.**~~ **Concluded**, on explicit request. Front end
+    and packaging, not measurement: six grounds behind a dropdown, no Google tiles on licensing,
+    and an API key confined to `style.json` by a field flag and a test. It struck the "no basemap
+    requiring an API key" anti-pattern in place rather than working around it.
+10. **The paper.**
+11. **Cleanup** — release. **The docs half landed early as Phase 20**; what is left here is the
     README split and the release itself.
 
 **`OA_w` was blocked and is now closed.** Bechtel, Demuzere & Stewart (2020) supplied both the
@@ -2067,6 +2191,15 @@ reconcile silently.** That flagging behaviour is working; keep it.
 | Protocol implementations documented only on the Protocol | The one member that *is* the implementation was blank in ten places — `generate`, `fill`, `ensure`, `name`. Defensible as authorial intent, and **not recoverable by a doc generator**: the implementations satisfy the Protocols structurally and subclass nothing, so there is no base to inherit a docstring from. Written out, each stating what it does differently rather than restating the interface. Checked before relying on it, not after. | 20 |
 | `docs/` as the MkDocs `docs_dir` | **Refused.** That directory is the internal record and is 205 MB on disk — 27 gitignored PDFs plus `references/datasets/`. CI sees only the 23 committed files, but a local `gh-deploy` would publish every PDF. `docs_dir` is `docs_src/`, holding the landing page and the API pages only. **A directory that cannot contain a PDF is a stronger guarantee than an `exclude_docs` rule that has to stay correct**, and a test asserts nothing under it is gitignored. | 0, 20 |
 | `uv run` undoing `uv sync --only-group` | `uv run` re-syncs the environment before running, so `uv sync --only-group docs` followed by a bare `uv run mkdocs` reinstalls the project and the whole geo stack the first step exists to skip. The flag is repeated on both steps. mkdocstrings needs neither — griffe reads the source statically via `paths: [src]`, verified by loading a module with `search_paths=["src"]` and nothing installed. | 20 |
+| "No basemap requiring an API key", vs a request for MapTiler | **Struck by explicit request, in place rather than departed from silently** — third time this bullet has been narrowed, after the `file://` amendment and Phase 15's online basemaps. The guarantee it protected is unchanged and still enforced: the default build names no remote host, and that test is untouched. What changed is that "no key, ever" is now "no key unless a caller asks, and then in one file that a test names". | 0, 7, 15, 21 |
+| Google as the satellite provider | **Refused on licensing, and a substitute shipped.** `mt{0-3}.google.com/vt` is undocumented and using it outside a Google Maps API breaks Google's terms, so it can record no licence — and every entry in the provider table records one, which is the table's purpose under this project's first non-negotiable. Esri World Imagery gives keyless satellite; MapTiler gives hybrid and topo. A test asserts every provider carries a licence and an attribution, so the question has to be answered again for the next ground added. | 21 |
+| An API key in a manifest the site publishes | The manifest is `settings.model_dump()` verbatim **and `build_site` copies it into the site**, so an ordinary config field would have published the key three times over. `VizConfig.maptiler_key` is `exclude=True` and a test greps every file a build wrote. It bounds the exposure rather than removing it — the browser fetches the tiles, so `style.json` carries the key in plain text and whoever holds the directory holds the key. Said in `.env.example`, in the site's own `README.md`, and by the CLI at the moment the provider is chosen. | 19, 21 |
+| An excluded field and a round-trip assertion | `test_json_round_trip` asserts `restored == settings`, which a deliberately non-serialising field cannot satisfy. It passed only because `MAPTILER_API_KEY` happens not to be exported in a shell — exporting it fails the test with a diff naming no cause. The variable is cleared explicitly there now, beside a test stating the non-round-trip as intended. **A test that depends on the ambient environment is not passing, it is agreeing with your machine.** | 21 |
+| One raster layer pinned at `layers.index() == 1` | Generalised, not relaxed. Several grounds cannot share one source — `maxzoom` and `tileSize` live on the source and differ per provider — so there are N raster layers, and the guarantee "nothing paints over the classification" becomes a contiguous hidden block directly above the background. | 7, 21 |
+| Two `--basemap` implementations | One flag, two meanings, found by needing to change both: `run` checked `PROVIDERS` directly, `site build` round-tripped the config, and only `site build` accepted `none`, so the same argument was an error in one command and an instruction in the other. Unified in `cli._options.parse_basemaps`. `None` and `[]` stay distinct — no flag leaves what the run recorded alone, `--basemap none` clears it — because a flag that cannot express the first makes an online ground unremovable on rebuild. | 15, 21 |
+| A trailing space in a `.env` value | Found by the first verification request failing before it left the machine. Invisible in an editor, and it would otherwise have reached the tile URL and made every request 403 with a symptom that names nothing. `maptiler_key()` strips, and a test passes a value with trailing whitespace. | 21 |
+| Base maps shipped opt-in, and the picker never appeared | **The default was wrong in use, and the report came from outside the repository.** Every ground was off unless `--basemap` named one, so a plain `lczkit site build` produced no picker — and every site on disk predated the change, so none could show one until rebuilt. A feature reachable only through an undocumented flag is not shipped. **Ruling: the CLI offers the keyless grounds by default, the library still offers none.** The line is `requires_key`, derived rather than listed, so a keyed provider cannot join the defaults by being forgotten. Cost, accepted knowingly: an ordinary CLI-built site now names four tile hosts where it named none, and an archival build must pass `--basemap none`. The site still opens and works offline either way, and no key is published unless asked for. | 7, 15, 21 |
+| One guarantee, two defaults | The no-external-reference test now pins `VizConfig()` and `build_site()`, not what the command line produces — a narrowing, so it is written down rather than left to be inferred from a test that kept passing. Both defaults are tested and both are documented; the distinction is that the archival path must be network-clean without being asked, and the interactive one should show a reader a map. **A guarantee that quietly changes scope while its test still passes is the failure this row exists to prevent.** | 7, 21 |
 
 ---
 
@@ -2141,12 +2274,15 @@ city where the class exists *and* is tagged, and the coverage table suggests the
   cannot reproduce a classification.
 - Don't delete anything under `input/`. To mark a cache entry as superseded, write a
   `<name>.discarded` sidecar next to it; never remove the entry itself.
-- Don't inline data into `index.html`, link a CDN, or use a basemap requiring an API key. The site
-  must open with no network and no software the user must install, and remain valid years from now.
+- Don't inline data into `index.html` or link a CDN. The **default** site must open with no network
+  and no software the user must install, and remain valid years from now.
   It is served by its own bundled `serve.py` over loopback — `file://` is not satisfiable, because
   PMTiles reads byte ranges through `fetch` and the Fetch standard leaves `file:` URLs unhandled.
   Every built site carries a `README.md` saying so, since the first thing a recipient tries is
-  opening `index.html` and it fails with an unexplained network error.
+  opening `index.html` and it fails with an unexplained network error. **"Or use a basemap requiring
+  an API key" was struck in Phase 21 by explicit request** — MapTiler is opt-in, off by default, and
+  its key is confined to `style.json` by a test; the default build still names no remote host
+  anywhere.
 - Don't recompute parameters or classification breaks at site-build time. Phase 7 reads
   `units_viz.parquet` and the manifest; it does not do analysis.
 - Don't hardcode dataset class mappings, thresholds, or storey heights — they go in config.

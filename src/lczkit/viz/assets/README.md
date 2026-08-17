@@ -1,7 +1,8 @@
 # Local Climate Zone map
 
 A self-contained map of one `lczkit` run. Everything it needs is in this directory — there is no
-CDN, no basemap API key, and nothing here reaches the network.
+CDN, and the map draws without a network. The one exception is the optional online base maps
+described below, which are not selected until you pick one.
 
 ## Opening it
 
@@ -66,13 +67,19 @@ position, zoom and active layer.
 ## The base map
 
 Under the units is the **run's own linework** — the cleaned water and streets the classification was
-computed from, tiled into this directory. That is the default because it needs no network: this
-site works offline, now and in ten years.
+computed from, tiled into this directory. Its checkbox is on by default because it needs no network:
+this site works offline, now and in ten years.
 
-If the site was built with `--basemap`, the picker offers a second ground fetched from an online
-tile provider, with its attribution shown. That layer is the only thing here that reaches outside
-this directory, it is off until you select it, and if the tiles fail to load the map says so and
-keeps working. A site built that way is no longer fully archival — the provider outlives it only as
-long as it chooses to.
+Unless the site was built with `--basemap none`, a **Base map** dropdown appears above it, offering
+one or more grounds fetched from an online tile provider, with attribution shown. The linework
+checkbox is
+separate so the run's own streets can be drawn *over* satellite imagery rather than instead of it.
+Those layers are the only things here that reach outside this directory, none is selected until you
+pick one, and if the tiles fail to load the map says so and keeps working. A site built that way is
+no longer fully archival — the provider outlives it only as long as it chooses to.
+
+**If one of the grounds is a MapTiler layer, this directory contains an API key**, in `style.json`,
+in plain text, because the browser is what fetches the tiles. Treat the directory accordingly before
+passing it on.
 
 The opacity slider fades the classification so you can read what is underneath.

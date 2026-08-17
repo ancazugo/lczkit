@@ -20,9 +20,12 @@ bundled `serve.py`, standard library only, over loopback.
     recipient tries and it is the thing that fails.
 
 The basemap is the run's **own** cleaned Overture water and streets: already cached for the bbox,
-ODbL-attributable, and the same linework the classification was computed from. An online raster
-basemap is available opt-in via `VizConfig.online_basemap`; with it unset the emitted site names
-no remote host anywhere, and that default is enforced by a test rather than promised in prose.
+ODbL-attributable, and the same linework the classification was computed from. Online raster grounds
+are available opt-in via `VizConfig.online_basemaps`, one or several, offered to the reader as a
+dropdown; with it empty the emitted site names no remote host anywhere, and that default is enforced
+by a test rather than promised in prose. Two of the providers need an API key, which is written into
+`style.json` and therefore travels with the built site — see `VizConfig.maptiler_key` for what that
+does and does not bound.
 
 ::: lczkit.viz.site
 

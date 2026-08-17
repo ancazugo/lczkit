@@ -23,7 +23,8 @@
     activeView: null,
     selected: null,
     meta: null,
-    base: "run",
+    base: "none",
+    linework: true,
   };
 
   function el(id) {
@@ -102,42 +103,60 @@
   /* --------------------------------------------------------------------- base */
 
   /*
-   * The ground under the units. `run` is the layers the run itself persisted — its cleaned water
-   * and streets — and is the default precisely because it needs no network: an archived site opened
-   * years from now still draws it. `raster` exists only when the run was built with an online
-   * basemap, and is treated as fallible rather than assumed.
+   * The ground under the units, and there are two independent controls for it.
+   *
+   * The dropdown picks a remote raster, or none. The checkbox draws the layers the run itself
+   * persisted — its cleaned water and streets — and is separate rather than a third dropdown entry
+   * because linework over imagery is the combination people actually want: satellite tells you what
+   * is there, the run's own streets tell you what the classification was computed from. It is on by
+   * default and needs no network, so an archived site opened years from now still draws a map.
+   *
+   * Every raster is treated as fallible rather than assumed.
    */
-  function setBase(map, choice) {
-    const base = state.meta.basemap || {};
-    const runLayers = base.run_layers || [];
-    state.base = choice;
+  function rasters() {
+    return (state.meta.basemap || {}).rasters || [];
+  }
 
-    runLayers.forEach(function (id) {
-      if (map.getLayer(id)) {
-        map.setLayoutProperty(id, "visibility", choice === "run" ? "visible" : "none");
-      }
+  function setBase(map, key) {
+    state.base = key;
+    let chosen = null;
+    rasters().forEach(function (entry) {
+      if (!map.getLayer(entry.id)) return;
+      const on = entry.key === key;
+      if (on) chosen = entry;
+      map.setLayoutProperty(entry.id, "visibility", on ? "visible" : "none");
     });
-    if (base.raster_layer && map.getLayer(base.raster_layer)) {
-      map.setLayoutProperty(
-        base.raster_layer,
-        "visibility",
-        choice === "raster" ? "visible" : "none"
-      );
+
+    const note = el("base-note");
+    if (chosen) {
+      note.hidden = false;
+      note.className = "muted";
+      note.textContent =
+        chosen.label + " tiles are fetched from the network (" + chosen.licence + ").";
+    } else {
+      note.hidden = true;
     }
+
     /*
-     * The LCZ palette was built for a light figure on a dark ground. Over a light raster the same
-     * fill at the same opacity washes out, so the floor rises with the basemap rather than leaving
-     * the reader to discover the problem and fix it with the slider.
+     * The LCZ palette was built for a light figure on a dark ground. Over a light or busy raster
+     * the same fill at the same opacity washes out, so the floor rises with the basemap rather than
+     * leaving the reader to discover the problem and fix it with the slider.
      */
-    if (choice === "raster" && base.raster_dark === false) {
+    if (chosen && chosen.dark === false) {
       const slider = el("opacity");
       if (Number(slider.value) < 70) {
         slider.value = "70";
         setOpacity(map, 70);
       }
     }
-    Array.prototype.forEach.call(document.querySelectorAll("[name=base]"), function (input) {
-      input.checked = input.value === choice;
+  }
+
+  function setLinework(map, visible) {
+    state.linework = visible;
+    ((state.meta.basemap || {}).run_layers || []).forEach(function (id) {
+      if (map.getLayer(id)) {
+        map.setLayoutProperty(id, "visibility", visible ? "visible" : "none");
+      }
     });
   }
 
@@ -147,33 +166,30 @@
   }
 
   function buildBaseOptions(map) {
-    const base = state.meta.basemap || {};
-    const container = el("base-options");
-    const choices = [{ value: "none", label: "None" }, { value: "run", label: "Run's own linework" }];
-    if (base.raster_layer) choices.push({ value: "raster", label: base.raster_label });
+    const available = rasters();
+    /*
+     * Hidden rather than empty when a run configured no raster: a dropdown whose only entry is
+     * "None" is a control that cannot do anything, and it would suggest the site is missing
+     * something rather than that it was built to reach no network.
+     */
+    el("base-picker").hidden = available.length === 0;
 
-    container.replaceChildren();
-    choices.forEach(function (choice) {
-      const row = document.createElement("label");
-      row.className = "checkbox";
-      const input = document.createElement("input");
-      input.type = "radio";
-      input.name = "base";
-      input.value = choice.value;
-      input.checked = choice.value === "run";
-      input.addEventListener("change", function () {
-        setBase(map, choice.value);
-      });
-      row.append(input, document.createTextNode(" " + choice.label));
-      container.append(row);
+    const picker = el("base-select");
+    picker.replaceChildren();
+    [{ key: "none", label: "None" }].concat(available).forEach(function (entry) {
+      const option = document.createElement("option");
+      option.value = entry.key;
+      option.textContent = entry.label;
+      picker.append(option);
+    });
+    picker.value = "none";
+    picker.addEventListener("change", function (event) {
+      setBase(map, event.target.value);
     });
 
-    if (base.raster_layer) {
-      const note = el("base-note");
-      note.hidden = false;
-      note.textContent =
-        base.raster_label + " tiles are fetched from the network (" + base.raster_licence + ").";
-    }
+    el("base-linework").addEventListener("change", function (event) {
+      setLinework(map, event.target.checked);
+    });
   }
 
   /* --------------------------------------------------------------- unit panel */
@@ -412,11 +428,17 @@
     if (config.overture && config.overture.release) {
       rows.push({ label: "Overture release", value: config.overture.release });
     }
-    const base = meta.basemap || {};
+    const available = (meta.basemap || {}).rasters || [];
     rows.push({
       label: "Base map",
-      value: base.raster_layer
-        ? "run's own linework, plus " + base.raster_label + " (network)"
+      value: available.length
+        ? "run's own linework, plus " +
+          available
+            .map(function (entry) {
+              return entry.label;
+            })
+            .join(", ") +
+          " (network)"
         : "run's own linework — this site needs no network",
     });
     definitionList(el("about"), rows);
@@ -468,7 +490,8 @@
          * a second copy of it. On when a run configured a remote basemap, because every provider
          * requires attribution and MapLibre reads it off the source rather than from this page.
          */
-        attributionControl: (meta.basemap && meta.basemap.raster_layer) ? {compact: true} : false,
+        attributionControl:
+          (meta.basemap && (meta.basemap.rasters || []).length) ? {compact: true} : false,
       });
       map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-left");
       map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
@@ -505,7 +528,8 @@
 
       map.on("load", function () {
         applyView(map, startView);
-        setBase(map, "run");
+        setBase(map, "none");
+        setLinework(map, el("base-linework").checked);
         setOpacity(map, Number(el("opacity").value));
         if (!meta.buildings_layer) return;
         el("buildings-section").hidden = false;
@@ -524,13 +548,23 @@
        */
       map.on("error", function (event) {
         const source = event && event.sourceId;
-        if (!source || source !== "basemap-raster") return;
+        /*
+         * Membership in the ids the style declared, not a match on their shared prefix: the run's
+         * own layers are named `basemap-*` too, and collecting a set by prefix once already put the
+         * remote raster into the choice that exists to avoid the network. A name prefix is not a
+         * category.
+         */
+        const remote = rasters().some(function (entry) {
+          return entry.id === source;
+        });
+        if (!remote) return;
         const note = el("base-note");
         note.hidden = false;
         note.className = "error";
         note.textContent =
-          "Base map tiles could not be loaded — you may be offline. Everything else on this map " +
-          "is served from this directory; switch the base back to the run's own linework.";
+          "Base map tiles could not be loaded — you may be offline, or the provider's key may " +
+          "have expired. Everything else on this map is served from this directory; set the base " +
+          "map back to None.";
       });
 
       select_.addEventListener("change", function () {

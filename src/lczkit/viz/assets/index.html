@@ -2,14 +2,15 @@
 <!--
   lczkit static map site.
 
-  Everything this page loads is a sibling file. There is no CDN link, no basemap API key, no
-  analytics, and no font endpoint — a test asserts that this file, app.js, app.css and serve.py
-  name no remote host at all.
+  Everything this page loads is a sibling file. There is no CDN link, no analytics, and no font
+  endpoint — a test asserts that this file, app.js, app.css and serve.py name no remote host at all,
+  and no API key appears in any of them.
 
-  The one exception a run can opt into is an online raster basemap, which reaches a tile server and
-  therefore appears only in style.json, never here. It is off by default, hidden when it is off, and
-  the run's own Overture linework stays the default ground either way, so an archived copy opened
-  offline still shows the geometry the classification was computed from.
+  The one exception a run can opt into is one or more online raster basemaps, which reach a tile
+  server and therefore appear only in style.json, never here — including the API key two of the
+  providers need. They are off by default, the picker is hidden when there are none, and the run's
+  own Overture linework is drawn either way, so an archived copy opened offline still shows the
+  geometry the classification was computed from.
 
   Serve it with the bundled server (`python serve.py`) and open the address it prints.
 -->
@@ -39,11 +40,15 @@
       </section>
 
       <section id="base-section">
-        <fieldset>
-          <legend>Base map</legend>
-          <div id="base-options"></div>
-          <p id="base-note" class="muted" hidden></p>
-        </fieldset>
+        <div id="base-picker" hidden>
+          <label for="base-select">Base map</label>
+          <select id="base-select"></select>
+        </div>
+        <label class="checkbox">
+          <input type="checkbox" id="base-linework" checked />
+          Run's own linework
+        </label>
+        <p id="base-note" class="muted" hidden></p>
         <label for="opacity">Layer opacity <span id="opacity-value" class="mono">82%</span></label>
         <input type="range" id="opacity" min="20" max="100" step="2" value="82" />
       </section>

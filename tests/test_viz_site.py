@@ -42,6 +42,10 @@ pytestmark = pytest.mark.skipif(
 CRS = "EPSG:32633"
 ORIGIN = (390_000.0, 5_818_000.0)  # a plausible UTM 33N origin near Berlin, so lon/lat is sane
 
+KEY = "not-a-real-maptiler-key"
+"""Stands in for a MapTiler key. Deliberately a distinctive literal rather than something like
+"test": the leak test greps every file a build wrote for it, and a common word would match prose."""
+
 
 @pytest.fixture
 def settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Settings:
@@ -238,10 +242,15 @@ def test_an_online_basemap_reaches_its_provider_and_nothing_else(run_dir: Path) 
     document that happens to fetch tiles and started being one that cannot work without them.
     """
     site = run_dir / "site"
-    build_site(run_dir, config=VizConfig(online_basemap="osm"))
+    build_site(
+        run_dir,
+        config=VizConfig(
+            online_basemaps=["osm", "esri-satellite", "maptiler-topo"], maptiler_key=KEY
+        ),
+    )
 
     style = json.loads((site / "style.json").read_text(encoding="utf-8"))
-    source = style["sources"]["basemap-raster"]
+    source = style["sources"]["basemap-raster-osm"]
     assert source["type"] == "raster"
     assert all(url.startswith("https://") for url in source["tiles"])
     assert "openstreetmap.org" in source["attribution"]
@@ -258,29 +267,73 @@ def test_an_online_basemap_reaches_its_provider_and_nothing_else(run_dir: Path) 
         assert offending == [], f"{authored.name} names a tile host: {offending}"
 
 
-def test_the_raster_basemap_is_hidden_until_a_reader_asks_for_it(run_dir: Path) -> None:
+def test_an_api_key_reaches_the_style_and_no_other_file(run_dir: Path) -> None:
+    """A MapTiler key must be in `style.json` — the browser fetches the tiles — and nowhere else.
+
+    The manifest is the file to watch, not the front end. It is `settings.model_dump()` verbatim and
+    `build_site` copies it into the published directory, so an ordinary config field would put the
+    key in two shipped files instead of the one that needs it. `VizConfig.maptiler_key` is
+    `exclude=True` for exactly this, and this is the assertion that notices if that is ever dropped.
+    """
+    site = run_dir / "site"
+    build_site(run_dir, config=VizConfig(online_basemaps=["maptiler-hybrid"], maptiler_key=KEY))
+
+    assert KEY in (site / "style.json").read_text(encoding="utf-8")
+    for path in sorted(site.rglob("*")) + [run_dir / "manifest.json"]:
+        if not path.is_file() or path.name == "style.json":
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, ValueError):
+            continue  # the tilesets and the vendored bundles are not text
+        assert KEY not in text, f"{path.relative_to(run_dir)} carries the API key"
+
+
+def test_a_keyed_basemap_without_a_key_fails_the_build_rather_than_the_map(
+    run_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An unsubstituted `{key}` is a well-formed URL that 403s per tile, so the alternative to
+    raising here is a site that builds cleanly and shows an empty ground for an unstated reason.
+
+    `load_dotenv` is neutralised rather than the variable merely unset. dotenv searches *upward*
+    from the working directory, so running this from inside a checkout finds the repository's own
+    `.env` and the missing-key branch would never be reached — the same trap recorded for the
+    `DATA_DIR`-unset test.
+    """
+    monkeypatch.setattr("lczkit.config.load_dotenv", lambda **_: False)
+    monkeypatch.delenv("MAPTILER_API_KEY", raising=False)
+
+    with pytest.raises(ValueError, match="MAPTILER_API_KEY"):
+        build_site(run_dir, config=VizConfig(online_basemaps=["maptiler-topo"], maptiler_key=None))
+
+
+def test_the_raster_basemaps_are_hidden_until_a_reader_asks_for_one(run_dir: Path) -> None:
     """An archived site opened offline must look the way it always did.
 
-    The run's own linework is the default ground; the raster is a layer the reader can switch to.
-    Starting with it visible would mean every offline open began with a failed fetch and a blank
-    band where the basemap should be.
+    The run's own linework is drawn by default and needs no network; every raster is a layer the
+    reader can switch to. Starting with one visible would mean every offline open began with a
+    failed fetch and a blank band where the basemap should be.
     """
-    build_site(run_dir, config=VizConfig(online_basemap="osm"))
+    build_site(run_dir, config=VizConfig(online_basemaps=["osm", "carto-dark"]))
     style = json.loads((run_dir / "site" / "style.json").read_text(encoding="utf-8"))
 
-    raster = next(layer for layer in style["layers"] if layer["id"] == "basemap-raster")
-    assert raster["layout"]["visibility"] == "none"
-    # And it must be under everything, or it paints over the classification it is context for.
-    assert style["layers"].index(raster) == 1, "the raster must sit directly above the background"
+    rasters = [layer for layer in style["layers"] if layer["type"] == "raster"]
+    assert len(rasters) == 2
+    assert all(layer["layout"]["visibility"] == "none" for layer in rasters)
+    # And they must be under everything, or one paints over the classification it is context for.
+    # With several the guarantee is positional in the same way: a contiguous block directly above
+    # the background, so whichever the reader picks lands in the same place in the stack.
+    positions = [style["layers"].index(layer) for layer in rasters]
+    assert positions == [1, 2], "the rasters must sit directly above the background"
 
 
 def test_a_site_without_an_online_basemap_declares_no_raster_source(run_dir: Path) -> None:
     build_site(run_dir)
     style = json.loads((run_dir / "site" / "style.json").read_text(encoding="utf-8"))
 
-    assert "basemap-raster" not in style["sources"]
+    assert not [name for name in style["sources"] if name.startswith("basemap-raster")]
     assert [layer for layer in style["layers"] if layer["type"] == "raster"] == []
-    assert style["metadata"]["lczkit"]["basemap"]["raster_layer"] is None
+    assert style["metadata"]["lczkit"]["basemap"]["rasters"] == []
 
 
 def test_the_manifest_is_the_runs_own_manifest_unchanged(run_dir: Path) -> None:

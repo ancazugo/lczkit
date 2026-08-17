@@ -13,6 +13,7 @@ from typing import Any
 import pytest
 
 from lczkit.classify.labels import LCZ_CLASSES, legend
+from lczkit.viz.basemaps import PROVIDERS
 from lczkit.viz.style import (
     NODATA_COLOUR,
     UNITS_FILL_LAYER,
@@ -452,8 +453,8 @@ def test_no_online_basemap_means_no_remote_source() -> None:
 def test_an_online_basemap_carries_its_attribution_into_the_source() -> None:
     """MapLibre reads attribution off the source, so a provider that requires it — all of them —
     is only correctly used if it travels with the tiles rather than being written into the page."""
-    document = style(online_basemap="osm")
-    source = document["sources"]["basemap-raster"]
+    document = style(online_basemaps=["osm"])
+    source = document["sources"]["basemap-raster-osm"]
 
     assert source["type"] == "raster"
     assert "OpenStreetMap" in source["attribution"]
@@ -462,22 +463,78 @@ def test_an_online_basemap_carries_its_attribution_into_the_source() -> None:
 
 def test_an_unknown_basemap_is_refused_by_name() -> None:
     with pytest.raises(KeyError, match="unknown basemap"):
-        style(online_basemap="not-a-provider")
+        style(online_basemaps=["not-a-provider"])
 
 
-def test_the_run_basemap_choice_does_not_include_the_remote_raster() -> None:
-    """The base picker offers "the run's own linework" and "the provider's tiles" as alternatives.
+def test_the_run_basemap_choice_does_not_include_the_remote_rasters() -> None:
+    """The picker offers the remote grounds; the run's own linework is a separate overlay.
 
-    Both the vector layers and the raster are named `basemap-*`, so collecting the offline set by
+    Both the vector layers and the rasters are named `basemap-*`, so collecting the offline set by
     prefix silently put the remote tiles into the offline choice — selecting "run's own linework"
     would then fetch the network, which is the one thing that choice exists to avoid.
     """
-    document = style(online_basemap="osm", basemap_layers=("water", "streets"))
+    document = style(online_basemaps=["osm", "esri-satellite"], basemap_layers=("water", "streets"))
     base = document["metadata"]["lczkit"]["basemap"]
 
     assert base["run_layers"] == ["basemap-water", "basemap-streets"]
-    assert base["raster_layer"] == "basemap-raster"
-    assert base["raster_layer"] not in base["run_layers"]
+    ids = [entry["id"] for entry in base["rasters"]]
+    assert ids == ["basemap-raster-osm", "basemap-raster-esri-satellite"]
+    assert set(ids).isdisjoint(base["run_layers"])
+
+
+def test_each_provider_gets_its_own_source_carrying_its_own_zoom_and_tile_size() -> None:
+    """The reason several grounds cannot share one source whose tiles are swapped at runtime.
+
+    `maxzoom` and `tileSize` live on the source, and they differ per provider — Esri's imagery has
+    global coverage to z19 while MapTiler's topo renders to z22. One source would have to pick one
+    pair of numbers and be wrong for every provider but that one.
+    """
+    document = style(online_basemaps=["esri-satellite", "carto-positron"])
+
+    esri = document["sources"]["basemap-raster-esri-satellite"]
+    carto = document["sources"]["basemap-raster-carto-positron"]
+    assert esri["maxzoom"] == 19
+    assert carto["maxzoom"] == 20
+    assert [layer["source"] for layer in document["layers"] if layer["type"] == "raster"] == [
+        "basemap-raster-esri-satellite",
+        "basemap-raster-carto-positron",
+    ]
+
+
+def test_the_rasters_keep_the_order_they_were_configured_in() -> None:
+    """It is the order they appear in the reader's dropdown, so it is a decision, not incidental."""
+    keys = ["carto-dark", "osm", "esri-satellite"]
+    base = style(online_basemaps=keys)["metadata"]["lczkit"]["basemap"]
+
+    assert [entry["key"] for entry in base["rasters"]] == keys
+
+
+def test_a_keyed_provider_without_a_key_is_refused_rather_than_left_unsubstituted() -> None:
+    """The failure this replaces is silent: `{key}` left in a tile URL is a well-formed URL that
+    403s on every request, so the site builds cleanly and shows an empty ground with no cause."""
+    with pytest.raises(ValueError, match="MAPTILER_API_KEY"):
+        style(online_basemaps=["maptiler-hybrid"], maptiler_key=None)
+
+
+def test_a_key_reaches_the_tile_urls_and_leaves_the_tile_coordinates_alone() -> None:
+    """Only `{key}` is substituted — `{z}`, `{x}` and `{y}` belong to MapLibre, and filling them
+    here would produce one hard-coded tile repeated across the whole map."""
+    document = style(online_basemaps=["maptiler-topo"], maptiler_key="a-test-key")
+    (url,) = document["sources"]["basemap-raster-maptiler-topo"]["tiles"]
+
+    assert "key=a-test-key" in url
+    assert "{key}" not in url
+    assert "{z}" in url and "{x}" in url and "{y}" in url
+
+
+def test_no_tile_url_anywhere_keeps_a_placeholder() -> None:
+    """Every provider at once, so a new one added with a placeholder no code substitutes cannot
+    reach a built site by being left out of the test above."""
+    document = style(online_basemaps=sorted(PROVIDERS), maptiler_key="a-test-key")
+
+    for name, source in document["sources"].items():
+        for url in source.get("tiles", []):
+            assert "{key}" not in url, name
 
 
 def test_a_run_written_before_labels_existed_still_gets_them_on_rebuild() -> None:

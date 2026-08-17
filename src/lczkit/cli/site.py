@@ -12,13 +12,12 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
-from pydantic import ValidationError
 
+from lczkit.cli._options import BASEMAP_HELP, apply_basemaps, parse_basemaps
 from lczkit.cli._render import EXIT_MISSING_TOOL, console, fail, report_site
 from lczkit.config import VizConfig
 from lczkit.output import MANIFEST_FILE
 from lczkit.viz import SITE_DIR, TippecanoeMissingError, build_site, serve
-from lczkit.viz.basemaps import PROVIDERS
 
 app = typer.Typer(no_args_is_help=True, help="Build and serve a run's map site.")
 
@@ -41,15 +40,8 @@ def build(
         ),
     ] = None,
     basemap: Annotated[
-        str | None,
-        typer.Option(
-            "--basemap",
-            metavar="KEY",
-            help=(
-                f"Add a selectable online base map ({', '.join(sorted(PROVIDERS))}), "
-                "or 'none'. Off by default: the site otherwise reaches no network."
-            ),
-        ),
+        list[str] | None,
+        typer.Option("--basemap", metavar="KEY", help=BASEMAP_HELP),
     ] = None,
 ) -> None:
     """Build `<run_dir>/site/` from the run's own outputs.
@@ -64,24 +56,15 @@ def build(
             "Pass the directory a run wrote, not its site/ subdirectory."
         )
 
-    config: VizConfig | None = None
-    if buildings is not None or basemap is not None:
-        config = _viz_config(run_dir)
-    if config is not None and buildings is not None:
+    keys = parse_basemaps(basemap)
+    # Always the run's own settings, because the base maps are now resolved on every build: an
+    # older run recorded no grounds at all, and rebuilding it is exactly when a reader wants them.
+    config = _viz_config(run_dir)
+    if buildings is not None:
         config.include_buildings = buildings
-    if config is not None and basemap is not None:
-        config.online_basemap = None if basemap == "none" else basemap
-        try:
-            VizConfig.model_validate(config.model_dump())
-        except ValidationError as error:
-            fail(f"--basemap: {error}")
 
     console.print(f"building site for [bold]{run_dir.name}[/bold]")
-    if config is not None and config.online_basemap is not None:
-        chosen = PROVIDERS[config.online_basemap]
-        console.print(f"  base map: [bold]{chosen.label}[/bold] — {chosen.licence}")
-        if chosen.terms:
-            console.print(f"  [yellow]note[/yellow] {chosen.terms}")
+    apply_basemaps(config, keys)
     try:
         report = build_site(run_dir, config=config)
     except TippecanoeMissingError as error:

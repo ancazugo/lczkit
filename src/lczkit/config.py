@@ -1184,23 +1184,59 @@ class VizConfig(BaseModel):
     """Above this many units the click-detail tileset is skipped and the sidebar falls back to the
     render attributes. A guard on the one part of the site whose size is unbounded in extent."""
 
-    online_basemap: str | None = None
-    """An optional remote raster basemap, by key from `lczkit.viz.basemaps.PROVIDERS`.
+    online_basemaps: list[str] = Field(default_factory=list)
+    """Remote raster grounds the site offers, by key from `lczkit.viz.basemaps.PROVIDERS`.
 
-    **`None` by default, and that default is load-bearing rather than cautious.** CLAUDE.md requires
+    **Empty by default, and that default is load-bearing rather than cautious.** CLAUDE.md requires
     a built site to open with no network and stay valid years from now, which is what makes one
     archivable beside a paper; a remote tile source breaks all three of those at once, and outlives
-    the run only as long as the provider chooses to serve it. With this unset the emitted site
+    the run only as long as the provider chooses to serve it. With this empty the emitted site
     contains no external reference at all, and a test asserts it.
 
-    Set it and the site gains a selectable ground under the units, drawn beneath everything else,
-    with the provider's attribution shown and its tiles treated as fallible: a failure leaves every
-    other layer working and says so. The run's own Overture water and streets remain in the site and
-    remain the default, so an archived copy opened offline still shows the linework the
-    classification was computed from.
+    Name one or several and the site gains a base-map picker: each is a selectable ground under the
+    units, drawn beneath everything else, hidden until chosen, with the provider's attribution shown
+    and its tiles treated as fallible — a failure leaves every other layer working and says so. The
+    run's own Overture water and streets stay in the site and stay switched on, so an archived copy
+    opened offline still shows the linework the classification was computed from.
 
-    Selecting a provider takes on its tile usage policy — see each one's `terms`.
+    Order is the order they appear in the picker. Selecting a provider takes on its tile usage
+    policy, and two of them need an API key — see each one's `terms`.
     """
+
+    online_basemap: str | None = None
+    """Deprecated single-value spelling of `online_basemaps`, folded into the front of it.
+
+    Kept because it is what runs before this field existed recorded in their manifests, and
+    `build_site` re-validates an archived manifest to rebuild a site. Pydantic ignores unknown
+    fields by default, so dropping this would make an archived run's configured ground disappear on
+    rebuild with nothing raised — a silent change to an artefact, which is worse than a stale name.
+    Read `basemap_keys`, never this field.
+    """
+
+    maptiler_key: str | None = Field(default=None, exclude=True)
+    """The MapTiler API key, resolved from `MAPTILER_API_KEY` by `Settings.load()`.
+
+    **`exclude=True` is the whole point of the field's shape.** The manifest is
+    `settings.model_dump()` verbatim, and `lczkit.viz.build_site` copies the manifest into the
+    published site, so an ordinary field would put the key in two shipped files rather than the one
+    that needs it. Excluded, it reaches `style.json`'s tile URLs and nothing else, and a test
+    asserts the manifest never carries it.
+
+    That bounds the exposure; it does not remove it. MapLibre fetches tiles from the browser, so the
+    key is in plain text in any site built with a MapTiler ground, and anyone holding the directory
+    holds the key. Restrict it by origin at the provider, or hand out a site built without one.
+    """
+
+    @property
+    def basemap_keys(self) -> list[str]:
+        """The configured provider keys in picker order, with the deprecated singular folded in.
+
+        The single place the two spellings are reconciled, so nothing downstream has to know that
+        `online_basemap` exists.
+        """
+        keys = [self.online_basemap] if self.online_basemap else []
+        keys.extend(self.online_basemaps)
+        return list(dict.fromkeys(key for key in keys if key))
 
     @model_validator(mode="after")
     def _check(self) -> VizConfig:
@@ -1232,16 +1268,16 @@ class VizConfig(BaseModel):
                 f"unknown basemap layers {', '.join(unknown)}; "
                 f"choose from {', '.join(sorted(allowed))}"
             )
-        if self.online_basemap is not None:
+        if self.basemap_keys:
             # Imported here rather than at module scope: `lczkit.viz` pulls in the tile builder and
             # the style module, and the config layer is imported by everything.
             from lczkit.viz.basemaps import PROVIDERS
 
-            if self.online_basemap not in PROVIDERS:
-                raise ValueError(
-                    f"unknown basemap {self.online_basemap!r}; "
-                    f"choose from {', '.join(sorted(PROVIDERS))}"
-                )
+            for key in self.basemap_keys:
+                if key not in PROVIDERS:
+                    raise ValueError(
+                        f"unknown basemap {key!r}; choose from {', '.join(sorted(PROVIDERS))}"
+                    )
         return self
 
 
@@ -1563,12 +1599,13 @@ class Settings(BaseModel):
     ) -> Settings:
         """Load `.env`, resolve `DATA_DIR`, and create `output/lczkit/<run_id>/` if absent.
 
-        Also picks up `GEE_PROJECT_NAME` into `land_cover.gee_project`. Unlike `DATA_DIR` it is
-        optional — only the Earth Engine backend needs it, and that backend raises its own message
-        when it is missing — so an absent value is not an error here. **An absent variable leaves
-        whatever is already configured alone**: assigning `os.environ.get(...)` unconditionally
-        would overwrite a value supplied by a config file with `None`, which is a silent discard
-        rather than a precedence rule.
+        Also picks up `GEE_PROJECT_NAME` into `land_cover.gee_project`, and `MAPTILER_API_KEY` into
+        `viz.maptiler_key`. Unlike `DATA_DIR` both are optional — only the Earth Engine backend and
+        the MapTiler base maps need them, and each raises its own message when it is missing — so an
+        absent value is not an error here. **An absent variable leaves whatever is already
+        configured alone**: assigning `os.environ.get(...)` unconditionally would overwrite a value
+        supplied by a config file with `None`, which is a silent discard rather than a precedence
+        rule.
 
         `create_run_dir=False` resolves everything and touches nothing, for callers that only want
         to *read* the resolved configuration — `lczkit run --dry-run`. The default creates it,
@@ -1593,6 +1630,33 @@ class Settings(BaseModel):
         gee_project = os.environ.get("GEE_PROJECT_NAME")
         if gee_project is not None:
             settings.land_cover.gee_project = gee_project
+        api_key = maptiler_key(dotenv_path=dotenv_path)
+        if api_key is not None:
+            settings.viz.maptiler_key = api_key
         if create_run_dir:
             settings.run_dir.mkdir(parents=True, exist_ok=True)
         return settings
+
+
+def maptiler_key(*, dotenv_path: Path | str | None = None) -> str | None:
+    """`MAPTILER_API_KEY` from the environment, stripped, or `None` if it is unset or blank.
+
+    Separate from `Settings.load` because `lczkit site build` needs the key and does **not** need
+    `DATA_DIR`: it works off a run directory given on the command line, and `Settings.load` raises
+    without `DATA_DIR`. Requiring one to get the other would make rebuilding an archived site
+    depend on an unrelated variable. `Settings.load` calls this too, so there is one definition of
+    where the key comes from.
+
+    The strip is not cosmetic. A trailing space in a `.env` line is invisible in an editor and
+    survives into the tile URL, where it makes every request 403 — a broken base map whose cause is
+    unreadable from the symptom.
+
+    It reads the environment, which the rest of the package must not do: CLAUDE.md's locked
+    decision is that `os.environ` is touched in this module and nowhere else.
+    """
+    load_dotenv(dotenv_path=dotenv_path)
+    raw = os.environ.get("MAPTILER_API_KEY")
+    if raw is None:
+        return None
+    stripped = raw.strip()
+    return stripped or None
