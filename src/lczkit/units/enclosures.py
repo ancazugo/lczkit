@@ -34,8 +34,9 @@ def assemble_barriers(
     rail: gpd.GeoDataFrame | None = None,
     vegetation: gpd.GeoDataFrame | None = None,
 ) -> gpd.GeoDataFrame:
-    """Combine barrier layers into the single `barriers` GeoDataFrame `EnclosureUnits.generate`
-    expects: one geometry column, no attributes, all layers in the same projected CRS.
+    """Combine barrier layers into the single `barriers` frame `EnclosureUnits.generate` expects.
+
+    That is: one geometry column, no attributes, all layers in the same projected CRS.
 
     `rail` and `vegetation` are optional — pass `None` (the default) when a layer isn't
     available; enclosures form from whatever barriers are given. All non-empty inputs must
@@ -87,6 +88,16 @@ class EnclosureUnits:
     """
 
     def generate(self, bbox: BBox, barriers: gpd.GeoDataFrame | None = None) -> gpd.GeoDataFrame:
+        """Polygonize `barriers` into enclosures clipped to `bbox`, indexed by `unit_id`.
+
+        `bbox` is lon/lat; `barriers` must already be in the projected CRS the units come back
+        in, and the returned frame carries geometry alone — every later stage joins onto it by
+        `unit_id`.
+
+        Unlike `GridUnits`, `barriers` is required rather than optional: this strategy has no
+        barrier source of its own, and silently returning one face for the whole bbox would be a
+        partition with no information in it. Build the argument with `assemble_barriers`.
+        """
         if barriers is None or barriers.empty:
             raise ValueError(
                 "EnclosureUnits requires `barriers` (see `assemble_barriers`) — it has no "

@@ -173,7 +173,9 @@ class ArealTierConfig(BaseModel):
 
 
 def _default_areal_tiers() -> list[ArealTierConfig]:
-    """CLAUDE.md's tiers 2, 3 and 4, in cascade order. **The default cascade is `coarse`.**
+    """CLAUDE.md's tiers 2, 3 and 4, in cascade order.
+
+    **The default cascade is `coarse`.**
 
     `source_dir_name` follows CLAUDE.md's `input/` diagram. `GHSL` is deliberately not the
     `input/GHS/` already on this system: that directory holds GHS-SMOD and GHS-UCDB for other

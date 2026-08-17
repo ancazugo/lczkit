@@ -135,8 +135,9 @@ def counts_from_histograms(
     *,
     dataset_name: str = "",
 ) -> pd.DataFrame:
-    """Earth Engine frequency histograms to the `unit_id` x class-index frame `fractions_table`
-    consumes.
+    """Earth Engine frequency histograms to the frame `fractions_table` consumes.
+
+    That is a `unit_id` x class-index frame.
 
     Histogram keys are class indices as strings, values are pixel counts. `EXCLUDED` keys are
     dropped — they are the cells that must not reach the denominator — and an
@@ -172,6 +173,14 @@ class EarthEngineSource:
         batch_size: int = 2000,
         max_units: int | None = None,
     ) -> None:
+        """Bind to a dataset, project and cache directory, and initialise Earth Engine.
+
+        Refuses both an absent project and a dataset with no asset configured, rather than
+        guessing an asset ID — the failure mode of a wrong one is a plausible fractions table
+        computed over the wrong imagery. `batch_size` keeps `reduceRegions` under Earth Engine's
+        element-count and payload caps; `max_units` bounds a request that would exceed them
+        anyway.
+        """
         self.config = config
         self.cache_dir = cache_dir
         self.batch_size = batch_size
@@ -198,6 +207,7 @@ class EarthEngineSource:
 
     @property
     def name(self) -> str:
+        """The dataset name, which is what the fraction columns are prefixed with downstream."""
         return self.config.name
 
     @classmethod
@@ -213,6 +223,11 @@ class EarthEngineSource:
         )
 
     def cache_path(self, units: gpd.GeoDataFrame) -> Path:
+        """Where this reduction's result lives under `input/GEE/`.
+
+        Keyed on the unit geometries, asset, date range, reducer and class mapping together, so
+        a run that changes any one of them cannot be served a result computed under the others.
+        """
         return self.cache_dir / f"{self.config.name}_{cache_key(units, self.config)}.parquet"
 
     def fractions(self, units: gpd.GeoDataFrame) -> pd.DataFrame:

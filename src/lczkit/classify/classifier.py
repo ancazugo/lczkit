@@ -59,6 +59,13 @@ class PrototypeClassifier:
     """
 
     def __init__(self, config: ClassificationConfig | None = None) -> None:
+        """Derive the prototype space, the weights and the reachable class set from `config`.
+
+        All three are fixed at construction, so `classify()` is a pure transform and two runs
+        sharing a config share a metric exactly. `reachable_natural` is computed rather than
+        configured: LCZ D's prototype box contains LCZ F's in every dimension, so F is
+        unreachable by arithmetic and the manifest records *dominated* apart from *excluded*.
+        """
         self.config = config or ClassificationConfig()
         self.weights: WeightPreset = preset(self.config.weight_preset)
         self.space = PrototypeSpace(
@@ -314,6 +321,7 @@ def _two_closest(candidates: pd.DataFrame) -> rules.Ranked:
     codes = np.asarray(candidates.columns, dtype="int64")
 
     def nth(rank: int) -> tuple[pd.Series, pd.Series]:
+        """`(code, distance)` at zero-based `rank` in the sorted order, as aligned Series."""
         position = order[:, rank]
         rows = np.arange(len(candidates))
         distance = values[rows, position]

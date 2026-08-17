@@ -33,6 +33,11 @@ class ClassIndex:
     """
 
     def __init__(self, config: LandCoverDatasetConfig) -> None:
+        """Compile `config`'s class list into the positional index the reducers count in.
+
+        The nodata and unmapped policies are resolved here, once, into either a class position
+        or `EXCLUDED` — so the hot path per window is a lookup rather than a branch on policy.
+        """
         self._config = config
         self.names: tuple[str, ...] = tuple(config.classes)
         self._position = {name: index for index, name in enumerate(self.names)}
@@ -49,6 +54,7 @@ class ClassIndex:
 
     @property
     def config(self) -> LandCoverDatasetConfig:
+        """The dataset config this index was compiled from, for the run manifest to record."""
         return self._config
 
     def index_of(self, name: str) -> int:

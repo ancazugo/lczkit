@@ -354,8 +354,10 @@ def _absorb(
     vectors: dict[str, np.ndarray],
     alive: set[str],
 ) -> None:
-    """Fold `small` into `into`, updating adjacency in O(degree) rather than rebuilding the
-    graph."""
+    """Fold `small` into `into`, updating adjacency in O(degree).
+
+    Rather than rebuilding the graph, which is what makes the merge linear in seed count.
+    """
     total = areas[small] + areas[into]
     if vectors[into].size:
         # Area-weighted, so a merged unit's feature vector is the vector of the ground it covers
@@ -445,12 +447,29 @@ class PatchUnits:
         max_area_m2: float | None = DEFAULT_MAX_AREA_M2,
         buildings: gpd.GeoDataFrame | None = None,
     ) -> None:
+        """Set the area floor the merge works towards, and the building layer it judges by.
+
+        `min_area_m2` is a floor, not a target: merging stops when a unit *reaches* it and the
+        merge that got it there overshoots, so 5 ha yields a ~10.5 ha median. `max_area_m2`
+        blocks a merge that would overshoot too far. `buildings` is optional and the merge runs
+        on size alone without it — supported, and worse.
+        """
         self.min_area_m2 = min_area_m2
         self.max_area_m2 = max_area_m2
         self.buildings = buildings
         self.report: PatchReport | None = None
 
     def generate(self, bbox: BBox, barriers: gpd.GeoDataFrame | None = None) -> gpd.GeoDataFrame:
+        """Seed enclosures over `barriers` and merge them to patch scale, indexed by `unit_id`.
+
+        Same contract as the other two strategies — `bbox` lon/lat, geometry-only frame back in
+        the projected CRS — and the same requirement as `EnclosureUnits` that `barriers` be
+        supplied, since the seeds are enclosures.
+
+        Sets `self.report` as a side effect. The protocol returns one frame, and a caller that
+        wants the merge outcome in the manifest reads it off the instance afterwards rather than
+        the interface growing a second return value for one strategy.
+        """
         seeds = EnclosureUnits().generate(bbox, barriers)
         features = None if self.buildings is None else seed_features(seeds, self.buildings)
         patches, report = merge_to_patches(

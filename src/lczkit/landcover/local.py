@@ -40,6 +40,12 @@ class LocalRasterSource:
         *,
         max_raster_cells: int = 200_000_000,
     ) -> None:
+        """Bind the source to one raster and the class mapping to read it through.
+
+        `max_raster_cells` caps how much of the raster a single read may pull into memory; it is
+        a guard against a units layer whose bounds quietly span a continental product, not a
+        tuning knob.
+        """
         self.config = config
         self.path = path
         self.max_raster_cells = max_raster_cells
@@ -47,6 +53,7 @@ class LocalRasterSource:
 
     @property
     def name(self) -> str:
+        """The dataset name, which is what the fraction columns are prefixed with downstream."""
         return self.config.name
 
     @classmethod

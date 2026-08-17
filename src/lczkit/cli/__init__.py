@@ -50,7 +50,12 @@ def main_callback(
         typer.Option("--version", callback=_version, is_eager=True, help="Show the version."),
     ] = False,
 ) -> None:
-    """Root options."""
+    """Map cities into Local Climate Zones from open vector and raster data.
+
+    Every run records the Overture release, the height cascade, the classifier weights and the
+    resolved package versions in its manifest, so a result can be traced back to what produced
+    it. Start with `lczkit run --city <name>`; `--dry-run` resolves the config without acting.
+    """
 
 
 def main() -> None:

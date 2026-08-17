@@ -75,9 +75,7 @@ def _parse(path: Path, heading: str) -> dict[tuple[int, int], float]:
     """
     lines = path.read_text(encoding="utf-8").splitlines()
     try:
-        start = next(
-            index for index, line in enumerate(lines) if _heading_matches(line, heading)
-        )
+        start = next(index for index, line in enumerate(lines) if _heading_matches(line, heading))
     except StopIteration:  # pragma: no cover - a broken checkout, not a code path
         raise RuntimeError(f"{path} has no section {heading!r}") from None
 

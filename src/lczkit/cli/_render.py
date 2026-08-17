@@ -73,6 +73,11 @@ class StageProgress:
         console.print(f"  [dim]{name:<16}[/dim] [green]done   [/green]")
 
     def stage(self, name: str) -> AbstractContextManager[None]:
+        """Context manager printing `name` as it starts, and its outcome as it ends.
+
+        Failure is printed before the exception propagates, so a run that dies mid-pipeline says
+        which stage it died in rather than only what the traceback shows.
+        """
         return self._stage(name)
 
 

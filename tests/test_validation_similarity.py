@@ -49,9 +49,7 @@ def test_the_matrix_is_a_similarity_and_not_its_complement() -> None:
 def test_the_matrix_is_symmetric() -> None:
     """Confusing 1 for A costs what confusing A for 1 costs. The confusion list is directional, so
     if the paper's matrix were asymmetric the orientation would matter and this would fail."""
-    asymmetric = [
-        (i, j) for i in CODES for j in CODES if SIMILARITY[(i, j)] != SIMILARITY[(j, i)]
-    ]
+    asymmetric = [(i, j) for i in CODES for j in CODES if SIMILARITY[(i, j)] != SIMILARITY[(j, i)]]
 
     assert asymmetric == []
 

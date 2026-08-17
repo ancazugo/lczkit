@@ -59,6 +59,11 @@ def surface_fractions(
     )
 
     def total(group: str) -> pd.Series:
+        """Summed fraction over one configured class group, null where the raster reached nothing.
+
+        `min_count` keeps a partially-null group null rather than summing the columns that did
+        arrive; an empty group answers 0.0, but only for units the raster actually covered.
+        """
         columns = groups[group]
         if not columns:
             return pd.Series(0.0, index=index, dtype="float64").where(observed)

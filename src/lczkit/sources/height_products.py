@@ -113,14 +113,27 @@ class Wsf3dSource:
     """
 
     def __init__(self, settings: Settings, config: Wsf3dConfig | None = None) -> None:
+        """Bind the fetcher to `input/<source_dir_name>/`, the directory it owns.
+
+        `config` defaults to `settings.height_products.wsf3d`; passing one explicitly is how a
+        test points the fetcher at a fixture without a `Settings` carrying the real product.
+        """
         self.config = config or settings.height_products.wsf3d
         self.directory = settings.source_dir(self.config.source_dir_name)
 
     @property
     def name(self) -> str:
+        """The `height_source` tag this product writes onto every building it resolves."""
         return self.config.tier_name
 
     def ensure(self, bbox: BBox) -> Path:
+        """Local path to the global WSF-3D file, downloading it once if it is not there.
+
+        `bbox` is ignored, and that is the point: one 2.1 GB tiled GeoTIFF answers for every
+        city, so there is nothing to clip and a per-window copy would duplicate data already on
+        disk. It never returns `None` — WSF-3D is global, so an absent file is a failed download
+        rather than a fact about the world.
+        """
         del bbox  # one global file answers for every window; see the class docstring
         return _download(self.config.url, self.directory / self.config.filename)
 
@@ -139,11 +152,17 @@ class GhslBuiltHSource:
     """
 
     def __init__(self, settings: Settings, config: GhslProductConfig | None = None) -> None:
+        """Bind the fetcher to `input/<source_dir_name>/`, the directory it owns.
+
+        `config` defaults to `settings.height_products.ghsl`; passing one explicitly is how a
+        test points the fetcher at a fixture without a `Settings` carrying the real product.
+        """
         self.config = config or settings.height_products.ghsl
         self.directory = settings.source_dir(self.config.source_dir_name)
 
     @property
     def name(self) -> str:
+        """The `height_source` tag this product writes onto every building it resolves."""
         return self.config.tier_name
 
     def tiles_for(self, bbox: BBox) -> list[tuple[int, int]]:
@@ -178,6 +197,11 @@ class GhslBuiltHSource:
         return [(row, column) for row in rows for column in columns]
 
     def tile_name(self, row: int, column: int) -> str:
+        """The R2023A name of one nominal tile, e.g. `R4_C19`, from its 1-based grid position.
+
+        Read off `config.tile_template` rather than formatted here, so the naming scheme stays a
+        configured property of the product and not a constant in this module.
+        """
         return self.config.tile_template.format(row=row, column=column)
 
     def _fetch_tile(self, row: int, column: int) -> Path | None:
@@ -208,6 +232,16 @@ class GhslBuiltHSource:
         return target
 
     def ensure(self, bbox: BBox) -> Path:
+        """Local path to a raster covering `bbox`, fetching only the tiles that are missing.
+
+        One tile in the ordinary case, returned untouched. A window straddling a tile boundary
+        gets a bbox-keyed merged clip instead, bounded to the window so that answering a 30 km
+        question does not write 800 MB of two whole 1000 km tiles.
+
+        Raises rather than returning `None` when the nominal grid names no published tile: GHS-
+        BUILT-H is global, so that is a defect in this module's tiling constants rather than an
+        absence of coverage.
+        """
         tiles = self.tiles_for(bbox)
         paths = [path for path in (self._fetch_tile(*tile) for tile in tiles) if path is not None]
         if not paths:
@@ -318,15 +352,28 @@ class OpenBuildings25dSource:
     """
 
     def __init__(self, settings: Settings, config: OpenBuildings25dConfig | None = None) -> None:
+        """Bind the fetcher to `input/<source_dir_name>/` and to an Earth Engine project.
+
+        `config` defaults to `settings.height_products.gob25d`. The project is read once here
+        rather than at download time, so a missing `GEE_PROJECT_NAME` surfaces as one clear
+        error from `ensure` instead of an Earth Engine authentication failure.
+        """
         self.config = config or settings.height_products.gob25d
         self.directory = settings.source_dir(self.config.source_dir_name)
         self.project = settings.land_cover.gee_project
 
     @property
     def name(self) -> str:
+        """The `height_source` tag this product writes onto every building it resolves."""
         return self.config.tier_name
 
     def path_for(self, bbox: BBox) -> Path:
+        """Where this window's export lives, keyed on tier, year and bbox.
+
+        The cache key is the filename, per CLAUDE.md's "a cache hit is just a file that is
+        already there". The year is in it because the collection is annual and two years over
+        one city are different rasters, not the same one refetched.
+        """
         return self.directory / f"{self.config.tier_name}_{self.config.year}_{bbox_key(bbox)}.tif"
 
     def sub_windows(self, bbox: BBox) -> list[BBox]:
@@ -356,6 +403,17 @@ class OpenBuildings25dSource:
         ]
 
     def ensure(self, bbox: BBox) -> Path | None:
+        """Local path to a raster covering `bbox`, exporting it from Earth Engine if absent.
+
+        The only tier that reaches the network at read time, and the only one that can honestly
+        answer `None`: Open Buildings 2.5D covers Africa, South and South-East Asia, Latin
+        America and the Caribbean, so an empty collection over Berlin is coverage the product
+        does not claim rather than a failure. The caller drops the tier from that city's cascade.
+
+        The export goes out as a grid of sub-windows sized by `sub_windows`, staged under a
+        hidden sibling directory and merged on success, so an interrupted export leaves no file
+        that a later run could mistake for a cache hit.
+        """
         destination = self.path_for(bbox)
         if destination.exists():
             return destination

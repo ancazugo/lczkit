@@ -44,7 +44,33 @@ line-length = 100
 src = ["src"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B"]
+select = ["E", "F", "I", "UP", "B", "D"]
+
+# `google` is chosen on measurement, not taste. The docstrings here are narrative prose with no
+# `Args:`/`Parameters` sections anywhere in the package, so no convention's *section* rules apply
+# and the choice only decides which nuisance rules switch off. `google` drops D401
+# (non-imperative-mood), which fires 67 times against a codebase that deliberately opens with a
+# claim about what a thing is — "`compute_parameters()` — the four parameter blocks joined into
+# one table" — rather than with a verb. It also resolves the D203/D211 and D212/D213
+# incompatibilities without an explicit ignore list, and it is mkdocstrings-python's own default,
+# so the linter and the docs renderer read the docstrings the same way.
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+# `src/` is the published API and the only thing mkdocstrings renders, so it carries `D`.
+# `tests/` names its behavioural claim in the test function name (785 of them, prose-sentence
+# style) and would add 1146 violations saying the same thing twice; `scripts/` is one-off
+# analyses, already at 100% module-docstring coverage, and is deliberately not importable.
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D"]
+"scripts/**" = ["D"]
+
+# `ruff format` reads Python fences inside Markdown, and `docs/references/tables/` holds
+# hand-checked transcriptions that are the authority for every numeric lookup in this package.
+# Reformatting them would be a whitespace-only change to a file whose value is that it is a
+# faithful copy — cheap to exclude, and one less reason for a transcription to drift.
+[tool.ruff.format]
+exclude = ["docs/references/tables/*.md"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -107,4 +133,10 @@ dev = [
     "pytest>=9.1.1",
     "ruff>=0.16.1",
     "types-geopandas>=1.1.4.20260728",
+]
+docs = [
+    "mkdocs>=1.6",
+    "mkdocs-jupyter>=0.25",
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.27",
 ]

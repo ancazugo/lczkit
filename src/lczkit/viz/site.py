@@ -73,6 +73,7 @@ class SiteReport:
     basemap that failed."""
 
     def as_dict(self) -> dict[str, Any]:
+        """The report as JSON-ready primitives, for the run manifest's `site` block."""
         return {
             "site_dir": str(self.site_dir),
             "n_units": self.n_units,

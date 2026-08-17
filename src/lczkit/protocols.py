@@ -96,8 +96,9 @@ class HeightSource(Protocol):
         ...
 
     def fill(self, buildings: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-        """Return `buildings` with `height`, `height_source`, and `height_confidence`
-        populated for every row this tier can resolve.
+        """Populate `height`, `height_source` and `height_confidence` where this tier can.
+
+        Returns `buildings` with those three columns filled for every row it resolves.
 
         Rows this tier cannot resolve are returned unchanged (still nullable) for the next
         tier in the cascade.
@@ -109,9 +110,10 @@ class RasterSource(Protocol):
     """Supplies zonal land-cover fractions keyed by `unit_id` — never raw pixels."""
 
     def fractions(self, units: gpd.GeoDataFrame) -> pd.DataFrame:
-        """Return a table indexed by `unit_id` with one fraction column per land-cover
-        class. Fractions must sum to ~1.0 per unit. The class-to-fraction mapping is a
-        config value, never hardcoded.
+        """Return a table indexed by `unit_id` with one fraction column per land-cover class.
+
+        Fractions must sum to ~1.0 per unit. The class-to-fraction mapping is a config value,
+        never hardcoded.
         """
         ...
 
@@ -132,8 +134,9 @@ class Classifier(Protocol):
     """Classifies spatial units into Local Climate Zones by distance to LCZ prototypes."""
 
     def classify(self, parameters: pd.DataFrame) -> pd.DataFrame:
-        """Return a table indexed by `unit_id` carrying the full 17-way distance vector to
-        each LCZ prototype, plus `lcz_primary`, `lcz_secondary`, and `uniqueness`.
+        """Return a table indexed by `unit_id` carrying the full 17-way distance vector.
+
+        One distance per LCZ prototype, plus `lcz_primary`, `lcz_secondary`, and `uniqueness`.
 
         Never collapse to a bare integer label here — that is a downstream convenience
         function, not part of the core classification output.

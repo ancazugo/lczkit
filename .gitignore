@@ -24,3 +24,8 @@ docs/references/datasets/
 .mypy_cache/
 .ruff_cache/
 .pytest_cache/
+
+# Documentation build. `site/` is mkdocs' output directory and `.cache/` is what
+# mkdocs-material's plugins write; the docs workflow caches the latter between runs.
+site/
+.cache/

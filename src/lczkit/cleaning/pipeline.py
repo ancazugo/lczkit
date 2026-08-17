@@ -1,5 +1,6 @@
-"""Top-level orchestration: fetch raw vectors from a `VectorSource` and run the full Phase 1
-cleaning pipeline against them.
+"""Top-level orchestration for Phase 1.
+
+Fetch raw vectors from a `VectorSource` and run the full cleaning pipeline against them.
 """
 
 from __future__ import annotations
@@ -126,8 +127,10 @@ def _repair_unprojectable(
 
 @dataclass(frozen=True)
 class CleanedVectors:
-    """The cleaned output of `clean_vectors()`. Holds live GeoDataFrames for in-process use —
-    never itself serialized; that's Phase 6's job on the eventual output GeoParquet.
+    """The cleaned output of `clean_vectors()`.
+
+    Holds live GeoDataFrames for in-process use — never itself serialized; that's Phase 6's job
+    on the eventual output GeoParquet.
 
     There is no plain `buildings` attribute, deliberately. Which of the two layers a caller wants
     is never obvious from the name, and the single ambiguous layer that used to be here is what

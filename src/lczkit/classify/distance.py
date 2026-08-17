@@ -54,7 +54,11 @@ class Normalisation:
         return (value - self.means[column]) / self.stds[column]
 
     def as_dict(self) -> dict[str, dict[str, float]]:
-        """For the run manifest."""
+        """The per-dimension mean and standard deviation, keyed by column, for the manifest.
+
+        Recorded because the metric is only interpretable against the standardisation it was
+        computed under: the same distance means different things under two prototype tables.
+        """
         return {
             column: {"mean": self.means[column], "std": self.stds[column]}
             for column in self.dimensions
@@ -130,6 +134,11 @@ class PrototypeSpace:
     """
 
     def __init__(self, prototypes: Sequence[PrototypeRange] = PROTOTYPES) -> None:
+        """Derive the normalisation and each class's standardised bounds from `prototypes`.
+
+        Defaults to the transcribed Stewart & Oke table. Both derivations happen once here, so
+        `distances()` neither re-derives them nor depends on call order.
+        """
         self.prototypes = tuple(prototypes)
         self.normalisation = normalisation(self.prototypes)
         self.dimensions = self.normalisation.dimensions

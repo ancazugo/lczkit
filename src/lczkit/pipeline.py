@@ -85,6 +85,7 @@ class _NullObserver:
     """The default: run the stages, record nothing, print nothing."""
 
     def stage(self, name: str) -> AbstractContextManager[None]:
+        """A context manager that does nothing, satisfying the observer seam without output."""
         return _untimed(name)
 
 
@@ -161,6 +162,7 @@ def run_pipeline(
 
     @contextmanager
     def timed(name: str) -> Iterator[None]:
+        """Run one stage under the observer, recording its wall time into `stages`."""
         started = time.perf_counter()
         with watch.stage(name):
             yield

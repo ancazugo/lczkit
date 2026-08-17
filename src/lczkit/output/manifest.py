@@ -59,9 +59,12 @@ zonal computation whose result this package reports as a measurement."""
 
 
 def package_versions() -> dict[str, str]:
-    """Resolved version of every tracked package. An absent one is recorded as such rather than
-    omitted, because "not installed" is itself a fact about the run - `earthengine-api` missing
-    means the Earth Engine path could not have been used."""
+    """Resolved version of every tracked package.
+
+    An absent one is recorded as such rather than omitted, because "not installed" is itself a
+    fact about the run - `earthengine-api` missing means the Earth Engine path could not have
+    been used.
+    """
     versions: dict[str, str] = {}
     for name in TRACKED_PACKAGES:
         try:

@@ -99,6 +99,12 @@ class OvertureAttributeTier:
         height_confidence: float | None,
         num_floors_confidence: float | None,
     ) -> None:
+        """Configure the storey height and the two confidences this tier's routes carry.
+
+        Both confidences are required rather than defaulted: they are an ordinal ranking of
+        measurement quality with no published value behind them, and a default would write a
+        quality claim nobody chose into every manifest. `_require_confidence` says so if unset.
+        """
         if storey_height_m <= 0:
             raise ValueError(f"storey_height_m must be positive, got {storey_height_m}")
         self.storey_height_m = storey_height_m
@@ -111,15 +117,29 @@ class OvertureAttributeTier:
 
     @property
     def name(self) -> str:
+        """The tier's name in the cascade. Its rows are tagged by `height_sources`, not by this."""
         return "overture"
 
     @property
     def height_sources(self) -> tuple[str, ...]:
-        """Two tags, not one — the `height` and `num_floors` routes are different measurements
-        and the output must keep them apart. See the class docstring."""
+        """The `height_source` tags this tier can write.
+
+        Two tags, not one — the `height` and `num_floors` routes are different measurements and
+        the output must keep them apart. See the class docstring.
+        """
         return (OVERTURE_HEIGHT, OVERTURE_NUM_FLOORS)
 
     def fill(self, buildings: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+        """Resolve heights from Overture's own attributes, `height` first and `num_floors` after.
+
+        A non-positive or non-finite `height` is cleared rather than kept: it is not a
+        measurement, and leaving it would hand the next tier a resolved row and the output a
+        zero-height building. Where Overture attaches its own per-building confidence to a
+        height, that real number is written in preference to the configured one.
+
+        Rows this tier cannot resolve are returned unchanged for the next tier in the cascade.
+        `buildings` is not mutated.
+        """
         out = prepare(buildings)
         todo = out["height_source"].isna()
 
@@ -166,6 +186,13 @@ class ArealRasterTier:
         nodata: float | None = None,
         min_height_m: float = 0.0,
     ) -> None:
+        """Configure one areal product: where its raster is, and how to read a height out of it.
+
+        `band`, `scale`, `nodata` and `min_height_m` are per-product and come from the product's
+        own documentation via `ArealTierConfig` — nothing here is hardcoded, because guessing at
+        a unit scale or a nodata value is what produces a quietly wrong map. `confidence` is
+        required for the same reason the Overture tier's are.
+        """
         self.name = name
         self.path = path
         self.confidence = _require_confidence(confidence, f"areal_tiers[{name!r}].confidence")
@@ -176,10 +203,17 @@ class ArealRasterTier:
 
     @property
     def height_sources(self) -> tuple[str, ...]:
+        """The single `height_source` tag this tier writes — its own product name."""
         return (self.name,)
 
     @classmethod
     def from_config(cls, config: ArealTierConfig, path: Path) -> ArealRasterTier:
+        """Build a tier from its serialised config and an already-resolved raster path.
+
+        The split is deliberate: `config` carries everything reproducible into the manifest,
+        while `path` is placed per study area by `lczkit.sources.height_products`. A filename
+        baked into the config would be a filename for one city.
+        """
         return cls(
             name=config.name,
             path=path,
@@ -191,6 +225,15 @@ class ArealRasterTier:
         )
 
     def fill(self, buildings: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+        """Give each unresolved building the mean raster height under its own footprint.
+
+        A categorically weaker measurement than tier 1 and tagged as such: the product's cell is
+        90-100 m, so what a building receives is its neighbourhood's mean height, not its own.
+        Values at or below `min_height_m` read as "no built volume in this cell" and are left for
+        the next tier rather than written out as a zero-height building.
+
+        Rows this tier cannot resolve are returned unchanged. `buildings` is not mutated.
+        """
         out = prepare(buildings)
         assert_projected_crs(out, "buildings")
         todo = out["height_source"].isna()

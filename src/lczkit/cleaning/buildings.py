@@ -151,16 +151,20 @@ def fix_invalid_geometries(buildings: gpd.GeoDataFrame) -> tuple[gpd.GeoDataFram
 
 
 def explode_multipolygons(buildings: gpd.GeoDataFrame) -> tuple[gpd.GeoDataFrame, CleaningStep]:
-    """Split multi-part geometries (MultiPolygons, and any GeometryCollections left over from
-    `make_valid()`) into single-part rows."""
+    """Split multi-part geometries into single-part rows.
+
+    MultiPolygons, and any GeometryCollections left over from `make_valid()`.
+    """
     assert_projected_crs(buildings, "buildings")
     exploded = buildings.explode(index_parts=False).reset_index(drop=True)
     return exploded, _step("explode_multipolygons", buildings, exploded)
 
 
 def drop_non_polygons(buildings: gpd.GeoDataFrame) -> tuple[gpd.GeoDataFrame, CleaningStep]:
-    """Drop features that are not (non-empty) Polygons — e.g. stray Points or LineStrings left
-    over from geometry repair, and any empty geometries."""
+    """Drop features that are not (non-empty) Polygons.
+
+    E.g. stray Points or LineStrings left over from geometry repair, and any empty geometries.
+    """
     assert_projected_crs(buildings, "buildings")
     keep = (buildings.geometry.geom_type == "Polygon") & (~buildings.geometry.is_empty)
     filtered = buildings.loc[keep].reset_index(drop=True)
@@ -226,9 +230,9 @@ def trim_overlaps(buildings: gpd.GeoDataFrame) -> tuple[gpd.GeoDataFrame, Cleani
 def resolve_overlaps(
     buildings: gpd.GeoDataFrame, merge_limit: float, overlap_limit: float
 ) -> tuple[gpd.GeoDataFrame, CleaningStep]:
-    """Merge overlapping footprints below `merge_limit`, or above it if the shared overlap
-    exceeds `overlap_limit`; trim whatever overlap remains. `buildings_topo` only.
+    """Merge overlapping footprints, then trim whatever overlap remains. `buildings_topo` only.
 
+    Merges those below `merge_limit`, or above it if the shared overlap exceeds `overlap_limit`.
     `merge_limit` and `overlap_limit` map directly onto `geoplanar.merge_overlaps`'
     identically-named parameters.
     """
@@ -248,8 +252,9 @@ def resolve_overlaps(
 def absorb_small_buildings(
     buildings: gpd.GeoDataFrame, min_area_m2: float
 ) -> tuple[gpd.GeoDataFrame, CleaningStep]:
-    """Dissolve footprints smaller than `min_area_m2` into a touching larger neighbour, **keeping
-    those that touch nothing**. `buildings_topo` only.
+    """Dissolve footprints smaller than `min_area_m2` into a touching larger neighbour.
+
+    **Keeping those that touch nothing.** `buildings_topo` only.
 
     `geoplanar.merge_touching` deletes any polygon in `index` that shares no boundary segment with
     a neighbour, and offers no way to turn that off. Deletion is wrong here: a free-standing garage

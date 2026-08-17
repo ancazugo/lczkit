@@ -44,6 +44,7 @@ class Interval(BaseModel):
 
     @property
     def width(self) -> float:
+        """`upper - lower`, in the units of the figure — the interval's span, not a half-width."""
         return self.upper - self.lower
 
 
@@ -142,6 +143,7 @@ def bootstrap_agreement(
     ).dropna(subset=["block"])
 
     def score(sample: pd.DataFrame) -> dict[str, float]:
+        """The tracked agreement figures for one resample, as a flat name-to-value mapping."""
         # A resample repeats blocks, so the index carries duplicate unit_ids. `agreement()` joins
         # its inputs by position through a DataFrame constructor, but a duplicated label would make
         # any later reindex ambiguous, so the resample gets a fresh unique index.
@@ -170,6 +172,12 @@ def bootstrap_agreement(
     tail = 100.0 * (1.0 - confidence) / 2.0
 
     def interval(name: str) -> Interval:
+        """The percentile interval for one figure across the draws, around its point estimate.
+
+        Non-finite draws are dropped rather than propagated: a resample can miss a class
+        entirely, which makes that class's figure undefined for that draw and not for the city.
+        An interval with no usable draws is returned as NaN bounds rather than invented.
+        """
         values = np.asarray([draw[name] for draw in draws], dtype="float64")
         usable = values[np.isfinite(values)]
         if usable.size == 0:

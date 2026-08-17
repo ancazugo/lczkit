@@ -19,10 +19,12 @@ DEFAULT_CELL_SIZE_M = 100.0
 
 
 class GridUnits:
-    """A regular `cell_size_m` grid, aligned to the local UTM CRS's own coordinate origin —
-    not to `bbox`. Two overlapping bboxes therefore assign the *same* `unit_id` to the same
-    real-world cell, which is what makes grid `unit_id`s meaningfully "stable" across runs and
-    across cities sharing a UTM zone, unlike `EnclosureUnits`' barrier-dependent ids.
+    """A regular `cell_size_m` grid, aligned to the local UTM CRS's own coordinate origin.
+
+    Aligned to that origin — not to `bbox`. Two overlapping bboxes therefore assign the *same*
+    `unit_id` to the same real-world cell, which is what makes grid `unit_id`s meaningfully
+    "stable" across runs and across cities sharing a UTM zone, unlike `EnclosureUnits`'
+    barrier-dependent ids.
 
     Cells are kept whole (never clipped to `bbox`) and are included if they intersect `bbox` at
     all, so the returned grid can extend slightly beyond `bbox`'s edges. `barriers` is accepted
@@ -30,11 +32,26 @@ class GridUnits:
     """
 
     def __init__(self, cell_size_m: float = DEFAULT_CELL_SIZE_M) -> None:
+        """Set the cell side in metres, defaulting to the 100 m every LCZ workflow uses.
+
+        100 m is what every existing LCZ map, validation dataset and WRF workflow is on, so a
+        run at another size is comparable to nothing. Rejects a non-positive size rather than
+        producing an empty or inverted grid downstream.
+        """
         if cell_size_m <= 0:
             raise ValueError(f"cell_size_m must be positive, got {cell_size_m}")
         self.cell_size_m = cell_size_m
 
     def generate(self, bbox: BBox, barriers: gpd.GeoDataFrame | None = None) -> gpd.GeoDataFrame:
+        """Return the grid cells intersecting `bbox`, indexed by `unit_id`.
+
+        `bbox` is lon/lat and the returned frame is in the local UTM CRS, carrying geometry
+        alone — every later stage joins onto it by `unit_id`. Cells are kept whole and are
+        included if they intersect `bbox` at all, so the grid can extend slightly past its edges.
+
+        `barriers` is accepted for `SpatialUnitStrategy` conformance and ignored: a regular grid
+        is defined by the CRS origin and the cell size, and nothing about the city moves it.
+        """
         del barriers  # grid cells ignore barriers; see SpatialUnitStrategy protocol docstring
         crs = local_utm_crs(bbox)
         bbox_utm = gpd.GeoSeries([box(*bbox)], crs="EPSG:4326").to_crs(crs).iloc[0]

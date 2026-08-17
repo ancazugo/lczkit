@@ -49,6 +49,7 @@ class RangeRequestHandler(SimpleHTTPRequestHandler):
     }
 
     def end_headers(self) -> None:
+        """Advertise range support on every response, then close the header block."""
         # Advertised unconditionally: pmtiles.js checks for it before issuing a ranged read, and a
         # server that supports ranges but does not say so is treated as one that does not.
         self.send_header("Accept-Ranges", "bytes")
@@ -56,6 +57,16 @@ class RangeRequestHandler(SimpleHTTPRequestHandler):
         super().end_headers()
 
     def send_head(self) -> IO[bytes] | None:  # type: ignore[override]
+        """Answer a `Range` request with `206 Partial Content`, or defer to the base class.
+
+        This is the whole reason the site ships its own server. `SimpleHTTPRequestHandler` has
+        no range support, so it would re-send an entire tileset per tile — and PMTiles reads a
+        map by issuing one ranged read per tile.
+
+        A request with no `Range` header, or for a directory, goes to the base class untouched.
+        A start past the end of the file gets `416` with a `Content-Range` stating the real size,
+        which is what lets a client that guessed wrong recover. Sets `_remaining` for `copyfile`.
+        """
         header = self.headers.get("Range")
         if header is None:
             return super().send_head()
@@ -95,6 +106,11 @@ class RangeRequestHandler(SimpleHTTPRequestHandler):
         return handle
 
     def copyfile(self, source: IO[bytes], outputfile: IO[bytes]) -> None:  # type: ignore[override]
+        """Write exactly the bytes `send_head` promised, or the whole file if it promised none.
+
+        `_remaining` is cleared before the loop rather than after, so a connection that drops
+        part-way cannot leave a stale byte count for the next request on the same handler.
+        """
         remaining = self._remaining
         if remaining is None:
             super().copyfile(source, outputfile)
@@ -148,6 +164,11 @@ def serve(directory: Path, port: int = 8000, *, bind: str = "127.0.0.1") -> None
 
 
 def main() -> None:
+    """Command-line entry point: serve the directory this file sits in, over loopback.
+
+    Defaulting `--directory` to the script's own parent is what makes a built site openable by
+    `python serve.py` from inside it, with no arguments and nothing installed.
+    """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--bind", default="127.0.0.1")

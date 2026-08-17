@@ -136,10 +136,18 @@ def _canonical_order(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
 
 
 class OvertureSource:
-    """Reads `buildings`, `streets`, `rail`, `water` and `land_use` layers from a pinned
-    Overture release."""
+    """Reads the five Overture layers this package ingests, from a pinned release.
+
+    `buildings`, `streets`, `rail`, `water` and `land_use`.
+    """
 
     def __init__(self, settings: Settings) -> None:
+        """Pin the release, bind the cache directory, and open a DuckDB spatial connection.
+
+        Refuses a `release` of `None` rather than falling back to "latest": every manifest
+        records the release string, and a run against a moving target is not reproducible. The
+        connection is in-memory — nothing is written outside `input/<source_dir_name>/`.
+        """
         release = settings.overture.release
         if release is None:
             raise ValueError(
@@ -153,8 +161,9 @@ class OvertureSource:
         self._con.execute(f"SET s3_region = '{_S3_REGION}'; SET enable_progress_bar = false;")
 
     def buildings(self, bbox: BBox) -> gpd.GeoDataFrame:
-        """Building footprints intersecting `bbox`. Columns: `id`, `height`, `num_floors`,
-        `subtype`, `class`, `sources`.
+        """Building footprints intersecting `bbox`.
+
+        Columns: `id`, `height`, `num_floors`, `subtype`, `class`, `sources`.
 
         `height` and `num_floors` are nullable and frequently null — that is expected, not an
         error. Overture's conflation is winner-takes-all at the geometry level, and `height` is
@@ -169,14 +178,18 @@ class OvertureSource:
         return self._read_theme(_BUILDINGS, bbox)
 
     def streets(self, bbox: BBox) -> gpd.GeoDataFrame:
-        """Road segments intersecting `bbox`: `subtype = 'road'`, excluding `class =
-        'service'`."""
+        """Road segments intersecting `bbox`.
+
+        `subtype = 'road'`, excluding `class = 'service'`.
+        """
         return self._read_theme(_STREETS, bbox)
 
     def rail(self, bbox: BBox) -> gpd.GeoDataFrame:
-        """Rail segments intersecting `bbox`: `subtype = 'rail'`, no `class` filter — CLAUDE.md
-        names rail as a barrier type for Phase 2's `EnclosureUnits` but does not describe any
-        sub-filtering of it, unlike streets' `class != 'service'`."""
+        """Rail segments intersecting `bbox`: `subtype = 'rail'`, no `class` filter.
+
+        CLAUDE.md names rail as a barrier type for Phase 2's `EnclosureUnits` but does not
+        describe any sub-filtering of it, unlike streets' `class != 'service'`.
+        """
         return self._read_theme(_RAIL, bbox)
 
     def water(self, bbox: BBox) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:

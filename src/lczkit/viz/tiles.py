@@ -78,6 +78,7 @@ class TilesetReport:
     seconds: float
 
     def as_detail(self) -> dict[str, object]:
+        """One tileset's row for the manifest: what was built, how big, and at which zooms."""
         return {
             "name": self.name,
             "file": self.path.name,

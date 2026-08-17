@@ -1,0 +1,34 @@
+name: docs
+on:
+  push:
+    branches:
+      - master
+permissions:
+  contents: write
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure Git Credentials
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: echo "cache_id=$(date --utc '+%V')" >> $GITHUB_ENV
+      - uses: actions/cache@v4
+        with:
+          key: mkdocs-material-${{ env.cache_id }}
+          path: .cache
+          restore-keys: |
+            mkdocs-material-
+      # `--only-group`: mkdocstrings reads the source statically through griffe and never imports
+      # lczkit, so the docs build needs neither the package nor the geo stack (duckdb, geopandas,
+      # rasterio, exactextract, neatnet, earthengine-api). mkdocs.yml sets `paths: [src]`.
+      - run: uv sync --only-group docs
+      # `--only-group` again, not just on the sync above: `uv run` re-syncs the environment
+      # before running, and without it that re-sync would reinstall the project and the whole
+      # geo stack the previous step exists to skip.
+      - run: uv run --only-group docs mkdocs gh-deploy --force
