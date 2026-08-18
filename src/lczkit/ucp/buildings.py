@@ -31,7 +31,9 @@ import pandas as pd
 from lczkit.cleaning.buildings import FEATURE_ID
 from lczkit.config import UcpConfig
 from lczkit.crs import assert_projected_crs
+from lczkit.ucp.attributes import ATTRIBUTES
 from lczkit.units import check_units
+from lczkit.units.overlay import PIECE_AREA, unit_pieces
 
 COLUMNS = (
     "building_surface_fraction",
@@ -48,9 +50,22 @@ COLUMNS = (
 #: footprint area of nothing are undefined and stay null.
 _ZERO_WHEN_EMPTY = ("building_surface_fraction", "building_count")
 
+OVERLAY_COLUMNS = (FEATURE_ID, "height", *ATTRIBUTES)
+"""Attributes carried through the building overlay.
+
+`FEATURE_ID` and `height` are this module's; `subtype` and `class` belong to the functional
+modules. All four ride the same intersection because `lczkit.ucp.parameters` performs it once and
+hands the pieces to every consumer — the alternative is three overlays of a city's whole building
+layer to answer three questions about it.
+"""
+
 
 def building_metrics(
-    buildings: gpd.GeoDataFrame, units: gpd.GeoDataFrame, config: UcpConfig
+    buildings: gpd.GeoDataFrame,
+    units: gpd.GeoDataFrame,
+    config: UcpConfig,
+    *,
+    pieces: gpd.GeoDataFrame | None = None,
 ) -> pd.DataFrame:
     """Per-unit building morphology, indexed by `unit_id` to match `units`.
 
@@ -59,6 +74,12 @@ def building_metrics(
     height: they still count towards `building_surface_fraction`, `building_count` and
     `mean_building_area_m2`, because a footprint is observed whether or not its height is, but
     they are excluded from the height statistics rather than imputed.
+
+    `pieces` is `buildings` already intersected with `units` by `lczkit.units.overlay.unit_pieces`.
+    `lczkit.ucp.parameters` passes it because two other blocks need the same intersection and it is
+    the expensive half of all three; passing `None` performs it here. Note the *object* statistics
+    below do not read it — a count and a mean footprint area are about whole buildings, not about
+    the fragments a unit boundary leaves.
 
     Neither input is mutated.
     """
@@ -74,8 +95,10 @@ def building_metrics(
             "computing urban canopy parameters."
         )
 
+    if pieces is None:
+        pieces = unit_pieces(units, buildings, columns=OVERLAY_COLUMNS)
     frame = pd.concat(
-        [_area_metrics(buildings, units, config), _object_metrics(buildings, units)], axis=1
+        [_area_metrics(pieces, units, config), _object_metrics(buildings, units)], axis=1
     )
     frame[list(_ZERO_WHEN_EMPTY)] = frame[list(_ZERO_WHEN_EMPTY)].fillna(0.0)
     frame["building_count"] = frame["building_count"].astype("int64")
@@ -83,17 +106,9 @@ def building_metrics(
 
 
 def _area_metrics(
-    buildings: gpd.GeoDataFrame, units: gpd.GeoDataFrame, config: UcpConfig
+    pieces: gpd.GeoDataFrame, units: gpd.GeoDataFrame, config: UcpConfig
 ) -> pd.DataFrame:
     """Surface fraction and the three height statistics, over footprints split by unit."""
-    columns = ["height", "geometry"]
-    if FEATURE_ID in buildings.columns:
-        columns.insert(0, FEATURE_ID)
-    pieces = gpd.overlay(
-        units[["geometry"]].reset_index(),
-        buildings[columns].reset_index(drop=True),
-        how="intersection",
-    )
     unit_area = units.geometry.area
     if pieces.empty:
         return pd.DataFrame(
@@ -107,8 +122,7 @@ def _area_metrics(
             index=units.index,
         )
 
-    pieces["piece_area"] = pieces.geometry.area
-    covered = pieces.groupby("unit_id")["piece_area"].sum().reindex(units.index)
+    covered = pieces.groupby("unit_id")[PIECE_AREA].sum().reindex(units.index)
     fraction = covered.div(unit_area.where(unit_area > 0))
 
     heights = _height_stats(pieces.dropna(subset=["height"]), units.index, config)
@@ -162,11 +176,11 @@ def _height_stats(pieces: pd.DataFrame, index: pd.Index, config: UcpConfig) -> d
         # because every part of one feature carries the same height by construction.
         pieces = (
             pieces.groupby(["unit_id", FEATURE_ID], observed=True)
-            .agg(piece_area=("piece_area", "sum"), height=("height", "first"))
+            .agg(**{PIECE_AREA: (PIECE_AREA, "sum"), "height": ("height", "first")})
             .reset_index()
         )
 
-    weight = pieces["piece_area"]
+    weight = pieces[PIECE_AREA]
     height = pieces["height"]
     log_h = np.log(height.clip(lower=config.min_building_height_m))
     grouped = (

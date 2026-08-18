@@ -39,3 +39,11 @@ the scale with a merge step instead.
 ## Aggregation
 
 ::: lczkit.units.aggregate
+
+## Overlay
+
+The one definition of "intersect a layer with the units and measure the pieces" — the operation
+every per-unit area statistic in the package is built from, and which five near-identical private
+helpers each carried a copy of.
+
+::: lczkit.units.overlay

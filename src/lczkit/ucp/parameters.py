@@ -3,6 +3,17 @@
 Pure transform. Every input is already in memory and already keyed on the unit of exchange, so
 this phase reads no raster, opens no file and touches no network; it is the stage that turns
 Phases 1-4's outputs into the vector Phase 6 measures against the LCZ prototypes.
+
+**Each vector layer is intersected with the units exactly once here.** Three blocks below need the
+building layer against the units and three need the land-use layer, and each used to perform its
+own overlay — `semantic_metrics` performed six of the land-use one, once for its coverage column
+and once per configured semantic group, so the count grew with the configuration. Measured on the
+Hong Kong fixture that was **seventeen overlays over 21 231 rows to answer questions about 7 203**.
+
+The overlays therefore happen here and the pieces are handed down, which is the move this function
+already made for `building_area_m2` and for the same reason: the intersection is the expensive
+half, and sharing it also guarantees every fraction divides by a denominator computed from the
+same pieces as its numerator.
 """
 
 from __future__ import annotations
@@ -11,12 +22,14 @@ import geopandas as gpd
 import pandas as pd
 
 from lczkit.config import LandCoverConfig, UcpConfig
-from lczkit.ucp.buildings import building_metrics
+from lczkit.ucp.attributes import ATTRIBUTES
+from lczkit.ucp.buildings import OVERLAY_COLUMNS, building_metrics
 from lczkit.ucp.industrial import industrial_metrics
 from lczkit.ucp.registry import PARAMETER_COLUMNS
 from lczkit.ucp.semantics import group_columns, semantic_metrics
 from lczkit.ucp.streets import street_metrics
 from lczkit.ucp.surface import surface_fractions
+from lczkit.units.overlay import unit_pieces
 
 
 def compute_parameters(
@@ -53,7 +66,13 @@ def compute_parameters(
     """
     dataset = land_cover_config.dataset(config.land_cover_dataset)
 
-    morphology = building_metrics(buildings_area, units, config)
+    # The two intersections every block below is built on. `buildings_topo` is deliberately not
+    # among them: only `street_metrics` reads it, and it reads it through `momepy.street_profile`
+    # rather than through an overlay against the units.
+    building_pieces = unit_pieces(units, buildings_area, columns=OVERLAY_COLUMNS)
+    land_use_pieces = unit_pieces(units, land_use, columns=ATTRIBUTES)
+
+    morphology = building_metrics(buildings_area, units, config, pieces=building_pieces)
     # Recovered from the fraction rather than overlaid again: `building_metrics` has already put
     # every footprint against every unit, and repeating that is the expensive half of
     # `industrial_metrics` at metropolitan scale. Exact, and it guarantees the industrial
@@ -65,12 +84,25 @@ def compute_parameters(
             street_metrics(streets, buildings_topo, units, config),
             surface_fractions(land_cover, morphology["building_surface_fraction"], dataset, config),
             industrial_metrics(
-                buildings_area, land_use, units, config, building_area_m2=building_area_m2
+                buildings_area,
+                land_use,
+                units,
+                config,
+                building_area_m2=building_area_m2,
+                building_pieces=building_pieces,
+                land_use_pieces=land_use_pieces,
             ),
-            # Phase 18. Shares the same handed-down denominator, so every semantic building share
-            # is on the same base as `building_surface_fraction` and as `FIND/B`.
+            # Phase 18. Shares the same handed-down denominator and the same pieces, so every
+            # semantic building share is on the same base as `building_surface_fraction` and as
+            # `FIND/B`, measured over the same intersection.
             semantic_metrics(
-                buildings_area, land_use, units, config, building_area_m2=building_area_m2
+                buildings_area,
+                land_use,
+                units,
+                config,
+                building_area_m2=building_area_m2,
+                building_pieces=building_pieces,
+                land_use_pieces=land_use_pieces,
             ),
         ],
         axis=1,

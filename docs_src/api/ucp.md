@@ -48,6 +48,12 @@ directly, at 300+ against ≤50 W m⁻² — is not something this package can m
 (Bernard's `FIND/B`, which the LCZ 10 rule reads) and `industrial_fraction_of_unit_area` are
 emitted as separately named columns.
 
+## Overture attributes
+
+::: lczkit.ucp.attributes
+
+## Industrial
+
 ::: lczkit.ucp.industrial
 
 ## Semantic evidence
