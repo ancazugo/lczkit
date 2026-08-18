@@ -153,6 +153,110 @@ class PrototypeSpace:
         """Every class this space carries ranges for, ascending."""
         return tuple(self._bounds)
 
+    def indistinguishable(
+        self, codes: Sequence[int], dimensions: Sequence[str]
+    ) -> tuple[tuple[int, int], ...]:
+        """Class pairs from `codes` whose boxes overlap when only `dimensions` are available.
+
+        A unit landing in such an overlap is at distance zero from both classes, so the label is
+        decided by `_two_closest`'s tie-break — ascending code — and not by any measurement. The
+        pair is *structurally* inseparable on that dimension set: no amount of precision in the
+        parameters that remain would tell the two apart there.
+
+        This is why it is worth reporting per weight vector and per missing-parameter signature
+        rather than only per unit. On the shipped built weights the full three dimensions give a
+        single overlapping pair, LCZ 3 with LCZ 7 — so the metric is nearly a partition, which is
+        not the intuitive answer. Drop `aspect_ratio`, which is null wherever no street reaches a
+        building, and {3, 8} and {6, 8} join it; drop `height_of_roughness_elements_m` instead and
+        {2, 3}, {2, 7}, {3, 7} and {5, 6} do. That second set is the height confusion axis, and it
+        falls out of the prototype table's own geometry without looking at a single city.
+
+        Overlap is tested on the standardised bounds, which is equivalent to testing the raw ones:
+        standardisation is a positive affine map per dimension and so preserves interval
+        intersection. An open end is NaN and reads as unbounded.
+        """
+        index = [self._position[column] for column in dimensions]
+        pairs: list[tuple[int, int]] = []
+        for position, first in enumerate(codes):
+            for second in codes[position + 1 :]:
+                lo_a, hi_a = self._bounds[first]
+                lo_b, hi_b = self._bounds[second]
+                if all(
+                    np.fmax(
+                        np.nan_to_num(lo_a[i], nan=-np.inf), np.nan_to_num(lo_b[i], nan=-np.inf)
+                    )
+                    < np.fmin(
+                        np.nan_to_num(hi_a[i], nan=np.inf), np.nan_to_num(hi_b[i], nan=np.inf)
+                    )
+                    for i in index
+                ):
+                    pairs.append((first, second))
+        return tuple(pairs)
+
+    def occupancy(
+        self,
+        codes: Sequence[int],
+        weights: Mapping[str, float],
+        *,
+        samples: int = 200_000,
+        seed: int = 0,
+    ) -> dict[str, object]:
+        """What share of the parameter space each class would claim before any data is seen.
+
+        The metric is a nearest-box rule, and the boxes tile only a small part of the space they
+        sit in — so most units are assigned by the *gap* to the nearest box, and the size of each
+        class's catchment is a property of the prototype table and the normalisation rather than
+        of any city. It is very uneven: on the shipped built weights LCZ 2 claims roughly a third
+        of the reachable space while LCZ 8 and LCZ 9 claim under two percent each.
+
+        That is not a defect to fix — the classes genuinely are different sizes in UCP space — but
+        it is a prior the output carries silently, and a reader comparing per-class recall across
+        classes needs it. Reported for the same reason `height_tier_fractions` is: a number that
+        changes how the result should be read belongs in the manifest, not in a reader's head.
+
+        Sampling bounds are `[0, largest boundary]` per weighted dimension, taken from the
+        prototype table itself rather than chosen, and returned alongside the shares because they
+        set what "the space" means — classes open at the top (LCZ 1 and 4 in height) claim more of
+        a taller cube. `seed` is fixed so a manifest reproduces.
+        """
+        active = [column for column in self.dimensions if weights.get(column, 0.0) > 0]
+        if not active or not codes:
+            return {"samples": 0, "bounds": {}, "share": {}}
+
+        upper: dict[str, float] = {}
+        for column in active:
+            bounds = [
+                bound
+                for prototype in self.prototypes
+                if prototype.column == column
+                for bound in (prototype.lo, prototype.hi)
+                if bound is not None
+            ]
+            upper[column] = float(max(bounds)) if bounds else 1.0
+
+        rng = np.random.default_rng(seed)
+        frame = pd.DataFrame(
+            {
+                column: (
+                    rng.uniform(0.0, upper[column], samples)
+                    if column in active
+                    # An unweighted dimension cannot influence the result; hold it at zero rather
+                    # than sampling a quantity nothing reads.
+                    else np.zeros(samples)
+                )
+                for column in self.dimensions
+            }
+        )
+        distances = self.distances(frame, codes, weights).distances
+        winner = np.asarray(distances.columns)[distances.to_numpy().argmin(axis=1)]
+        counts = pd.Series(winner).value_counts()
+        return {
+            "samples": samples,
+            "seed": seed,
+            "bounds": {column: [0.0, upper[column]] for column in active},
+            "share": {str(code): float(counts.get(code, 0)) / samples for code in codes},
+        }
+
     def _standardised_bounds(self, code: int) -> tuple[np.ndarray, np.ndarray]:
         """`(lo, hi)` over `dimensions` for one prototype, NaN where the class is open."""
         lo = np.full(len(self.dimensions), np.nan)

@@ -19,13 +19,15 @@ informative about a unit near the boundary; they are not what decides it.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 import numpy as np
 import pandas as pd
 
 from lczkit.classify import rules
 from lczkit.classify.distance import PrototypeSpace, uniqueness
 from lczkit.classify.labels import BUILT_CODES, CODES, NATURAL_CODES, code_of, lcz
-from lczkit.classify.prototypes import build_prototypes
+from lczkit.classify.prototypes import HEIGHT_DEPENDENT_DIMENSIONS, build_prototypes
 from lczkit.classify.weights import WeightPreset, preset
 from lczkit.config import ClassificationConfig
 
@@ -44,6 +46,7 @@ LABEL_COLUMNS: tuple[str, ...] = (
     "semantic_rule_applied",
     "n_params_used",
     "n_params_available",
+    "n_tied_classes",
     "missing_parameters",
 )
 
@@ -124,6 +127,7 @@ class PrototypeClassifier:
             natural.distances[list(self.reachable_natural)],
             is_built,
         )
+        tied = _n_tied(candidates)
         ranked, fired = rules.apply_lcz10_rule(
             _two_closest(candidates),
             parameters[industrial_column],
@@ -178,6 +182,7 @@ class PrototypeClassifier:
                             index=parameters.index,
                             dtype="int64",
                         ),
+                        "n_tied_classes": tied,
                         "missing_parameters": _pick(
                             built.missing_parameters, natural.missing_parameters, is_built
                         ),
@@ -202,6 +207,12 @@ class PrototypeClassifier:
             "weight_preset_description": self.weights.description,
             "weights": {"built": dict(self.weights.built), "natural": dict(self.weights.natural)},
             "normalisation": self.space.normalisation.as_dict(),
+            "height_dependent_weight": self._height_dependent_weight(),
+            "indistinguishable_classes": self._indistinguishable(),
+            "geometric_prior": {
+                "built": self.space.occupancy(self.selectable_built, self.weights.built),
+                "natural": self.space.occupancy(self.reachable_natural, self.weights.natural),
+            },
             "prototypes": [
                 {
                     "code": prototype.code,
@@ -246,6 +257,65 @@ class PrototypeClassifier:
                     "still computed and reported as lcz_d10."
                 ),
             },
+        }
+
+    def _height_dependent_weight(self) -> dict[str, object]:
+        """How much of each family's weight moves when the height cascade does.
+
+        Phase 3's height reaches the metric twice — as `height_of_roughness_elements_m` and, less
+        visibly, as the numerator of `momepy.street_profile`'s H/W. Every error budget this
+        project has written treats the two as independent dimensions. On the shipped built weights
+        they are 9 of 17 applied units, so a height product that moves `Hr` moves **53%** of the
+        metric and not the 35% the `Hr` weight alone suggests.
+
+        Derived from `PropertySpec.reads_building_height` and the active weights, so a new
+        dimension or a new preset is reflected without anyone remembering to update a number.
+        """
+        out: dict[str, object] = {
+            "dimensions": list(HEIGHT_DEPENDENT_DIMENSIONS),
+            "reason": (
+                "height_of_roughness_elements_m is the geometric mean of building heights and "
+                "aspect_ratio is momepy.street_profile(height=buildings['height']), so both move "
+                "with the Phase 3 cascade. They are not independent dimensions."
+            ),
+        }
+        for family in ("built", "natural"):
+            vector = self.weights.for_family(family)
+            total = sum(vector.values())
+            shared = sum(vector[column] for column in HEIGHT_DEPENDENT_DIMENSIONS)
+            out[family] = {
+                "weight": shared,
+                "total_weight": total,
+                "fraction": (shared / total) if total > 0 else 0.0,
+            }
+        return out
+
+    def _indistinguishable(self) -> dict[str, object]:
+        """Class pairs the metric cannot separate, per family and per missing dimension.
+
+        Reported for the full dimension set and for the loss of each weighted dimension in turn,
+        because a unit missing a parameter is the normal case rather than the exception — measured
+        at 10.8% of Istanbul's built grid cells for `aspect_ratio` — and what it costs depends
+        entirely on *which* parameter went. See `PrototypeSpace.indistinguishable`.
+        """
+
+        def table(codes: tuple[int, ...], weights: dict[str, float]) -> Mapping[str, object]:
+            active = [column for column in self.space.dimensions if weights.get(column, 0.0) > 0]
+            entries: dict[str, list[list[int]]] = {
+                "all": [list(pair) for pair in self.space.indistinguishable(codes, active)]
+            }
+            for dropped in active:
+                remaining = [column for column in active if column != dropped]
+                if not remaining:
+                    continue
+                entries[f"without_{dropped}"] = [
+                    list(pair) for pair in self.space.indistinguishable(codes, remaining)
+                ]
+            return entries
+
+        return {
+            "built": table(self.selectable_built, self.weights.built),
+            "natural": table(self.reachable_natural, self.weights.natural),
         }
 
 
@@ -334,6 +404,25 @@ def _two_closest(candidates: pd.DataFrame) -> rules.Ranked:
     primary, closest = nth(0)
     secondary, runner_up = nth(1)
     return rules.Ranked(primary=primary, secondary=secondary, closest=closest, runner_up=runner_up)
+
+
+def _n_tied(candidates: pd.DataFrame) -> pd.Series:
+    """How many classes sit at exactly the minimum distance, per unit.
+
+    Two or more means the label is settled by `_two_closest`'s ascending-code tie-break rather
+    than by any measurement. That happens exactly where a unit lies inside more than one prototype
+    box, since the distance is zero throughout a box — so this is the per-unit counterpart of
+    `PrototypeSpace.indistinguishable`, and it needs no threshold to say so.
+
+    Deliberately exact rather than "within a tolerance of the minimum": a tolerance is a number
+    that would have to be swept and justified, and the near-miss case is already reported, as
+    `uniqueness`. One is a statement about the data, the other about the metric's geometry.
+    """
+    values = candidates.to_numpy(dtype="float64", na_value=np.nan)
+    with np.errstate(invalid="ignore"):
+        best = np.nanmin(np.where(np.isnan(values), np.inf, values), axis=1)
+        count = (values == best[:, None]).sum(axis=1)
+    return pd.Series(np.where(np.isfinite(best), count, 0), index=candidates.index, dtype="int64")
 
 
 def _pick(built: pd.Series, natural: pd.Series, is_built: pd.Series) -> pd.Series:
