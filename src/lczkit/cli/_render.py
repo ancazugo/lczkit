@@ -33,6 +33,14 @@ starts."""
 EXIT_MISSING_TOOL = 3
 """A required external tool is absent. Today that is only tippecanoe."""
 
+LARGE_EXTENT_KM2 = 900.0
+"""Above this an extent is a long run, and both `run` and `cities` say so.
+
+Berlin's full 891 km² administrative extent is the measured reference — 9.8 minutes of cleaning —
+so this is the size at which "try it with --extent-km first" stops being fussy advice. 239 of
+GUPPD's 5 558 regions are above it; the median is 80 km².
+"""
+
 
 def fail(message: str, code: int = EXIT_CONFIG) -> NoReturn:
     """Print `message` and exit, with no traceback.

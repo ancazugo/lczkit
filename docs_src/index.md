@@ -30,10 +30,14 @@ Put it in a `.env` file at your project root.
 ## A run
 
 ```bash
-lczkit run --city berlin --preset published
-lczkit site build output/lczkit/<run_id>
+lczkit cities cambridge                    # 5 558 urban regions, with each one's area
+lczkit run --city cambridge --country GBR
 lczkit site serve output/lczkit/<run_id>
 ```
+
+`lczkit cities` prints each region's bounding box and its area in km², which is the one number
+that predicts how long a run takes — the median urban region is 80 km² and a few minutes, and the
+largest is 17 661 km². `--extent-km N` trims any extent to a concentric square.
 
 Or from Python:
 

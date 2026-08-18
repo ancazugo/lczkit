@@ -23,10 +23,24 @@ release. Presets close that gap with the exact constants a published figure was 
 
 ::: lczkit.presets
 
-## City registry
+## Places — the general locator
 
-The study cities the validation sweeps run over, with the window resolution used to pick a
-comparable extent in each. The command line's `--city` resolves against this same registry, and
-a test asserts the sweep imports it rather than defining its own.
+Every urban region on earth, by name, from the GUPPD gazetteer: 5 558 of them across 173
+countries, in one 564 KB table. This is what `lczkit run --city` and `lczkit cities` resolve
+against, and it is a **locator, not a reference** — nothing here labels or validates anything.
+
+A name is not unique (149 of the 5 558 are shared), so an ambiguous query is refused with the
+candidates rather than answered with the first match. Getting that wrong would run the wrong
+continent and record a manifest that looks entirely correct.
+
+::: lczkit.places
+
+## City registry — the comparable-extent locator
+
+The 28 study cities the validation sweeps run over, with the window resolution used to pick a
+comparable extent in each. Reached by `lczkit run --city ... --so2sat-window`, which is a flag
+rather than a fallback: this window and the GUPPD region of the same city are different ground,
+and only this one makes a run comparable with a recorded agreement figure. A test asserts the
+sweep imports this registry rather than defining its own.
 
 ::: lczkit.cities

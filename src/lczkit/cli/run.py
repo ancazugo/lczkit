@@ -1,4 +1,14 @@
-"""`lczkit run` — a bbox or a city in, a run directory and a map site out."""
+"""`lczkit run` — a bbox or a city in, a run directory and a map site out.
+
+**Two city locators, and the distinction is load-bearing.** `--city` names one of GUPPD's 5 558
+urban regions and covers it; `--city ... --so2sat-window` takes the densest 30 km window of that
+city's So2Sat labels instead, which is the extent every validation sweep since Phase 9 measured
+over. They are different ground, so a run says which one it used in its manifest rather than
+leaving a reader to infer it from a bbox.
+
+The default is the general one. Reproducing a recorded figure is the specialist case and asks for
+itself; getting a map of a city is what the command is for.
+"""
 
 from __future__ import annotations
 
@@ -9,7 +19,7 @@ from typing import Annotated
 import typer
 from pydantic import ValidationError
 
-from lczkit.cities import BY_KEY, shrink, so2sat_window
+from lczkit.cities import BY_KEY, WINDOW_KM, shrink, so2sat_window
 from lczkit.cities import city as lookup_city
 from lczkit.cli._options import (
     BASEMAP_HELP,
@@ -18,10 +28,20 @@ from lczkit.cli._options import (
     parse_basemaps,
     parse_bbox,
 )
-from lczkit.cli._render import EXIT_MISSING_TOOL, StageProgress, console, fail, out, report_site
+from lczkit.cli._render import (
+    EXIT_MISSING_TOOL,
+    LARGE_EXTENT_KM2,
+    StageProgress,
+    console,
+    fail,
+    out,
+    report_site,
+)
 from lczkit.cli._render import stage_table as render_stages
 from lczkit.config import Settings
+from lczkit.output.extent import ExtentRecord
 from lczkit.pipeline import PipelineResult, run_pipeline
+from lczkit.places import load_places, normalise, place
 from lczkit.presets import DEFAULT_PRESET, PRESETS, apply_preset
 from lczkit.protocols import BBox
 from lczkit.viz import TippecanoeMissingError
@@ -40,10 +60,25 @@ def run(
         str | None,
         typer.Option(
             "--city",
-            metavar="KEY",
-            help="A So2Sat city, using the same 30 km window every validation sweep used.",
+            metavar="NAME",
+            help="Any of GUPPD's 5 558 urban regions. `lczkit cities` searches them.",
         ),
     ] = None,
+    country: Annotated[
+        str | None,
+        typer.Option(
+            "--country",
+            metavar="ISO",
+            help="Disambiguate --city, e.g. GBR. 149 GUPPD names are shared.",
+        ),
+    ] = None,
+    so2sat_window: Annotated[
+        bool,
+        typer.Option(
+            "--so2sat-window",
+            help="Use the city's densest 30 km So2Sat window instead of its GUPPD extent.",
+        ),
+    ] = False,
     extent_km: Annotated[
         float | None,
         typer.Option(
@@ -95,15 +130,19 @@ def run(
     Give it either an explicit window or a city:
 
         lczkit run --bbox 13.29,52.45,13.52,52.59
-        lczkit run --city berlin --extent-km 4
+        lczkit run --city nairobi
+        lczkit run --city cambridge --country GBR --extent-km 3
 
     Writes `$DATA_DIR/output/lczkit/<run_id>/`, plus the caches the Overture and height-product
     sources own under `input/`. Nothing existing under `input/` is modified.
     """
     if (bbox is None) == (city is None):
         fail("give exactly one of --bbox or --city (see --help for the forms)")
+    if city is None and (country is not None or so2sat_window):
+        fail("--country and --so2sat-window only apply to --city")
 
     parsed: BBox
+    extent: ExtentRecord
     settings = _load_settings(run_id=run_id, create=not dry_run)
     try:
         apply_preset(settings, preset)
@@ -116,33 +155,32 @@ def run(
 
     if bbox is not None:
         parsed = parse_bbox(bbox)
-        label = "bbox"
+        extent = ExtentRecord(kind="bbox", bbox=parsed)
+    elif so2sat_window:
+        parsed, extent = _so2sat_extent(city, country, settings)
     else:
-        assert city is not None
-        if city not in BY_KEY:
-            fail(f"unknown city {city!r}; choose from {', '.join(sorted(BY_KEY))}")
-        try:
-            parsed = so2sat_window(lookup_city(city), settings)
-        except FileNotFoundError as error:
-            fail(str(error))
-        label = city
+        parsed, extent = _guppd_extent(city, country, settings)
 
     if extent_km is not None:
         if extent_km <= 0:
             fail(f"--extent-km must be positive, got {extent_km}")
         parsed = shrink(parsed, extent_km)
+        extent = extent.shrunk(parsed, extent_km)
 
+    label = extent.label
     if dry_run:
-        _print_plan(settings, parsed, label=label, preset=preset, site=site)
+        _print_plan(settings, extent, label=label, preset=preset, site=site)
         return
 
     console.print(f"run [bold]{settings.run_id}[/bold] over {label} {_format_bbox(parsed)}")
+    _report_extent(extent)
     try:
         result = run_pipeline(
             settings,
             parsed,
             build_site_after=site,
             observer=StageProgress(quiet=quiet),
+            extent=extent,
         )
     except TippecanoeMissingError as error:
         fail(str(error), EXIT_MISSING_TOOL)
@@ -184,7 +222,9 @@ def _format_bbox(bbox: BBox) -> str:
     return "(" + ", ".join(f"{value:.4f}" for value in bbox) + ")"
 
 
-def _print_plan(settings: Settings, bbox: BBox, *, label: str, preset: str, site: bool) -> None:
+def _print_plan(
+    settings: Settings, extent: ExtentRecord, *, label: str, preset: str, site: bool
+) -> None:
     """What `--dry-run` shows: the resolved configuration, and nothing created to show it."""
     console.print(f"[bold]dry run[/bold] — nothing written, {settings.run_dir} not created")
     out.print_json(
@@ -192,7 +232,8 @@ def _print_plan(settings: Settings, bbox: BBox, *, label: str, preset: str, site
             {
                 "run_id": settings.run_id,
                 "locator": label,
-                "bbox": list(bbox),
+                "bbox": list(extent.bbox),
+                "extent": extent.model_dump(mode="json"),
                 "preset": preset,
                 "build_site": site,
                 "run_dir": str(settings.run_dir),
@@ -200,3 +241,89 @@ def _print_plan(settings: Settings, bbox: BBox, *, label: str, preset: str, site
             }
         )
     )
+
+
+def _guppd_extent(
+    query: str | None, country: str | None, settings: Settings
+) -> tuple[BBox, ExtentRecord]:
+    """Resolve a city name against GUPPD, reporting its two failures as messages.
+
+    Both are the caller's to fix and neither is a bug: the table may not be on disk, and a name may
+    belong to more than one region. `place` raises `LookupError` for both, already carrying the
+    text that says what to do, so there is nothing to add here beyond not printing a traceback.
+    """
+    assert query is not None
+    try:
+        found = place(load_places(settings), query, country=country)
+    except (FileNotFoundError, ValueError, LookupError) as error:
+        fail(str(error))
+    record = ExtentRecord(
+        kind="guppd",
+        bbox=found.bbox,
+        name=found.name,
+        query=query,
+        iso=found.iso,
+        country=found.country,
+        smod_id=found.smod_id,
+    )
+    return found.bbox, record
+
+
+def _so2sat_extent(
+    query: str | None, country: str | None, settings: Settings
+) -> tuple[BBox, ExtentRecord]:
+    """Resolve a registry key to its densest 30 km So2Sat window.
+
+    Kept separate from the GUPPD path rather than folded into it as a fallback: this is the extent
+    the recorded agreement figures were measured over, and reaching it by accident — or failing to
+    reach it and silently getting the region instead — is exactly what would make a run look
+    comparable with a published number when it is not.
+
+    `--country` is **checked here rather than ignored**. The registry is keyed by name and three of
+    its keys name a city that exists in more than one country, so ignoring the flag would answer
+    `--city london --country CAN` with *London, UK's* window — the caller's own disambiguation
+    silently overruled, and nothing downstream of a bbox able to say so.
+    """
+    assert query is not None
+    key = query.strip().casefold().replace(" ", "_").replace("-", "_")
+    if key not in BY_KEY:
+        fail(
+            f"--so2sat-window needs one of the {len(BY_KEY)} cities with labelled windows, and "
+            f"{query!r} is not one: {', '.join(sorted(BY_KEY))}. Drop the flag to run "
+            f"{query!r}'s GUPPD extent instead."
+        )
+    target = lookup_city(key)
+    if country is not None and normalise(country) not in {
+        normalise(target.iso),
+        normalise(target.iso)[:2],
+    }:
+        fail(
+            f"the labelled window for {query!r} is in {target.iso}, not {country!r}. "
+            "Drop --so2sat-window to run the region you named."
+        )
+    try:
+        window = so2sat_window(target, settings)
+    except FileNotFoundError as error:
+        fail(str(error))
+    return window, ExtentRecord(
+        kind="so2sat_window",
+        bbox=window,
+        name=target.so2sat.replace("_", " "),
+        query=query,
+        iso=target.iso,
+        city_key=key,
+        side_km=WINDOW_KM,
+    )
+
+
+def _report_extent(extent: ExtentRecord) -> None:
+    """Say how much ground the run covers, and mention the trim flag when that is a lot.
+
+    Printed before the first stage because it is the one number that predicts the wall time, and
+    the point at which a caller can still change their mind cheaply.
+    """
+    console.print(f"  extent: [bold]{extent.area_km2:,.0f} km2[/bold]")
+    if extent.area_km2 > LARGE_EXTENT_KM2 and extent.extent_km is None:
+        console.print(
+            "  [yellow]note[/yellow] this is a long run; --extent-km N trims it concentrically"
+        )

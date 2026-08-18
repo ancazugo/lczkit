@@ -19,6 +19,7 @@ import typer
 
 from lczkit import __version__
 from lczkit.cli import site
+from lczkit.cli.cities import cities
 from lczkit.cli.export import export
 from lczkit.cli.run import run
 
@@ -33,6 +34,7 @@ app = typer.Typer(
 )
 
 app.command("run")(run)
+app.command("cities")(cities)
 app.command("export")(export)
 app.add_typer(site.app, name="site")
 
@@ -54,7 +56,8 @@ def main_callback(
 
     Every run records the Overture release, the height cascade, the classifier weights and the
     resolved package versions in its manifest, so a result can be traced back to what produced
-    it. Start with `lczkit run --city <name>`; `--dry-run` resolves the config without acting.
+    it. `lczkit cities <name>` finds an extent and `lczkit run --city <name>` maps it;
+    `--dry-run` resolves the config without acting.
     """
 
 

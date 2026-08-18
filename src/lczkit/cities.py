@@ -30,7 +30,7 @@ SO2SAT_CITIES = Path("v4") / "cities"
 
 @dataclass(frozen=True)
 class City:
-    """One So2Sat city: where its labels live and which continent it speaks for."""
+    """One So2Sat city: its labels, its country, and the region it speaks for."""
 
     key: str
 
@@ -38,6 +38,17 @@ class City:
     """Directory name under `input/So2Sat-LCZ42/v4/cities/`."""
 
     region: str
+
+    iso: str
+    """ISO 3166-1 alpha-3, so this registry can be matched against the GUPPD gazetteer.
+
+    Added because the two locators otherwise collided on a name. Three of these keys name a city
+    that exists in more than one country — **London** (GBR and CAN), **Santiago** (CHL and PHL) and
+    **Los Angeles** (USA and Chile's Los Ángeles) — so `lczkit cities` marked rows that carry no
+    So2Sat window at all, and `--city london --country CAN --so2sat-window` would have run
+    *London, UK's* window while the caller asked for Canada. Silent wrong ground, which is the one
+    failure the two-locator design exists to prevent.
+    """
 
 
 #: Chosen by measuring labelled-patch density inside a 30 km window across all 51 cities on disk,
@@ -79,34 +90,34 @@ class City:
 #: Istanbul and Tehran are labelled `West Asia` rather than folded into Europe. Istanbul genuinely
 #: straddles, and putting it in Europe would inflate the group whose distinctiveness is under test.
 CITIES = (
-    City("berlin", "Berlin", "Europe"),
-    City("london", "London", "Europe"),
-    City("paris", "Paris", "Europe"),
-    City("cologne", "Cologne", "Europe"),
-    City("rome", "Rome", "Europe"),
-    City("milan", "Milan", "Europe"),
-    City("sao_paulo", "Sao_Paulo", "South America"),
-    City("rio_de_janeiro", "Rio_De_Janeiro", "South America"),
-    City("santiago", "Santiago", "South America"),
-    City("cairo", "Cairo", "Africa"),
-    City("nairobi", "Nairobi", "Africa"),
-    City("cape_town", "Cape_Town", "Africa"),
-    City("islamabad", "Rawalpindi_[Islamabad]", "South Asia"),
-    City("mumbai", "Mumbai", "South Asia"),
-    City("jakarta", "Jakarta", "Southeast Asia"),
-    City("hong_kong", "Hong_Kong", "East Asia"),
-    City("beijing", "Beijing", "East Asia"),
-    City("guangzhou", "Guangzhou", "East Asia"),
-    City("nanjing", "Nanjing", "East Asia"),
-    City("tokyo", "Tokyo", "East Asia"),
-    City("wuhan", "Wuhan", "East Asia"),
-    City("istanbul", "Istanbul", "West Asia"),
-    City("tehran", "Tehran", "West Asia"),
-    City("sydney", "Sydney", "Oceania"),
-    City("vancouver", "Vancouver", "North America"),
-    City("los_angeles", "Los_Angeles", "North America"),
-    City("new_york", "New_York", "North America"),
-    City("washington_dc", "Washington_D.C.", "North America"),
+    City("berlin", "Berlin", "Europe", "DEU"),
+    City("london", "London", "Europe", "GBR"),
+    City("paris", "Paris", "Europe", "FRA"),
+    City("cologne", "Cologne", "Europe", "DEU"),
+    City("rome", "Rome", "Europe", "ITA"),
+    City("milan", "Milan", "Europe", "ITA"),
+    City("sao_paulo", "Sao_Paulo", "South America", "BRA"),
+    City("rio_de_janeiro", "Rio_De_Janeiro", "South America", "BRA"),
+    City("santiago", "Santiago", "South America", "CHL"),
+    City("cairo", "Cairo", "Africa", "EGY"),
+    City("nairobi", "Nairobi", "Africa", "KEN"),
+    City("cape_town", "Cape_Town", "Africa", "ZAF"),
+    City("islamabad", "Rawalpindi_[Islamabad]", "South Asia", "PAK"),
+    City("mumbai", "Mumbai", "South Asia", "IND"),
+    City("jakarta", "Jakarta", "Southeast Asia", "IDN"),
+    City("hong_kong", "Hong_Kong", "East Asia", "CHN"),
+    City("beijing", "Beijing", "East Asia", "CHN"),
+    City("guangzhou", "Guangzhou", "East Asia", "CHN"),
+    City("nanjing", "Nanjing", "East Asia", "CHN"),
+    City("tokyo", "Tokyo", "East Asia", "JPN"),
+    City("wuhan", "Wuhan", "East Asia", "CHN"),
+    City("istanbul", "Istanbul", "West Asia", "TUR"),
+    City("tehran", "Tehran", "West Asia", "IRN"),
+    City("sydney", "Sydney", "Oceania", "AUS"),
+    City("vancouver", "Vancouver", "North America", "CAN"),
+    City("los_angeles", "Los_Angeles", "North America", "USA"),
+    City("new_york", "New_York", "North America", "USA"),
+    City("washington_dc", "Washington_D.C.", "North America", "USA"),
 )
 
 BY_KEY = {city.key: city for city in CITIES}

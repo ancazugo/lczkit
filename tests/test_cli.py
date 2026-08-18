@@ -108,11 +108,140 @@ def test_a_malformed_bbox_is_refused_with_the_reason(value: str, message: str) -
     assert message in result.output
 
 
-def test_an_unknown_city_lists_the_ones_that_exist(data_dir: Path) -> None:
+def test_an_unknown_city_says_how_to_search_for_the_right_name(places_data_dir: Path) -> None:
+    """The registry used to be 28 cities and an unknown name could list them all. It is now 5 558
+    urban regions, so the useful answer is the search command rather than the catalogue."""
     result = runner.invoke(app, ["run", "--city", "atlantis"])
     assert result.exit_code == EXIT_CONFIG
-    assert "unknown city 'atlantis'" in result.output
-    assert "berlin" in result.output
+    assert "lczkit cities" in result.output
+
+
+def test_a_city_without_the_bounds_table_names_the_file_and_offers_bbox(data_dir: Path) -> None:
+    """`--bbox` needs nothing on disk, and that is the thing to say when a locator's data is
+    missing rather than reporting a file error with no way forward."""
+    result = runner.invoke(app, ["run", "--city", "berlin"])
+    assert result.exit_code == EXIT_CONFIG
+    assert "guppd_bounds.csv" in result.output
+    assert "--bbox" in result.output
+
+
+def test_an_ambiguous_city_is_refused_with_the_candidates(places_data_dir: Path) -> None:
+    """Two Cambridges, and taking the first would run the wrong continent under a manifest that
+    looks entirely correct."""
+    result = runner.invoke(app, ["run", "--city", "cambridge"])
+    assert result.exit_code == EXIT_CONFIG
+    assert "--country" in result.output
+
+
+def test_a_named_city_resolves_to_its_gazetteer_extent(places_data_dir: Path) -> None:
+    """The general locator: a name in, that region's window out, recorded with the row it came
+    from so the run can say which of two same-named cities it covered."""
+    result = runner.invoke(app, ["run", "--city", "cambridge", "--country", "GBR", "--dry-run"])
+    assert result.exit_code == 0
+
+    plan = json.loads(result.stdout[result.stdout.index("{") :])
+    extent = plan["extent"]
+    assert extent["kind"] == "guppd"
+    assert extent["name"] == "Cambridge"
+    assert extent["iso"] == "GBR"
+    assert extent["smod_id"] == "30_4732"
+    assert plan["bbox"] == list(extent["bbox"])
+    assert 50 < extent["area_km2"] < 80
+
+
+def test_shrinking_a_city_keeps_the_locator_and_records_what_it_was_trimmed_from(
+    places_data_dir: Path,
+) -> None:
+    """A 3 km trial over Cambridge is still a run about Cambridge.
+
+    Replacing the locator with a bare bbox on shrink is how a directory of trial runs becomes
+    unreadable — every one of them a rectangle with no name.
+    """
+    result = runner.invoke(
+        app,
+        ["run", "--city", "cambridge", "--country", "GBR", "--extent-km", "3", "--dry-run"],
+    )
+    extent = json.loads(result.stdout[result.stdout.index("{") :])["extent"]
+
+    assert extent["kind"] == "guppd"
+    assert extent["name"] == "Cambridge"
+    assert extent["extent_km"] == 3.0
+    assert extent["source_bbox"] is not None
+    assert extent["area_km2"] < 12.0
+
+
+def test_the_so2sat_window_is_a_flag_and_not_a_fallback(places_data_dir: Path) -> None:
+    """Two locators that mean different ground, so neither may be reached by accident.
+
+    `--so2sat-window` gives the extent every recorded agreement figure was measured over. Falling
+    back to it — or silently past it — is how a run comes to look comparable with a published
+    number when it covers different ground. Asking for it where no labelled window exists is an
+    error naming the flag, not a quiet substitution of the region.
+    """
+    unlisted = runner.invoke(app, ["run", "--city", "mombasa", "--so2sat-window", "--dry-run"])
+    assert unlisted.exit_code == EXIT_CONFIG
+    assert "Drop the flag" in unlisted.output
+
+
+def test_a_country_is_checked_against_the_labelled_window_rather_than_ignored(
+    places_data_dir: Path,
+) -> None:
+    """`--city london --country CAN --so2sat-window` must not run London, UK.
+
+    The So2Sat registry is keyed by name and three of its keys name a city that exists in more than
+    one country, so ignoring `--country` here overrules the caller's own disambiguation and returns
+    the wrong continent under a manifest that looks entirely correct. This is the exact failure the
+    two-locator split exists to prevent, reachable through the flag that implements it.
+    """
+    wrong = runner.invoke(
+        app, ["run", "--city", "london", "--country", "CAN", "--so2sat-window", "--dry-run"]
+    )
+    assert wrong.exit_code == EXIT_CONFIG
+    assert "GBR" in wrong.output
+    assert "not 'CAN'" in wrong.output
+
+    # The matching country gets past the check and fails on the archive instead, which is as far
+    # as this can go without So2Sat on disk — and is exactly the distinction being asserted.
+    right = runner.invoke(
+        app, ["run", "--city", "london", "--country", "GBR", "--so2sat-window", "--dry-run"]
+    )
+    assert right.exit_code == EXIT_CONFIG
+    assert "So2Sat" in right.output
+    assert "GBR" not in right.output
+
+
+def test_every_registry_city_carries_the_country_its_labels_are_in() -> None:
+    """The field that stops the two locators colliding, asserted as present and plausible.
+
+    It is not derived from anything — the So2Sat archive has no country dimension — so nothing
+    else would notice a city added without one, or with a two-letter code where the gazetteer uses
+    three.
+    """
+    from lczkit.cities import CITIES
+
+    assert len(CITIES) == 28
+    for city in CITIES:
+        assert len(city.iso) == 3 and city.iso.isupper(), city
+    assert {city.key: city.iso for city in CITIES}["london"] == "GBR"
+    assert {city.key: city.iso for city in CITIES}["santiago"] == "CHL"
+    assert {city.key: city.iso for city in CITIES}["los_angeles"] == "USA"
+
+
+def test_the_city_flags_are_refused_alongside_an_explicit_bbox(data_dir: Path) -> None:
+    for extra in (["--country", "GBR"], ["--so2sat-window"]):
+        result = runner.invoke(app, ["run", "--bbox", "13.0,52.0,13.1,52.1", *extra, "--dry-run"])
+        assert result.exit_code == EXIT_CONFIG
+        assert "only apply to --city" in result.output
+
+
+def test_an_explicit_bbox_records_itself_as_the_locator(data_dir: Path) -> None:
+    """A library caller who computed their own window can claim nothing more than the window."""
+    result = runner.invoke(app, ["run", "--bbox", "13.0,52.0,13.1,52.1", "--dry-run"])
+    extent = json.loads(result.stdout[result.stdout.index("{") :])["extent"]
+
+    assert extent["kind"] == "bbox"
+    assert extent["name"] is None
+    assert extent["bbox"] == [13.0, 52.0, 13.1, 52.1]
 
 
 def test_a_non_positive_extent_is_refused(data_dir: Path) -> None:
