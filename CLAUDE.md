@@ -2177,6 +2177,174 @@ inferred — the same shape as attributing a cost by adjacency in a call graph.
 
 ---
 
+---
+
+### Phase 25 — the dimensions the metric was missing — CONCLUDED
+
+**Opened by a scientific review on request, not by a defect report**, and it turned into the first
+diagnostic phase since the stop rule because the review measured something the record does not
+contain. Two tiers, agreed in advance: instruments first, then the metric — the Phase 14 ordering
+and deliberately not the Phase 9→10 one, where the intervention invalidated the evidence that had
+ordered the levers.
+
+Everything below was measured on this package's own runs on disk — Berlin 91 242 cells, Bogotá
+116 491, Nairobi 68 353, Istanbul 455 538 across three unit strategies on one extent — and on the
+shipped prototype table. **One obvious fix was tested and refuted**, and is recorded as such.
+
+#### The finding: LCZ 7 and LCZ 8 are inverted on building size
+
+| built cells, BSF > 0.05 | LCZ 7 median footprint | LCZ 8 median footprint | ratio 8/7 |
+|---|---:|---:|---:|
+| Berlin | 13 419 m² | 767 m² | 0.06 |
+| Istanbul | 13 172 m² | 462 m² | 0.04 |
+| Bogotá | 6 756 m² | 55 m² | **0.01** |
+| Nairobi | 3 749 m² | 93 m² | 0.02 |
+
+**LCZ 8 is _large low-rise_ — warehouses, malls, hangars. LCZ 7 is _lightweight low-rise_ — the
+informal-settlement class.** The map assigns "large low-rise" to cells of 55–93 m² buildings and
+"lightweight low-rise" to cells of 7 000–13 000 m² sheds, in every city measured. **This needs no
+external reference to call wrong: it is internally contradictory.**
+
+The mechanism is structural, not tuning. A big flat warehouse has a high building surface fraction
+and a low height, which is LCZ 7's box on two of three weighted dimensions; a dense informal
+settlement has moderate BSF and — because Overture's network does not contain its alleys — a low
+measured H/W, which is LCZ 8's box. **Neither box mentions how big a building is**, and
+`mean_building_area_m2` has been computed since Phase 5 and has never been a metric dimension.
+Phase 14 found the omission in the metric's structure; this measures what it costs.
+
+It also predicts, from the prototype table alone, **Phase 6.7's LCZ 8 at 0.0% (n=224)** and
+**Phase 13's LCZ 7 at 8.2% in range** — the latter attributed at the time to Overture coverage of
+informal settlements, which is at most half of it.
+
+#### Six further measurements
+
+**A height error moves 53% of the metric, not 35%.** `Hr` carries weight 6 of 17 *and* is
+`momepy.street_profile`'s numerator for `aspect_ratio` (weight 3). Every error budget this project
+has written treats them as independent dimensions. They share an input.
+
+**The adopted areal tiers compress within-unit height variance**, which is the Phase 10 mechanism
+running backwards. Cells with BSF > 0.05 and ≥ 3 buildings, by dominant source:
+
+| source | city | median `h_std` | median CV | constant units |
+|---|---|---:|---:|---:|
+| Overture `height` | Berlin | 1.52 m | **0.266** | 0.1% |
+| WSF-3D | Nairobi | 0.88 m | **0.192** | 1.3% |
+| GHS-BUILT-H | Bogotá | 0.36 m | **0.112** | **23.6%** |
+
+Phase 10 rejected Open Buildings 2.5D for spread of 0.441 against reality's 0.195. What shipped has
+too *little*, and `Hr` is a geometric mean, so compression biases it upward.
+
+**LCZ 7 is unreachable by arithmetic, not only by coverage.** Assigned to 0.1% of Nairobi's and
+0.3% of Bogotá's built cells. Its box wants H/W 1–2 *with* `Hr` 2–4 m — canyon widths of **1–4 m**,
+which neither a 100 m cell nor Overture's street network contains. Per-dimension satisfaction on
+built cells carrying all three parameters: H/W is met by 1.4–2.2% for LCZ 7, 3.2–6.9% for LCZ 2 and
+3, against 40.2–70.0% for LCZ 8.
+
+> **Tested and refuted, recorded so it is not retried.** The network-free canyon ratio
+> `H/W = λf/(1−λp)` with `λf = λp·Hr/√A_bldg` gives Berlin **0.14** and Istanbul **0.27** against
+> momepy's 0.35 and 0.53 — *worse*. On the densest decile it is better (Bogotá 0.35 → 1.24), so the
+> relation is not wrong; the whole-sample deficit is in `Hr`, not in the width. The obvious fix does
+> not work as a straight substitution.
+
+**The metric's geometric prior is uneven and was unreported.** The built boxes are essentially
+disjoint on the three weighted dimensions — only 3~7 overlap, **which is the opposite of the
+intuition and was checked rather than assumed**. But 86.8% of the plausible cube lies outside every
+box, so nearly every label is set by the normalisation, and the nearest-box partition gives LCZ 2
+**38.8%** of the reachable space against LCZ 8's **3.4%**.
+
+**The confusion axes fall out of the box geometry alone.** Dropping `Hr` ties {2,3}, {2,7}, {3,7}
+and {5,6} — the height axis exactly; dropping `aspect_ratio` ties {3,8} and {6,8}. No city required.
+
+**The unit strategies are complementary and the record treats them as rivals.** Istanbul, one
+extent: `aspect_ratio` null on **10.8%** of built grid cells against **0.9%** of enclosures, and on
+the densest decile the enclosures put **82.2%** of cells inside LCZ 2's published H/W band against
+the grid's 70.2%. An enclosure is a block and not an LCZ patch — rejected as a classification unit
+three times, correctly — and it is still the better thing to *measure* a canyon on.
+
+**`patch_max_area_m2` was a merge guard wearing a ceiling's name.** It refused to *combine* two
+seeds into something oversized and had no way to divide a seed that already exceeded it. Istanbul:
+**807 patches over the 50 ha setting holding 72.7% of the extent**, largest 1 072.7 km² (23.6% of
+the extent), and one 98 km² unit holding **1 310 buildings** at a uniqueness of 0.12.
+
+#### What shipped
+
+**Tier A — six instruments, and none of them moves a label.** Verified by re-classifying the three
+post-Phase-14 runs on disk: **0 labels moved, bit-identical distances and uniqueness on 195 787
+cells.** Berlin's stored run is *not* a valid baseline and that was checked rather than assumed — it
+predates Phase 14, so its runner-up can be LCZ 10, which that phase removed from the metric.
+
+- `classification.height_dependent_weight` — the 9-of-17 figure, derived from
+  `PropertySpec.reads_building_height` and the active preset rather than written down.
+- `height_dispersion` — median `h_std`, median CV and the constant-unit share per tier.
+- `classification.indistinguishable_classes` — the tie table, per family and per dropped dimension.
+- `classification.geometric_prior` — each class's share of the parameter cube, by Monte Carlo at a
+  fixed seed, with the sampling bounds beside it because they set what "the space" means.
+- `n_tied_classes` per unit — threshold-free, and the per-cell counterpart of the tie table.
+  Deliberately *not* "within a tolerance of the minimum": that is a threshold, and the near-miss
+  case is already `uniqueness`.
+- `impervious_clipped` per unit — `building + impervious + pervious` is exactly 1.0 by construction
+  except where the clip fires, and it fires where vector footprints cover more ground than a 10 m
+  product calls built-up. Nullable, because "the clip did not fire" and "nothing was measured" are
+  different statements — **which the existing tests caught when the first version answered False**.
+
+**Tier B — four changes, three of them inert by default.**
+
+- **`mean_building_area_m2` is a metric dimension**, tagged `source=LCZKIT`, transcribed from
+  `docs/references/tables/lczkit_building_size_ranges.md` and asserted against it cell for cell.
+  **Weight 0.0 in every preset including `equal`**, so it changes no label; a swept weight of 6.0
+  puts the shed on LCZ 8 and the shack elsewhere, which is the test that says it is worth sweeping.
+  Only LCZ 7 and LCZ 8 are constrained — the two classes whose published *name* asserts a size.
+- **`UcpConfig.measure_on = "enclosures"`** computes the parameters on street-bounded enclosures
+  and transfers them to the target units. Default `"units"`, so no stored figure moves.
+- **`ClassificationConfig.modal_filter`** — the minimum mapping unit this package never had, and
+  which the LCZ Generator applies. Default off. A functionally assigned label is never smoothed
+  away: the industrial rule places a unit on evidence, and its threshold is the only one in the
+  package that *has* been swept.
+- **Oversized patch seeds are split** before merging, so `max_area_m2` means what its name says.
+  A regular grid cut anchored on each seed's bounds — deliberately the dullest thing that works,
+  because it needs no building layer and most oversized seeds are unmapped hinterland. Verified to
+  preserve area exactly and produce no overlaps.
+
+**The `app.js` route guard fired, which is its fourth catch and the point of it.** Adding
+`modal_filter` to `rules.ROUTES` without teaching the front end left a cell that would print its
+raw token in the sidebar. That test was written in Phase 15 after the third instance of a consumer
+guessing at a producer's enum; it is now the thing that stops the fourth.
+
+**A design error caught by a test I wrote to check the design.** `transfer_parameters` first
+delegated its numeric pass to `units.aggregate`, whose docstring I read as excluding nulls from the
+weight. It does not: `groupby.sum()` skips the null in the numerator while the denominator is the
+*total* overlap area, so a null piece drags the mean toward zero. Harmless where every column is
+populated and wrong for the one column the module exists to move — `aspect_ratio` is null exactly
+where no street reached a building. The transfer now weights per column over the pieces that
+carried a value; `aggregate` is untouched, because its normalisation is what every stored arm-B
+projection was computed under.
+
+**Rulings:**
+
+1. **A class whose published *name* asserts a property may be given an lczkit-owned range for it,
+   and only then.** `mean_building_area_m2` constrains LCZ 7 and LCZ 8 because "lightweight" and
+   "large" are claims about building size; giving LCZ 3 or LCZ 9 a range would invent a claim the
+   scheme does not make. The same discipline as the tree/water ranges, applied to a built type for
+   the first time.
+2. **A dimension whose weight has not been swept ships at weight zero in every preset, `equal`
+   included.** `equal` means "uniform over every available dimension", and this is a departure from
+   it recorded in its own description rather than left to be discovered. The alternative is an
+   invented number reaching a label in the preset people reach for when they want neutrality.
+3. **Nothing here has an accuracy claim, and the sweeps are pre-registered.** For
+   `mean_building_area_m2`: Nairobi's and Bogotá's densest deciles should move off LCZ 8 toward
+   LCZ 3/7 and built-class agreement should rise where LCZ 8 is over-called; a fall anywhere and it
+   stays disabled. For `measure_on="enclosures"`: Phase 12 named unit definition the lever at a
+   compactness lift of 1.16 against height's 0.86, so **the compactness lift should fall toward
+   1.0** — plain enclosures as classification units *raised* it to 2.33, so a rise is a refutation.
+
+**Not built, and recorded rather than dropped.** Frontal area index, z₀ and z_d by Kanda et al.
+(2013) — which needs only λp, λf, H_max and σ_H, and `h_std` and BSF already ship — and an LCZ-code
+GeoTIFF. **A run currently writes no raster at all**, so W2W (Demuzere et al. 2022) has nothing to
+ingest and the stated WRF path does not close. Deferred by scope, not by judgement.
+
+**Also worth the paper's attention: "faster than GeoClimate" is claimed and has never been
+measured.** There is no head-to-head anywhere in the repository.
+
 ### STOP RULE — applies after Phase 13
 
 **No further diagnostic phases.** Thirteen phases in, the finding rate remains high but the returns
@@ -2223,8 +2391,14 @@ Remaining work, in order:
     by request. Not measurement: an ordering defect in `lczkit run`, and the `.env` leak that kept
     the six tests pinning it green on every machine that had one. It found that CI has never had a
     green run in this repository's history, and had never fired at all before Phase 20.
-13. **The paper.**
-14. **Cleanup** — release. **The docs half landed as Phase 20, the notebook half as Phase 22 and
+13. ~~**Phase 25 — the dimensions the metric was missing.**~~ **Concluded**, on a scientific review
+    requested by the user rather than on a defect report. Six instruments that move no label and
+    four metric changes, three of them inert by default. It found that **LCZ 7 and LCZ 8 come out
+    inverted on building size in every city measured** — "large low-rise" landing on 55-93 m²
+    footprints and "lightweight low-rise" on 7 000-13 000 m² sheds — and that `mean_building_area_m2`
+    has been computed since Phase 5 and never reached the metric.
+14. **The paper.**
+15. **Cleanup** — release. **The docs half landed as Phase 20, the notebook half as Phase 22 and
     the README split as Phase 23**; what is left here is the release itself.
 
 **`OA_w` was blocked and is now closed.** Bechtel, Demuzere & Stewart (2020) supplied both the
@@ -2619,6 +2793,16 @@ reconcile silently.** That flagging behaviour is working; keep it.
 | A run without tippecanoe reported as a run that produced nothing | The site is the **last** stage and every other file is written before it starts, but `TippecanoeMissingError` propagated out of `run_pipeline` and became an exit code *before* the line naming the run directory was printed. A ten-minute city whose only problem was an absent tool looked like a failure. `PipelineResult.site` had documented the skip behaviour since Phase 15 and the code never had it — so the behaviour was changed to match the docstring, not the reverse. `site_skipped` records the reason, the CLI names the run directory and `lczkit site build`, and the exit code stays non-zero because a site was asked for and not produced. **Found by writing a README sentence about it and then checking whether the sentence was true.** | 7, 15, 23 |
 | `lczkit run` loaded the environment before it read its own arguments | **`--bbox 1,2,3` with no `DATA_DIR` answered "DATA_DIR is not set"** — it blamed the environment for a typo, at the one moment the reader has configured neither and cannot tell which is really wrong. `_load_settings` ran before `parse_bbox` and `parse_basemaps`, so every argument error that needs nothing on disk arrived as a config error. **`site build` had always had the right shape** — parse the argument, then touch the environment — so the fix is `run` catching up to a sibling command rather than a new idea. The city locators stay behind the wall deliberately: they read `guppd_bounds.csv` and the So2Sat archive through `settings.source_dir`, so there the environment genuinely is the blocker. `--preset` is **not** hoisted, because validating the name early would be a second copy of the membership check `apply_preset` already owns. | 15, 24 |
 | The test suite could not see it, because it was reading the developer's `.env` | **`test_a_malformed_bbox_is_refused_with_the_reason` pins exactly the right behaviour in six parametrisations, and all six passed here and failed in CI.** `_clean_data_dir_env` deletes `DATA_DIR` from the environment and stops — then `Settings.load` calls `load_dotenv()`, whose upward search starts at `src/lczkit/config.py`, finds the repository's own `.env` and puts it straight back. The fixture guarded the variable and not the file, and its docstring claimed a guarantee the CLI tests cannot honour, since they invoke `app` and cannot pass `dotenv_path`. **The repository already knew the answer and had applied it once** — `test_a_missing_data_dir_is_a_message_and_not_a_traceback` neutralised `load_dotenv` inline, with a docstring explaining precisely this — and never made it the default. Now autouse, so every test says what it depends on. Third instance: **agreeing with your machine is not passing.** | 0, 15, 21, 22, 24 |
+| LCZ 7 and LCZ 8 swapped on building size | **Measured in Phase 25 and internally contradictory, so no reference is needed to call it wrong.** LCZ 8 (*large* low-rise) lands on cells of 55-93 m² footprints and LCZ 7 (*lightweight* low-rise) on cells of 7 000-13 000 m² sheds, ratio 0.01-0.06 across Berlin, Istanbul, Bogotá and Nairobi. Structural, not tuning: a big flat warehouse is LCZ 7's box on two of three weighted dimensions, a dense informal settlement is LCZ 8's, and **no box mentions building size**. `mean_building_area_m2` has been computed since Phase 5 and never reached the metric — Phase 14 found the omission, Phase 25 measured the cost. It predicts Phase 6.7's LCZ 8 at 0.0% and Phase 13's LCZ 7 at 8.2% from the prototype table alone; the latter was attributed to Overture coverage, which is at most half of it. Added as an lczkit-owned dimension at **weight 0.0 in every preset**, pending a sweep. | 5, 6.7, 13, 14, 25 |
+| `Hr` and `aspect_ratio` treated as independent dimensions | **They share an input and always have.** `Hr` carries weight 6 of 17 and is also `momepy.street_profile`'s numerator for H/W, weight 3 — so a height error moves **53%** of the built metric, not the 35% the `Hr` weight alone suggests. Every error budget this project has written assumed independence. Now derived into the manifest from `PropertySpec.reads_building_height` rather than stated, so a new dimension or preset updates it. | 3, 5, 9, 10, 25 |
+| Areal height tiers assumed to preserve within-unit spread | **They compress it, which is Phase 10's mechanism running backwards.** Median CV 0.266 for real Overture heights in Berlin against 0.192 for WSF-3D in Nairobi and **0.112** for GHS-BUILT-H in Bogotá, where 23.6% of units carry a single height throughout. Phase 10 rejected Open Buildings for spread of 0.441 against reality's 0.195; what shipped has too little, and `Hr` is a geometric mean, so compression biases it up. Reported per run in `manifest.height_dispersion`, which is also the target the deferred shrinkage work aims at. | 10, 25 |
+| LCZ 7 blamed on Overture coverage of informal settlements | **At most half of it — the rest is arithmetic.** LCZ 7's box wants H/W 1-2 *with* `Hr` 2-4 m, i.e. canyon widths of **1-4 m**, which neither a 100 m cell nor Overture's street network contains. H/W is satisfied by 1.4-2.2% of built cells for LCZ 7 against 40.2-70.0% for LCZ 8. Perfect footprints would not fix it. Phase 13's finding stands as a coverage result; its causal attribution does not. | 13, 25 |
+| A network-free canyon ratio as the H/W fix | **Tested and refuted as a straight substitution, recorded so it is not retried.** `H/W = λf/(1−λp)` with `λf = λp·Hr/√A_bldg` gives Berlin 0.14 and Istanbul 0.27 against momepy's 0.35 and 0.53 — *worse* over the whole built set, though better on the densest decile (Bogotá 0.35 → 1.24). The relation is sound; the whole-sample deficit is in `Hr`, not in the width. | 25 |
+| Grid, enclosure and patch units treated as rivals | **Complementary, and the difference is measurable.** A canyon has to be measured against streets and a grid cell is bounded by none: `aspect_ratio` is null on **10.8%** of one Istanbul extent's built grid cells against **0.9%** of its enclosures, and on the densest decile enclosures put 82.2% of cells inside LCZ 2's published H/W band against the grid's 70.2%. An enclosure remains the wrong *classification* unit — a block, not a patch, rejected three times correctly — and is the better *measurement* unit. `UcpConfig.measure_on` exposes the split, default `"units"`, no accuracy claim, sweep pre-registered. | 6.5, 9, 11, 17, 25 |
+| `patch_max_area_m2` as a ceiling on a unit | **It was a merge guard wearing a ceiling's name.** It refused to combine two seeds into something oversized and could not divide a seed already over it — and enclosure seeds routinely are, a face bounded by nothing but the study edge being as large as the unmapped ground it covers. Istanbul: 807 patches over the 50 ha setting holding **72.7% of the extent**, largest 1 072.7 km², one 98 km² unit holding 1 310 buildings at uniqueness 0.12. Oversized seeds are now split before merging, by a grid cut that needs no building layer and preserves area exactly. | 17, 25 |
+| No minimum mapping unit anywhere in the package | Every unit is classified independently of its neighbours, so an isolated 1 ha cell can carry a label the fabric around it does not — salt-and-pepper at a grain Stewart & Oke never intended, given a So2Sat patch is 320 m. A spatial filter is standard in this literature and the LCZ Generator applies one. `ClassificationConfig.modal_filter` ships **off**, because its threshold has not been swept and **every stored figure in this project was measured without one**. A functionally assigned label is never smoothed away. | 6, 13, 25 |
+| The metric's per-class geometric prior | Unreported until Phase 25, and uneven: LCZ 2 claims **38.8%** of the reachable parameter cube against LCZ 8's **3.4%**, before any city is seen. Not a defect — the classes are genuinely different sizes in UCP space — but per-class recall is not comparable across classes without it. Also checked and **contrary to intuition**: the built boxes are essentially disjoint on the three weighted dimensions, only 3~7 overlapping, so there is no pervasive tie problem. And **the confusion axes fall out of the box geometry alone** — dropping `Hr` ties {2,3}, {2,7}, {3,7}, {5,6}; dropping `aspect_ratio` ties {3,8}, {6,8}. | 6, 9, 12, 25 |
+| `units.aggregate` read as excluding nulls from its weight | **It does not**, and a test written to check the design caught it before it shipped. `groupby.sum()` skips a null in the numerator while the denominator stays the *total* overlap area, so a null piece drags the mean toward zero — harmless where every column is populated, wrong for `aspect_ratio`, which is null exactly where no street reached a building. `transfer_parameters` weights per column over the pieces that carried a value; `aggregate` is untouched, since its normalisation is what every stored arm-B projection used. | 2, 12, 25 |
 | CI red on `master`, and red before the cleanup pass too | Checked rather than assumed, by running the same test against an extracted `38bce20`: **identical failures, so this predates the nine commits and is not their regression.** The Actions API gives the fuller picture: **4 CI runs in the repository's history, all `push`, all after Phase 20 fixed the trigger, all failed** — this repository has never had a green CI run, and before Phase 20 it had none at all. **A gate turned on after the fact reports the past, not just the future**, and the first thing it says is usually not about the change that turned it on. | 20, 24 |
 
 ---
@@ -2761,6 +2945,16 @@ city where the class exists *and* is tagged, and the coverage table suggests the
   The field has to stay (stored records depend on its definition), so the guard belongs on the
   *reading*: a test that fails when a reporting path touches it. The same applies to "% of ceiling",
   ruled broken in Phase 9 and still printed in two places by the same script.
+- **A parameter the package computes but the metric never reads is not a spare column — it is a
+  dimension the classification is blind on.** `mean_building_area_m2` shipped from Phase 5 and
+  reached nothing, and the two classes it would have separated came out *inverted* in every city:
+  "large low-rise" on 55-93 m² footprints, "lightweight low-rise" on 7 000-13 000 m² sheds. Phase 14
+  found the omission by reading the metric's structure and left it there. When a registry documents
+  a column no consumer reads, ask what would be different if it were read.
+- **Check whether two metric dimensions share an input before treating their weights as
+  independent.** `Hr` is weight 6 and is also H/W's numerator at weight 3, so a height error moves
+  53% of the built metric and not 35%. Nothing in the code said so and every error budget assumed
+  otherwise; it is one `grep` for what a function is passed.
 - **A quantity defined over a patch may not transfer to a 100 m cell.** Two instances: Stewart &
   Oke's parameter ranges (Phase 13) and the So2Sat labels themselves (a 320 m patch attributed to a
   1 ha cell). Before transferring a published threshold, check that the cell is large enough to be
