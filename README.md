@@ -1,20 +1,29 @@
 # lczkit
 
-Maps a city into [Local Climate Zones](https://doi.org/10.1175/BAMS-D-11-00019.1)
-(Stewart & Oke 2012) from open vector and raster data — anywhere in the world, from data that is
-already public.
+Maps a city into **Local Climate Zones** from open data, anywhere in the world.
 
-It follows the conceptual approach of GeoClimate — partition into spatial units, compute urban
-canopy parameters, classify by distance to LCZ prototypes — as an independent implementation with a
-pluggable data layer: **Overture Maps** for vector data, **ESA WorldCover** for land cover, and a
-tiered cascade of global products for building height. It is not a machine-learning model; nothing
-here is trained, and the classification is the published prototype distance with the parameters
-lczkit can actually measure.
+A [Local Climate Zone](https://doi.org/10.1175/BAMS-D-11-00019.1) (Stewart & Oke 2012) describes
+the surface around a place — how much of the ground is building, how tall, how dense, how green —
+using seventeen classes: ten built types numbered 1 to 10, and seven natural land-cover types
+lettered A to G. The scheme exists so that temperature measurements from different cities can be
+compared by the kind of surface they were taken over, rather than by the word "urban".
+
+`lczkit` follows the approach of [GeoClimate](https://doi.org/10.5194/gmd-17-2077-2024), the
+reference open-source implementation: cut the city into spatial units, measure the shape of the
+surface in each one, and label each unit with the class whose published parameter ranges it sits
+closest to. This is an **independent implementation from the published papers** — it contains no
+GeoClimate code — with a pluggable data layer: **Overture Maps** for buildings, streets and water,
+**ESA WorldCover** for land cover, and a tiered cascade of global products for building height.
+
+It is **not a machine-learning model.** Nothing here is trained, and no threshold is fitted to a
+label set.
 
 **Building height completeness, and reporting it honestly, is a first-class output.** In much of
-the world Overture carries footprints and no heights — 1% of building area in Cairo against 80% in
-Berlin — and the height a run used therefore comes from a 90 m raster far more often than not.
-Every run says so, per unit, in a column you can put on a map.
+the world Overture carries building footprints and no heights — 1% of building area in Cairo
+against 80% in Berlin — so the height a run used comes from a 90 m satellite radar raster far more
+often than not. Every run says so, per unit, in a column you can put on a map.
+
+Unfamiliar terms are defined in the **[glossary](docs_src/glossary.md)**.
 
 ---
 
@@ -26,23 +35,26 @@ lczkit run --city cambridge --country GBR
 lczkit site serve <run_dir>              # then open the address it prints
 ```
 
-`lczkit cities` searches 5 558 urban regions from NASA/JRC's GUPPD gazetteer and prints each one's
-bounding box and area, because the area is the one number that predicts how long a run takes — the
-median region is 80 km² and a few minutes, and the largest is 17 661 km². `lczkit run` covers the
-region you name, writes `$DATA_DIR/output/lczkit/<run_id>/`, and builds a map site from it.
+`lczkit cities` searches the Global Urban Polygons and Points Dataset (GUPPD), a gazetteer from
+NASA's Socioeconomic Data and Applications Center and the European Commission's Joint Research
+Centre. It covers 5 558 urban regions and prints each one's bounding box and area, because the
+area is the one number that predicts how long a run takes — the median region is 80 km² and a few
+minutes, and the largest is 17 661 km². `lczkit run` covers the region you name, writes
+`$DATA_DIR/output/lczkit/<run_id>/`, and builds a map site from it.
 
 Three ways to name an extent, and they mean different ground:
 
 | | what it covers | needs |
 |---|---|---|
-| `--bbox W,S,E,N` | exactly that window | nothing on disk |
-| `--city NAME [--country ISO]` | that urban region | the GUPPD bounds table, 564 KB |
+| `--bbox W,S,E,N` | exactly that window, in longitude and latitude | nothing on disk |
+| `--city NAME [--country ISO]` | that urban region; `ISO` is a three-letter country code | the GUPPD bounds table, 564 KB |
 | `--city NAME --so2sat-window` | the densest 30 km window of that city's So2Sat labels | the So2Sat archive |
 
-The third is the specialist one. It reproduces the extent every recorded agreement figure in this
-project was measured over, works for 28 cities, and has to be asked for — a run that fell back to
-it silently would look comparable with a published number while covering different ground. The run
-manifest records which locator was used, along with the bbox and its area.
+The third is the specialist one. So2Sat LCZ42 is a set of hand-drawn LCZ labels over 51 cities;
+this flag reproduces the extent every recorded agreement figure in this project was measured over,
+works for 28 of them, and **has to be asked for** — a run that fell back to it silently would look
+comparable with a published number while covering different ground. The run manifest records which
+locator was used, along with the bounding box and its area.
 
 Useful flags: `--extent-km N` trims any extent to a concentric square, which is the first thing to
 do with a new city; `--dry-run` resolves the whole configuration and writes nothing, including the
@@ -53,45 +65,78 @@ works there**, so a run can be reproduced from its own output.
 
 ```
 output/lczkit/<run_id>/
-├── units.parquet        # GeoParquet: geometry, the 17-way distance vector, every parameter
-├── units.gpkg           # the same table, for a GIS whose GDAL lacks the Parquet driver
-├── units_viz.parquet    # rounded, scaled, break-precomputed — what the site reads
-├── manifest.json        # the full config, source versions, extent, CRS, and every report
+├── units.parquet        # geometry, the 17-way distance vector, every parameter
+├── units.gpkg           # the same table as a GeoPackage, for software that cannot read Parquet
+├── units_viz.parquet    # rounded, scaled, break-precomputed — what the map site reads
+├── manifest.json        # the full config, source versions, extent, coordinate system, reports
 ├── layers/              # the cleaned streets, water, land use and buildings the run used
-└── site/                # a self-contained MapLibre site, with its own serve.py
+└── site/                # a self-contained web map, with its own serve.py
 ```
+
+`units.parquet` is [GeoParquet](docs_src/glossary.md#outputs-and-tooling): a table with geometry
+attached. `units.gpkg` holds the same rows as a GeoPackage, because GeoParquet support is an
+optional component in GDAL and a geographic information system built without it opens a perfectly
+valid file as a table with no location.
 
 The classification is the **full 17-way distance vector**, not a label. `lcz_primary`,
 `lcz_secondary` and `uniqueness` are conveniences on top of it, in the LCZ Generator's integer
-codes and Demuzere's colour table, so results drop into existing tooling.
+codes and the standard colour table, so results drop into existing tooling. Alongside them,
+`n_params_used` says how many parameters the unit was actually scored on, `n_tied_classes` flags a
+unit where two classes were exactly equidistant so the label was arbitrary, and
+`impervious_clipped` flags the one case where the surface shares do not sum to one.
 
-`manifest.json` is the point of the whole design: the serialised config, the pinned Overture
+`manifest.json` is the point of the whole design: the serialised configuration, the pinned Overture
 release, the resolved versions of `momepy`/`neatnet`/`geopandas`, the cleaning report with feature
-counts **and footprint areas** in and out of every operation, the height-tier distribution, and the
-extent and CRS. A run can be traced back to what produced it.
+counts **and footprint areas** in and out of every operation, the height-tier distribution, the
+extent and the coordinate system. A run can be traced back to what produced it.
 
 ## What it will not tell you
 
-Stated here rather than in a footnote, because two of these bound every number the package emits.
+Stated here rather than in a footnote, because several of these bound every number the package
+emits.
 
-- **Sky view factor and roughness length are not computed.** SVF is the most expensive component
-  and is strongly correlated with aspect ratio, which is computed. The active weight preset is
-  named `bernard2024_partial` for this reason: it applies 17 of the published 21.5 weight units,
-  and the manifest records which dimensions were dropped and how the rest were renormalised.
-- **Building surface fraction carries roughly half the metric.** With three non-zero dimensions,
-  `FB` dominates. Read it, and read `height_completeness` beside it.
-- **Heights outside Europe and North America are mostly from 90–100 m rasters.** An areal product
-  assigns a neighbourhood mean to individual buildings, which cannot separate low-rise from
-  mid-rise inside a heterogeneous cell. `height_tier_fractions` distinguishes "90% real heights"
-  from "90% coarse fallback"; they produce the same label with very different trustworthiness.
-- **LCZ 10 cannot be separated from LCZ 8 on morphology**, and Overture exposes one `industrial`
-  value with no heavy/light split. LCZ 10 is assigned functionally, at a threshold calibrated
-  against a reference rather than picked, and the manifest records how often the rule fired.
+- **Sky view factor and roughness length are not computed.** Sky view factor — the share of sky
+  visible from street level — is the most expensive parameter and is strongly correlated with
+  aspect ratio, which is computed. Roughness length describes how much the surface slows the wind.
+  The active weight preset is named `bernard2024_partial` for this reason: it applies 17 of the
+  published 21.5 weight units, and the manifest records which dimensions were dropped and how the
+  rest were renormalised.
+- **Building surface fraction carries roughly half the classification.** With only three
+  weighted parameters left, the share of ground covered by building dominates. Read it, and read
+  `height_completeness` beside it.
+- **Heights outside Europe and North America are mostly from 90–100 m rasters.** Such a product
+  assigns a neighbourhood average to individual buildings, which cannot separate low-rise from
+  mid-rise inside a mixed cell. `height_tier_fractions` distinguishes "90% measured heights" from
+  "90% coarse fallback"; they produce the same label with very different trustworthiness. The
+  manifest also reports how much within-unit height variation each source preserved, because a
+  raster that gives every building in a cell the same height has resolved nothing inside it.
+- **Class 10 (heavy industry) cannot be separated from class 8 (large low-rise) on shape**, and
+  Overture exposes one `industrial` value with no heavy/light split. Class 10 is assigned
+  functionally, at a threshold calibrated against a reference rather than picked, and the manifest
+  records how often the rule fired.
+- **Classes 7 and 8 come out inverted on building size.** Class 8 is *large* low-rise — warehouses
+  and malls — and class 7 is *lightweight* low-rise, the informal-settlement class. Measured across
+  four cities, the units labelled 8 hold buildings of 55–93 m² and those labelled 7 hold buildings
+  of 7 000–13 000 m². Neither class's published parameter ranges mention building size, so nothing
+  in the classification pulls either back. `mean_building_area_m2` is present as a parameter and
+  carries **zero weight** pending a calibration sweep; until then, treat those two labels with
+  suspicion.
 - **A 100 m cell is not an LCZ patch.** Stewart & Oke's parameter ranges describe a patch of
-  hundreds of metres, and on a grid the within-class spread is wider than the published bands can
-  hold — one class of ten reaches its published BSF range. `units.strategy = "patch"` builds larger
-  organic units if that matters for your use; the grid is the default because it is what every
-  existing LCZ map, validation dataset and WRF workflow uses.
+  hundreds of metres, and on a grid the within-class spread is wider than the published ranges can
+  hold — one class of ten reaches its published building-surface-fraction range.
+  `units.strategy = "patch"` builds larger organic units if that matters for your use; the grid is
+  the default because it is what every existing LCZ map, reference label set and weather-model
+  workflow uses.
+- **The output is not yet a complete weather-model input.** The Weather Research and Forecasting
+  model is the main downstream use for an LCZ map, and the tool that feeds it expects a raster.
+  `lczkit` writes vector formats only, and does not compute roughness length or displacement
+  height.
+
+Two options exist and are **off by default**, because their thresholds have not been calibrated:
+`ucp.measure_on = "enclosures"` measures street-canyon geometry on street-bounded blocks and
+transfers it to the units being classified, and `classification.modal_filter` replaces an isolated
+unit's label with the one its neighbours carry. Every recorded figure in this project was measured
+with both off.
 
 ## On validating the output
 
@@ -99,7 +144,9 @@ The repository ships loaders for three LCZ references — So2Sat LCZ42, WUDAPT, 
 global map — and they are **research instruments, not a quality gate you should run over your own
 city.** Two reasons, both measured here:
 
-- They do not cover most cities. So2Sat has 51; WUDAPT is wider but irregular and uneven.
+- They do not cover most cities. So2Sat has 51. WUDAPT — the World Urban Database and Access
+  Portal Tools, a community effort whose training areas are polygons drawn by contributors
+  worldwide — is wider but irregular and uneven.
 - **They do not agree with each other.** Over 28 cities, two independent expert label sets agree at
   a median 79.7%, ranging from 26.3% (Cairo — *below* what a constant predictor scores there) to
   97.7%. Where two references disagree, no map can match both, and an agreement figure without that
@@ -114,8 +161,8 @@ report per-class agreement and a confusion matrix rather than a single number �
 
 ## Setup
 
-This project runs on a shared HPC system. The Python environment lives outside the repo and
-already exists — do not create a new one:
+This project runs on a shared high-performance computing system. The Python environment lives
+outside the repository and already exists — do not create a new one:
 
 ```sh
 source /maps/acz25/envs/lczkit-env/bin/activate
@@ -136,9 +183,9 @@ Copy `.env.example` to `.env` and set `DATA_DIR` to the shared data directory (s
 "Environment and paths" section for the expected `input/`/`output/` layout). `lczkit` only ever
 reads from `input/` via source-specific subdirectories and writes under `output/lczkit/<run_id>/`.
 
-The map site needs `tippecanoe`, installed by the `viz` extra. Without it a run still writes
-everything else — the site is the last stage — and says so, naming `lczkit site build <run_dir>`
-to finish it later.
+The map site needs `tippecanoe`, the tile-building tool, installed by the `viz` extra. Without it a
+run still writes everything else — the site is the last stage — and says so, naming
+`lczkit site build <run_dir>` to finish it later.
 
 ## Library use
 
@@ -159,8 +206,8 @@ print(result.run_dir, result.seconds)
 time, so an invented default cannot travel into a manifest looking like a measurement.
 `apply_preset` is what fills them.
 
-Every stage is separately usable and every one of them is a join on `unit_id`:
-`lczkit.cleaning`, `lczkit.heights`, `lczkit.units`, `lczkit.landcover`, `lczkit.ucp`,
+Every stage is separately usable and every one of them is a join on `unit_id`, the spatial unit's
+identifier: `lczkit.cleaning`, `lczkit.heights`, `lczkit.units`, `lczkit.landcover`, `lczkit.ucp`,
 `lczkit.classify`, `lczkit.output`, `lczkit.viz`. The five data-source seams are
 `typing.Protocol`s in `lczkit.protocols`.
 
@@ -174,10 +221,11 @@ Tests do not require `DATA_DIR` to be set and never touch the network — fixtur
 `tests/fixtures/`.
 
 **The primary fixture is a 3 km window over Kowloon, Hong Kong**, not Berlin. Berlin's labelled
-cells hold two classes and both are mid-rise, so the height confusion axis has no pair to confuse
-on and cannot be measured there at all. Hong Kong's window carries LCZ 1, 2, 3, 4 and 5. Berlin and
-Rotterdam stay: every figure before Phase 11 is against Berlin, and Rotterdam is the industrial
-fixture for the LCZ 10 rule. See [`tests/fixtures/README.md`](tests/fixtures/README.md).
+cells hold two classes and both are mid-rise, so the height confusion axis — the pattern of errors
+that distinguishes low-rise from mid-rise from high-rise — has no pair to confuse on and cannot be
+measured there at all. Hong Kong's window carries classes 1, 2, 3, 4 and 5. Berlin and Rotterdam
+stay: the project's earliest figures are against Berlin, and Rotterdam is the industrial fixture
+for the class 10 rule. See [`tests/fixtures/README.md`](tests/fixtures/README.md).
 
 Network-dependent tests are marked `@pytest.mark.network` and skipped by default:
 
@@ -185,12 +233,13 @@ Network-dependent tests are marked `@pytest.mark.network` and skipped by default
 pytest -m network
 ```
 
-These hit live Overture and live Earth Engine. The Earth Engine ones additionally need
+These hit live Overture and live Google Earth Engine. The Earth Engine ones additionally need
 `GEE_PROJECT_NAME` and working credentials (`earthengine authenticate`); they skip rather than
 fail when the project is unset, so a checkout without Earth Engine access can still run them.
 
 ## More
 
+- **[`docs_src/glossary.md`](docs_src/glossary.md)** — every term and abbreviation, defined.
 - **[`docs/status.md`](docs/status.md)** — what has been built, phase by phase, with the
   measurement behind each decision. This was the bulk of this README.
 - **[`CLAUDE.md`](CLAUDE.md)** — the specification, the locked architectural decisions, and the
@@ -206,6 +255,6 @@ MIT. See [`LICENSE`](LICENSE).
 
 This package is an independent implementation from the published literature. It contains no code
 derived from GeoClimate (LGPL-3.0) or UMEP (GPL-3.0), and every dependency is permissively
-licensed. Data carries its own terms: Overture is ODbL/CDLA depending on theme, ESA WorldCover is
-CC BY 4.0, and WUDAPT's polygons are CC BY-SA or CC BY-NC-SA per polygon — a run's record states
-them from the data rather than asserting them.
+licensed. Data carries its own terms: Overture is ODbL or CDLA depending on the theme, ESA
+WorldCover is CC BY 4.0, and WUDAPT's polygons are CC BY-SA or CC BY-NC-SA per polygon — the last
+being non-commercial. A run's record states them from the data rather than asserting them.
