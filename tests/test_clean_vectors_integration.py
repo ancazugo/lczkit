@@ -14,26 +14,20 @@ overlaps itself by 0.61% and Kowloon by 7.52%, which is why the Hong Kong case l
 from __future__ import annotations
 
 import pytest
-from conftest import SMALL_BBOX, FixtureVectorSource
+from conftest import (
+    SMALL_BBOX,
+    SMALL_CLEANING,
+    FixtureVectorSource,
+)
 
 from lczkit.cleaning.buildings import BUILDING_ID
 from lczkit.cleaning.pipeline import CleanedVectors, clean_vectors
-from lczkit.config import CleaningConfig
 from lczkit.crs import assert_projected_crs
-
-_TEST_CLEANING_CONFIG = CleaningConfig(
-    building_max_area_m2=10_000,
-    building_min_area_m2=15,
-    building_merge_limit_m2=50,
-    building_overlap_limit=0.3,
-    building_road_buffer_m=4.0,
-    building_road_overlap_limit=0.5,
-)
 
 
 @pytest.fixture(scope="module")
 def result(fixture_vector_source: FixtureVectorSource) -> CleanedVectors:
-    return clean_vectors(fixture_vector_source, SMALL_BBOX, _TEST_CLEANING_CONFIG)
+    return clean_vectors(fixture_vector_source, SMALL_BBOX, SMALL_CLEANING)
 
 
 def test_clean_vectors_end_to_end(result: CleanedVectors) -> None:
@@ -134,10 +128,10 @@ def test_only_the_topological_layer_is_cleared_of_streets_and_water(result: Clea
         assert hits.empty
 
     if not result.streets.empty:
-        road = result.streets.geometry.buffer(_TEST_CLEANING_CONFIG.building_road_buffer_m or 0.0)
+        road = result.streets.geometry.buffer(SMALL_CLEANING.building_road_buffer_m or 0.0)
         inside = result.buildings_topo.geometry.intersection(road.union_all()).area
         fraction = inside / result.buildings_topo.geometry.area
-        assert (fraction <= _TEST_CLEANING_CONFIG.building_road_overlap_limit).all()
+        assert (fraction <= SMALL_CLEANING.building_road_overlap_limit).all()
 
 
 def test_every_step_records_both_a_count_and_an_area(result: CleanedVectors) -> None:
@@ -181,7 +175,7 @@ def test_the_street_rule_reports_what_it_dropped_and_trimmed(result: CleanedVect
     assert step.detail["area_dropped_m2"] <= step.area_in_m2 - step.area_out_m2
 
 
-_TILED_CLEANING_CONFIG = _TEST_CLEANING_CONFIG.model_copy(
+_TILED_CLEANING_CONFIG = SMALL_CLEANING.model_copy(
     update={"street_tile_size_m": 400.0, "street_tile_buffer_m": 200.0, "street_tile_workers": 1}
 )
 
@@ -213,6 +207,6 @@ def test_tiling_without_a_buffer_refuses_rather_than_guessing(
     """The buffer has no literature default and a wrong one degrades seams silently, so the
     pipeline raises rather than picking — the same rule the building thresholds follow.
     """
-    config = _TEST_CLEANING_CONFIG.model_copy(update={"street_tile_size_m": 400.0})
+    config = SMALL_CLEANING.model_copy(update={"street_tile_size_m": 400.0})
     with pytest.raises(ValueError, match="street_tile_buffer_m"):
         clean_vectors(fixture_vector_source, SMALL_BBOX, config)

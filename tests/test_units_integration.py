@@ -8,29 +8,23 @@ exact values.
 from __future__ import annotations
 
 import numpy as np
-from conftest import SMALL_BBOX, FixtureVectorSource
+from conftest import (
+    SMALL_BBOX,
+    SMALL_CLEANING,
+    FixtureVectorSource,
+)
 
 from lczkit.cleaning.pipeline import clean_vectors
-from lczkit.config import CleaningConfig
 from lczkit.crs import assert_projected_crs
 from lczkit.units.aggregate import aggregate
 from lczkit.units.enclosures import EnclosureUnits, assemble_barriers
 from lczkit.units.grid import GridUnits
 
-_TEST_CLEANING_CONFIG = CleaningConfig(
-    building_max_area_m2=10_000,
-    building_min_area_m2=15,
-    building_merge_limit_m2=50,
-    building_overlap_limit=0.3,
-    building_road_buffer_m=4.0,
-    building_road_overlap_limit=0.5,
-)
-
 
 def test_enclosure_and_grid_units_and_aggregate_round_trip(
     fixture_vector_source: FixtureVectorSource,
 ) -> None:
-    cleaned = clean_vectors(fixture_vector_source, SMALL_BBOX, _TEST_CLEANING_CONFIG)
+    cleaned = clean_vectors(fixture_vector_source, SMALL_BBOX, SMALL_CLEANING)
     rail = fixture_vector_source.rail(SMALL_BBOX).to_crs(cleaned.crs)
     assert not rail.empty, "SMALL_BBOX is expected to contain real rail segments"
 

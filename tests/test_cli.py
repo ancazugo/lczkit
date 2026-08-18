@@ -13,13 +13,12 @@ Nothing here needs `DATA_DIR`, the network, or tippecanoe.
 
 from __future__ import annotations
 
-import importlib.util
 import json
-import sys
 from pathlib import Path
-from types import ModuleType
 
 import pytest
+
+from conftest import load_script
 from typer.testing import CliRunner
 
 from lczkit.cli import app
@@ -43,24 +42,6 @@ def data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     (tmp_path / "input").mkdir()
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     return tmp_path
-
-
-def load_script(name: str) -> ModuleType:
-    """Import a module from `scripts/` by path, the way its sibling tests do.
-
-    `scripts/` is deliberately not a package, so there is no import to reach it with.
-    """
-    path = Path(__file__).resolve().parent.parent / "scripts" / f"{name}.py"
-    sys.path.insert(0, str(path.parent))
-    try:
-        spec = importlib.util.spec_from_file_location(name, path)
-        assert spec is not None and spec.loader is not None
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[name] = module
-        spec.loader.exec_module(module)
-        return module
-    finally:
-        sys.path.remove(str(path.parent))
 
 
 # --------------------------------------------------------------------------- help and wiring

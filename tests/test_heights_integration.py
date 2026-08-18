@@ -13,11 +13,16 @@ from pathlib import Path
 import geopandas as gpd
 import numpy as np
 import pytest
-from conftest import SMALL_BBOX, FixtureVectorSource, write_height_raster
+from conftest import (
+    SMALL_BBOX,
+    SMALL_CLEANING,
+    FixtureVectorSource,
+    write_height_raster,
+)
 from shapely.geometry import box
 
 from lczkit.cleaning.pipeline import CleanedVectors, clean_vectors
-from lczkit.config import ArealTierConfig, CleaningConfig, HeightConfig
+from lczkit.config import ArealTierConfig, HeightConfig
 from lczkit.crs import local_utm_crs
 from lczkit.heights.cascade import UNRESOLVED, fill_heights
 from lczkit.heights.completeness import FRACTION_PREFIX, height_metrics
@@ -26,15 +31,6 @@ from lczkit.heights.tiers import OVERTURE_HEIGHT, OVERTURE_NUM_FLOORS, build_cas
 from lczkit.units.enclosures import EnclosureUnits, assemble_barriers
 from lczkit.units.grid import GridUnits
 
-_TEST_CLEANING_CONFIG = CleaningConfig(
-    building_max_area_m2=10_000,
-    building_min_area_m2=15,
-    building_merge_limit_m2=50,
-    building_overlap_limit=0.3,
-    building_road_buffer_m=4.0,
-    building_road_overlap_limit=0.5,
-)
-
 WEST_HEIGHT = 8.0
 EAST_HEIGHT = 24.0
 AREAL_TIER = "ghsl"
@@ -42,7 +38,7 @@ AREAL_TIER = "ghsl"
 
 @pytest.fixture(scope="module")
 def cleaned(fixture_vector_source: FixtureVectorSource) -> CleanedVectors:
-    return clean_vectors(fixture_vector_source, SMALL_BBOX, _TEST_CLEANING_CONFIG)
+    return clean_vectors(fixture_vector_source, SMALL_BBOX, SMALL_CLEANING)
 
 
 @pytest.fixture(scope="module")

@@ -14,39 +14,22 @@ would produce a plausible number rather than a failure:
 
 from __future__ import annotations
 
-import importlib.util
-import sys
 from pathlib import Path
 from types import ModuleType
 
 import geopandas as gpd
 import pandas as pd
 import pytest
+from conftest import load_script
 from shapely.geometry import MultiPolygon, Polygon, box
 
 _CRS = "EPSG:32633"
 _E, _N = 500_000.0, 5_700_000.0
 
 
-def load_script() -> ModuleType:
-    """Import `scripts/unit_scale_experiment.py` by path.
-
-    By path rather than as a package: `scripts/` is deliberately not importable — it holds one-off
-    analyses, not library code — and making it so to run a test would put the wrong thing on the
-    package's runtime surface.
-    """
-    path = Path(__file__).resolve().parent.parent / "scripts" / "unit_scale_experiment.py"
-    spec = importlib.util.spec_from_file_location("unit_scale_experiment", path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
 @pytest.fixture(scope="module")
 def script() -> ModuleType:
-    return load_script()
+    return load_script("unit_scale_experiment")
 
 
 def grid_units(n: int = 2) -> gpd.GeoDataFrame:

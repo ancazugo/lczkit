@@ -27,26 +27,11 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
+from conftest import load_script
 
 from lczkit.protocols import BBox
 
-
-def load_script() -> ModuleType:
-    """Import `scripts/berlin_wide_validation.py` by path, for the reason its sibling tests give:
-    `scripts/` holds one-off analyses and is deliberately not importable as a package."""
-    path = Path(__file__).resolve().parent.parent / "scripts" / "berlin_wide_validation.py"
-    sys.path.insert(0, str(path.parent))
-    try:
-        spec = importlib.util.spec_from_file_location("berlin_wide_validation", path)
-        assert spec is not None and spec.loader is not None
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        return module
-    finally:
-        sys.path.remove(str(path.parent))
-
-
-SCRIPT = load_script()
+SCRIPT = load_script("berlin_wide_validation")
 
 
 def load_multi_city() -> ModuleType:

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import importlib.util
+import sys
 from pathlib import Path
+from types import ModuleType
 
 import geopandas as gpd
 import numpy as np
@@ -10,6 +13,7 @@ import pytest
 import rasterio
 from rasterio.transform import from_origin
 
+from lczkit.config import CleaningConfig, HeightConfig
 from lczkit.protocols import BBox
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "overture"
@@ -60,6 +64,88 @@ INDUSTRY_BBOX: BBox = (4.3000, 51.8850, 4.3400, 51.9050)
 
 #: A ~700x600 m subset over the densest industrial block, for the same reason `SMALL_BBOX` exists.
 INDUSTRY_SMALL_BBOX: BBox = (4.3130, 51.8930, 4.3230, 51.8985)
+
+#: Twelve real rows from the GUPPD bounds table, committed so the place lookup is testable with
+#: no `DATA_DIR`. Chosen for the cases that matter rather than for coverage: three Londons and two
+#: Cambridges for ambiguity, `São Paulo` for accent folding, and Berlin, Hong Kong and Nairobi
+#: because they are the cities the rest of the suite already talks about.
+PLACES_FIXTURES_DIR = Path(__file__).parent / "fixtures" / "places"
+
+
+@pytest.fixture
+def places_data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A `DATA_DIR` whose `input/NASA/GUPPD/` holds the committed bounds fixture.
+
+    A real directory layout rather than a patched loader, so what is exercised is the path
+    `lczkit.places.bounds_path` builds — which is the half that has ever been wrong.
+    """
+    guppd = tmp_path / "input" / "NASA" / "GUPPD"
+    guppd.mkdir(parents=True)
+    (guppd / "guppd_bounds.csv").write_bytes(
+        (PLACES_FIXTURES_DIR / "guppd_bounds.csv").read_bytes()
+    )
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    return tmp_path
+
+
+#: Cleaning thresholds for the tests that run a *whole* fixture extent — the classification,
+#: land-cover, UCP and industry integration tests, and the evidence-equivalence pins.
+#:
+#: The same values `scripts/unit_scale_experiment.py` uses for its 9 km² comparison arms, so a
+#: number measured in a test and a number measured in that harness are measured under one
+#: configuration. They are **not** `lczkit.presets`' published values, which are the metropolitan
+#: ones — CLAUDE.md records two `CleaningConfig` constants of the same name diverging as a real
+#: failure, and the distinction between these two is that they are different measured
+#: configurations rather than two copies of one.
+FIXTURE_CLEANING = CleaningConfig(
+    building_max_area_m2=50_000.0,
+    building_min_area_m2=20.0,
+    building_merge_limit_m2=200.0,
+    building_overlap_limit=0.1,
+    building_road_buffer_m=4.0,
+    building_road_overlap_limit=0.5,
+)
+
+#: Looser, faster thresholds for the tests that only need `clean_vectors` to have run — the
+#: cleaning, units and heights integration tests, all of which work over `SMALL_BBOX`.
+#:
+#: Kept separate from `FIXTURE_CLEANING` rather than collapsed into it: the values differ
+#: deliberately, and merging them would change what six tests exercise while looking like tidying.
+SMALL_CLEANING = CleaningConfig(
+    building_max_area_m2=10_000,
+    building_min_area_m2=15,
+    building_merge_limit_m2=50,
+    building_overlap_limit=0.3,
+    building_road_buffer_m=4.0,
+    building_road_overlap_limit=0.5,
+)
+
+#: Tier-1 confidences for tests that fill heights. `HeightConfig` defaults both to `None` and
+#: raises at call time, so every such test has to state them; these are the published values.
+FIXTURE_HEIGHTS = HeightConfig(overture_height_confidence=0.9, overture_num_floors_confidence=0.6)
+
+
+def load_script(name: str) -> ModuleType:
+    """Import a module from `scripts/` by path.
+
+    `scripts/` is deliberately not a package — its modules are one-off analysis drivers, not part
+    of the published surface — so there is no import that reaches them. Several of them also import
+    each other through a `sys.path` insertion of their own directory, which is why this puts that
+    directory on the path for the duration of the load rather than only resolving the one file.
+
+    Six copies of this existed, one per test that needed it.
+    """
+    path = Path(__file__).resolve().parent.parent / "scripts" / f"{name}.py"
+    sys.path.insert(0, str(path.parent))
+    try:
+        spec = importlib.util.spec_from_file_location(name, path)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        sys.path.remove(str(path.parent))
 
 
 @pytest.fixture(autouse=True)

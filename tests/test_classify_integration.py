@@ -18,15 +18,20 @@ from pathlib import Path
 import geopandas as gpd
 import pandas as pd
 import pytest
-from conftest import LANDCOVER_FIXTURES_DIR, LCZ_FIXTURES_DIR, SMALL_BBOX, FixtureVectorSource
+from conftest import (
+    FIXTURE_CLEANING,
+    FIXTURE_HEIGHTS,
+    LANDCOVER_FIXTURES_DIR,
+    LCZ_FIXTURES_DIR,
+    SMALL_BBOX,
+    FixtureVectorSource,
+)
 
 from lczkit.classify import CLASSIFICATION_COLUMNS, DISTANCE_COLUMNS, PrototypeClassifier
 from lczkit.classify.labels import BUILT_CODES, NATURAL_CODES
 from lczkit.classify.rules import ROUTES
 from lczkit.cleaning.pipeline import CleanedVectors, clean_vectors
 from lczkit.config import (
-    CleaningConfig,
-    HeightConfig,
     LandCoverConfig,
     Settings,
     UcpConfig,
@@ -45,15 +50,6 @@ from lczkit.validation import agreement, reference_lcz
 WORLDCOVER = LANDCOVER_FIXTURES_DIR / "worldcover_berlin.tif"
 REFERENCE = LCZ_FIXTURES_DIR / "lcz_reference_berlin.tif"
 
-_CLEANING = CleaningConfig(
-    building_max_area_m2=50_000.0,
-    building_min_area_m2=20.0,
-    building_merge_limit_m2=200.0,
-    building_overlap_limit=0.1,
-    building_road_buffer_m=4.0,
-    building_road_overlap_limit=0.5,
-)
-_HEIGHTS = HeightConfig(overture_height_confidence=0.9, overture_num_floors_confidence=0.6)
 _LAND_COVER = LandCoverConfig()
 _UCP = UcpConfig()
 _VALIDATION = ValidationConfig()
@@ -61,12 +57,12 @@ _VALIDATION = ValidationConfig()
 
 @pytest.fixture(scope="module")
 def cleaned(fixture_vector_source: FixtureVectorSource) -> CleanedVectors:
-    return clean_vectors(fixture_vector_source, SMALL_BBOX, _CLEANING)
+    return clean_vectors(fixture_vector_source, SMALL_BBOX, FIXTURE_CLEANING)
 
 
 @pytest.fixture(scope="module")
 def buildings(cleaned: CleanedVectors) -> gpd.GeoDataFrame:
-    tiers = build_cascade(_HEIGHTS, lambda name: LANDCOVER_FIXTURES_DIR)
+    tiers = build_cascade(FIXTURE_HEIGHTS, lambda name: LANDCOVER_FIXTURES_DIR)
     filled, _ = fill_heights(cleaned.buildings_area, tiers)
     return filled
 
@@ -197,7 +193,7 @@ def test_a_full_run_writes_its_three_files_and_a_validation_report(
     settings = Settings.load(run_id="berlin", dotenv_path=tmp_path / "absent.env")
     settings.overture.release = "2026-07-22.0"
 
-    tiers = build_cascade(_HEIGHTS, lambda name: LANDCOVER_FIXTURES_DIR)
+    tiers = build_cascade(FIXTURE_HEIGHTS, lambda name: LANDCOVER_FIXTURES_DIR)
     heights = height_metrics(buildings, grid_units, cascade_height_sources(tiers))
     fractions = LocalRasterSource(_LAND_COVER.dataset("worldcover"), WORLDCOVER).fractions(
         grid_units
@@ -263,7 +259,7 @@ def test_the_validation_report_is_per_class_and_stratified_not_a_single_number(
     """CLAUDE.md: reported lczexplore-style, plus the two breakdowns that make the Phase 3 height
     caveat measurable. The agreement figure itself is not asserted — that is a property of Berlin
     and of a fixture too small to draw a conclusion from."""
-    tiers = build_cascade(_HEIGHTS, lambda name: LANDCOVER_FIXTURES_DIR)
+    tiers = build_cascade(FIXTURE_HEIGHTS, lambda name: LANDCOVER_FIXTURES_DIR)
     heights = height_metrics(buildings, grid_units, cascade_height_sources(tiers))
     reference = reference_lcz(grid_units, REFERENCE, _VALIDATION.reference)
 

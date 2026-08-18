@@ -11,41 +11,18 @@ comparison it never made.
 
 from __future__ import annotations
 
-import importlib.util
-import sys
 from pathlib import Path
 from types import ModuleType
 
 import pytest
+from conftest import load_script
 
 from lczkit.config import HeightConfig, Settings
 
 
-def load_script() -> ModuleType:
-    """Import `scripts/height_tier_experiment.py` by path.
-
-    By path rather than as a package, for the reason `tests/test_unit_scale_experiment.py` gives:
-    `scripts/` holds one-off analyses, and making it importable to run a test would put the wrong
-    thing on the package's runtime surface.
-    """
-    root = Path(__file__).resolve().parent.parent / "scripts"
-    sys.path.insert(0, str(root))
-    try:
-        spec = importlib.util.spec_from_file_location(
-            "height_tier_experiment", root / "height_tier_experiment.py"
-        )
-        assert spec is not None and spec.loader is not None
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[spec.name] = module
-        spec.loader.exec_module(module)
-        return module
-    finally:
-        sys.path.remove(str(root))
-
-
 @pytest.fixture(scope="module")
 def script() -> ModuleType:
-    return load_script()
+    return load_script("height_tier_experiment")
 
 
 def _resolved(

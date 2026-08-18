@@ -10,10 +10,15 @@ from __future__ import annotations
 import geopandas as gpd
 import numpy as np
 import pytest
-from conftest import LANDCOVER_FIXTURES_DIR, SMALL_BBOX, FixtureVectorSource
+from conftest import (
+    FIXTURE_CLEANING,
+    LANDCOVER_FIXTURES_DIR,
+    SMALL_BBOX,
+    FixtureVectorSource,
+)
 
 from lczkit.cleaning.pipeline import clean_vectors
-from lczkit.config import CleaningConfig, HeightConfig, LandCoverConfig
+from lczkit.config import HeightConfig, LandCoverConfig
 from lczkit.heights.cascade import cascade_height_sources, fill_heights
 from lczkit.heights.completeness import height_metrics
 from lczkit.heights.tiers import build_cascade
@@ -23,15 +28,6 @@ from lczkit.units.grid import GridUnits
 
 WORLDCOVER = LANDCOVER_FIXTURES_DIR / "worldcover_berlin.tif"
 CANOPY = LANDCOVER_FIXTURES_DIR / "eth_canopy_berlin.tif"
-
-_CLEANING = CleaningConfig(
-    building_max_area_m2=50_000.0,
-    building_min_area_m2=20.0,
-    building_merge_limit_m2=200.0,
-    building_overlap_limit=0.1,
-    building_road_buffer_m=4.0,
-    building_road_overlap_limit=0.5,
-)
 
 
 def _source(name: str, path) -> LocalRasterSource:  # type: ignore[no-untyped-def]
@@ -68,7 +64,7 @@ def test_land_cover_joins_against_the_phase_3_height_metrics(
 ) -> None:
     """The whole point of `unit_id` as the unit of exchange: two independently computed tables land
     on the same index and merge without any spatial work."""
-    cleaned = clean_vectors(fixture_vector_source, SMALL_BBOX, _CLEANING)
+    cleaned = clean_vectors(fixture_vector_source, SMALL_BBOX, FIXTURE_CLEANING)
 
     heights_config = HeightConfig(
         overture_height_confidence=0.9, overture_num_floors_confidence=0.6
@@ -95,7 +91,7 @@ def test_enclosure_units_work_the_same_way(
 ) -> None:
     """`RasterSource` is indifferent to how the units were made — it only needs a projected CRS and
     a `unit_id` index, which both strategies guarantee."""
-    cleaned = clean_vectors(fixture_vector_source, SMALL_BBOX, _CLEANING)
+    cleaned = clean_vectors(fixture_vector_source, SMALL_BBOX, FIXTURE_CLEANING)
     rail = fixture_vector_source.rail(SMALL_BBOX).to_crs(cleaned.crs)
     barriers = assemble_barriers(cleaned.streets, cleaned.waterbodies, rail=rail)
     units = EnclosureUnits().generate(SMALL_BBOX, barriers)

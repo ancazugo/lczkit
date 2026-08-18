@@ -8,36 +8,12 @@ as a precision optimum it is not.
 
 from __future__ import annotations
 
-import importlib.util
-import sys
-from pathlib import Path
-from types import ModuleType
-
 import pytest
+from conftest import load_script
 
 from lczkit.config import ClassificationConfig
 
-
-def load_script() -> ModuleType:
-    """Import by path, for the reason its sibling tests give: `scripts/` holds one-off analyses and
-    is deliberately not importable as a package."""
-    root = Path(__file__).resolve().parent.parent
-    path = root / "scripts" / "lcz10_threshold_sweep.py"
-    sys.path.insert(0, str(path.parent))
-    try:
-        spec = importlib.util.spec_from_file_location("lcz10_threshold_sweep", path)
-        assert spec is not None and spec.loader is not None
-        module = importlib.util.module_from_spec(spec)
-        # Registered before execution because `@dataclass` resolves its own module through
-        # `sys.modules` while the class body is being processed, and fails outright if it is absent.
-        sys.modules[spec.name] = module
-        spec.loader.exec_module(module)
-        return module
-    finally:
-        sys.path.remove(str(path.parent))
-
-
-SCRIPT = load_script()
+SCRIPT = load_script("lcz10_threshold_sweep")
 
 
 @pytest.fixture(scope="module")

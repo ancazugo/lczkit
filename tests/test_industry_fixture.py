@@ -19,6 +19,8 @@ import geopandas as gpd
 import pandas as pd
 import pytest
 from conftest import (
+    FIXTURE_CLEANING,
+    FIXTURE_HEIGHTS,
     INDUSTRY_BBOX,
     INDUSTRY_FIXTURES_DIR,
     LANDCOVER_FIXTURES_DIR,
@@ -30,8 +32,6 @@ from lczkit.classify import PrototypeClassifier
 from lczkit.cleaning.pipeline import CleanedVectors, clean_vectors
 from lczkit.config import (
     ClassificationConfig,
-    CleaningConfig,
-    HeightConfig,
     LandCoverConfig,
     UcpConfig,
     ValidationConfig,
@@ -47,15 +47,6 @@ from lczkit.validation import agreement, reference_lcz
 WORLDCOVER = LANDCOVER_FIXTURES_DIR / "worldcover_rotterdam.tif"
 REFERENCE = LCZ_FIXTURES_DIR / "lcz_reference_rotterdam.tif"
 
-_CLEANING = CleaningConfig(
-    building_max_area_m2=50_000.0,
-    building_min_area_m2=20.0,
-    building_merge_limit_m2=200.0,
-    building_overlap_limit=0.1,
-    building_road_buffer_m=4.0,
-    building_road_overlap_limit=0.5,
-)
-_HEIGHTS = HeightConfig(overture_height_confidence=0.9, overture_num_floors_confidence=0.6)
 _LAND_COVER = LandCoverConfig()
 _UCP = UcpConfig()
 _VALIDATION = ValidationConfig()
@@ -68,7 +59,7 @@ def source() -> FixtureVectorSource:
 
 @pytest.fixture(scope="module")
 def cleaned(source: FixtureVectorSource) -> CleanedVectors:
-    return clean_vectors(source, INDUSTRY_BBOX, _CLEANING)
+    return clean_vectors(source, INDUSTRY_BBOX, FIXTURE_CLEANING)
 
 
 @pytest.fixture(scope="module")
@@ -78,7 +69,7 @@ def units() -> gpd.GeoDataFrame:
 
 @pytest.fixture(scope="module")
 def parameters(cleaned: CleanedVectors, units: gpd.GeoDataFrame) -> pd.DataFrame:
-    tiers = build_cascade(_HEIGHTS, lambda name: LANDCOVER_FIXTURES_DIR)
+    tiers = build_cascade(FIXTURE_HEIGHTS, lambda name: LANDCOVER_FIXTURES_DIR)
     buildings, _ = fill_heights(cleaned.buildings_area, tiers)
     land_cover = LocalRasterSource(_LAND_COVER.dataset("worldcover"), WORLDCOVER).fractions(units)
     return compute_parameters(

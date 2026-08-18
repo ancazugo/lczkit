@@ -14,30 +14,17 @@ produces a plausible number rather than an error:
 
 from __future__ import annotations
 
-import importlib.util
 import json
-import sys
 from pathlib import Path
 from types import ModuleType
 
 import pytest
-
-
-def load_script() -> ModuleType:
-    """Import `scripts/bsf_published_ranges.py` by path, for the reason its sibling test gives:
-    `scripts/` holds one-off analyses and is deliberately not importable as a package."""
-    path = Path(__file__).resolve().parent.parent / "scripts" / "bsf_published_ranges.py"
-    spec = importlib.util.spec_from_file_location("bsf_published_ranges", path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
+from conftest import load_script
 
 
 @pytest.fixture(scope="module")
 def script() -> ModuleType:
-    return load_script()
+    return load_script("bsf_published_ranges")
 
 
 def row(
