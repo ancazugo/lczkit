@@ -63,9 +63,19 @@ _BERNARD_BUILT: dict[str, float] = {
     "height_of_roughness_elements_m": 6.0,
     "tree_fraction": 0.0,
     "water_fraction": 0.0,
+    "mean_building_area_m2": 0.0,
 }
 
 _UNIFORM: dict[str, float] = dict.fromkeys(DIMENSIONS, 1.0)
+
+# `mean_building_area_m2` is lczkit's own and ships **disabled in every preset**, `equal` included.
+# That is a departure from `equal`'s "uniform over every available dimension" and it is deliberate:
+# CLAUDE.md's standing ruling is that a threshold is swept against a reference and chosen at an
+# operating point, never picked, and neither the weight nor the two bounds in
+# `docs/references/tables/lczkit_building_size_ranges.md` has been swept. Enabling it here would put
+# an invented number into a published label, and would do it in the preset people reach for when
+# they want a neutral comparison.
+_UNIFORM["mean_building_area_m2"] = 0.0
 
 BERNARD2024 = WeightPreset(
     name="bernard2024_partial",
@@ -92,7 +102,10 @@ EQUAL = WeightPreset(
         "Uniform weights over every available dimension, for comparison against "
         "bernard2024_partial. "
         "Gives the impervious and pervious fractions real influence over the built types, which "
-        "is the right choice where the land-cover input is trusted more than Bernard's was."
+        "is the right choice where the land-cover input is trusted more than Bernard's was. "
+        "`mean_building_area_m2` is the one exception to the uniformity and carries zero: it is "
+        "lczkit's own dimension and its weight has not been swept, so enabling it would put an "
+        "uncalibrated number into a label."
     ),
 )
 

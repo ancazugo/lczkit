@@ -25,6 +25,9 @@ BASE = {
     "water_fraction": 0.0,
     "height_of_roughness_elements_m": np.nan,
     "aspect_ratio": np.nan,
+    # Null rather than a value: the dimension ships at weight zero in every preset, so a value here
+    # would assert nothing, and a null keeps these units unambiguous on the dimensions that do act.
+    "mean_building_area_m2": np.nan,
     "industrial_fraction_of_building_area": 0.0,
     "industrial_fraction_of_unit_area": 0.0,
     "industrial_fraction": 0.0,

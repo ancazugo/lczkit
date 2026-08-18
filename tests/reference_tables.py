@@ -21,6 +21,7 @@ TABLES_DIR = Path(__file__).resolve().parent.parent / "docs" / "references" / "t
 STEWART_OKE_TABLE = TABLES_DIR / "stewart_oke_2012_properties.md"
 DEMUZERE_TABLE = TABLES_DIR / "demuzere_2022_lcz_codes.md"
 NATURAL_RANGES_TABLE = TABLES_DIR / "lczkit_natural_class_ranges.md"
+BUILDING_SIZE_TABLE = TABLES_DIR / "lczkit_building_size_ranges.md"
 SIMILARITY_TABLE = TABLES_DIR / "lcz_class_similarity.md"
 
 SIMILARITY_HEADING = "## Similarity matrix of LCZ classes"
@@ -90,6 +91,22 @@ def lczkit_natural_ranges() -> Ranges:
     header, *body = rows(NATURAL_RANGES_TABLE, first_column="LCZ")
     pairs = _paired_columns(header, {"tree": "tree_fraction", "water": "water_fraction"})
     return _read(body, pairs)
+
+
+def lczkit_building_size_ranges() -> Ranges:
+    """The lczkit-owned mean building area ranges, for LCZ 7 and LCZ 8 only.
+
+    Classes the table does not list are unbounded on both sides, so they are absent from the result
+    rather than present with a `(None, None)` pair — matching how `_RANGES` records an unconstrained
+    property, and keeping "this class has no size claim" distinct from "this class has one and it is
+    blank on both ends".
+    """
+    header, *body = rows(BUILDING_SIZE_TABLE, first_column="LCZ")
+    pairs = _paired_columns(header, {"mean building area m²": "mean_building_area"})
+    return {
+        label: {name: bounds for name, bounds in properties.items() if bounds != (None, None)}
+        for label, properties in _read(body, pairs).items()
+    }
 
 
 def lcz_similarity() -> dict[tuple[str, str], float]:

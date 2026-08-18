@@ -14,6 +14,7 @@ import reference_tables as rt
 
 from lczkit.classify.labels import BUILT_CODES, LCZ_CLASSES, NATURAL_CODES, code_of, lcz
 from lczkit.classify.prototypes import (
+    _BUILDING_SIZE,
     _RANGES,
     DEFAULT_DOMINANT_FRACTION,
     DEFAULT_NEGLIGIBLE_FRACTION,
@@ -28,6 +29,7 @@ from lczkit.classify.prototypes import (
     property_of,
     ranges_for,
 )
+from lczkit.classify.weights import PRESETS as WEIGHT_PRESETS
 from lczkit.ucp import PARAMETER_COLUMNS
 
 
@@ -41,6 +43,12 @@ def test_the_lczkit_ranges_match_their_committed_table_too() -> None:
     generated = _natural_cover(DEFAULT_DOMINANT_FRACTION, DEFAULT_NEGLIGIBLE_FRACTION)
 
     assert generated == rt.lczkit_natural_ranges()
+
+
+def test_the_building_size_ranges_match_their_committed_table_too() -> None:
+    """Also not Stewart & Oke's — their table has no building-size column at all — and so also
+    transcribed from a file that says so, and checked against it the same way."""
+    assert _BUILDING_SIZE == rt.lczkit_building_size_ranges()
 
 
 def test_every_dimension_is_a_real_phase_5_parameter_column() -> None:
@@ -73,15 +81,37 @@ def test_lcz_g_has_no_height_range_at_all() -> None:
     assert "height_of_roughness_elements_m" not in ranges_for(code_of("G"))
 
 
-def test_lczkit_ranges_are_tagged_and_constrain_only_the_natural_types() -> None:
-    """`source` is what stops an lczkit number being cited as Stewart & Oke's. The built types
-    carry no tree or water range at all, so those dimensions never penalise them."""
-    lczkit_ranges = [p for p in PROTOTYPES if p.source == LCZKIT]
+def test_lczkit_ranges_are_tagged_and_each_stays_on_the_family_it_was_written_for() -> None:
+    """`source` is what stops an lczkit number being cited as Stewart & Oke's.
 
-    assert {p.column for p in lczkit_ranges} == {"tree_fraction", "water_fraction"}
-    assert {p.code for p in lczkit_ranges} <= set(NATURAL_CODES)
-    assert not {p.code for p in lczkit_ranges} & set(BUILT_CODES)
+    The three lczkit dimensions split by family and the split is the point. Tree and water cover
+    exist to separate the *natural* classes, which the published table cannot separate at all with
+    what this package computes, and they constrain no built type — so they never penalise LCZ 1-10.
+    `mean_building_area_m2` is the exact opposite: it constrains LCZ 7 and LCZ 8 and no natural
+    class, because those two are the only classes whose published *name* asserts a building size
+    and they were measured coming out swapped on it.
+    """
+    lczkit_ranges = [p for p in PROTOTYPES if p.source == LCZKIT]
+    natural_cover = [p for p in lczkit_ranges if p.column != "mean_building_area_m2"]
+    building_size = [p for p in lczkit_ranges if p.column == "mean_building_area_m2"]
+
+    assert {p.column for p in natural_cover} == {"tree_fraction", "water_fraction"}
+    assert {p.code for p in natural_cover} <= set(NATURAL_CODES)
+    assert not {p.code for p in natural_cover} & set(BUILT_CODES)
+
+    assert {p.code for p in building_size} == {code_of("7"), code_of("8")}
+    assert not {p.code for p in building_size} & set(NATURAL_CODES)
     assert all(p.source == STEWART_OKE_2012 for p in PROTOTYPES if p not in lczkit_ranges)
+
+
+def test_the_building_size_dimension_ships_disabled_in_every_preset() -> None:
+    """A ruling, not caution. CLAUDE.md requires a threshold to be swept against a reference and
+    chosen at an operating point; neither this dimension's weight nor its two bounds has been, so
+    enabling it anywhere would put an invented number into a published label. `equal` carries the
+    zero too, despite meaning "uniform over every dimension", and its description says why."""
+    for entry in WEIGHT_PRESETS:
+        for family in ("built", "natural"):
+            assert entry.for_family(family)["mean_building_area_m2"] == 0.0, entry.name
 
 
 def test_building_surface_fraction_is_where_the_family_gate_belongs() -> None:

@@ -13,11 +13,18 @@ committed table stays the authority and this module is a copy of it that ships i
 Percent-to-fraction conversion happens in `PropertySpec.scale`, in one place, rather than being
 folded into the transcription where a test could not see it.
 
-Two properties are lczkit's own and are marked `source=LCZKIT`: `tree_fraction` and
-`water_fraction`, from `docs/references/tables/lczkit_natural_class_ranges.md`. They exist because
-the published table cannot separate the natural classes at all with the parameters this package
-computes — see that file for the full argument, and `UNUSED_PROPERTIES` below for the properties
-whose absence causes it.
+Three properties are lczkit's own and are marked `source=LCZKIT`. `tree_fraction` and
+`water_fraction` come from `docs/references/tables/lczkit_natural_class_ranges.md` and exist
+because the published table cannot separate the natural classes at all with the parameters this
+package computes — see that file for the full argument, and `UNUSED_PROPERTIES` below for the
+properties whose absence causes it.
+
+`mean_building_area_m2` comes from `docs/references/tables/lczkit_building_size_ranges.md` and
+exists because LCZ 7 and LCZ 8 — *lightweight* low-rise and *large* low-rise — are separated by
+nothing in the metric that measures how big a building is, and consequently come out **swapped**:
+measured over built cells, LCZ 8 lands on 55-93 m² footprints and LCZ 7 on 7 000-13 000 m² ones, in
+every city checked. **It carries weight 0.0 in every shipped preset and therefore changes no
+label**, per CLAUDE.md's rule that a threshold is swept against a reference and never picked.
 """
 
 from __future__ import annotations
@@ -54,10 +61,30 @@ class PropertySpec:
     source: str
     """`STEWART_OKE_2012` or `LCZKIT`."""
 
+    reads_building_height: bool = False
+    """Whether computing this dimension consumes the Phase 3 building height.
+
+    Two do, and only one of them is obviously a height: `height_of_roughness_elements_m` is the
+    geometric mean of building heights, and `aspect_ratio` is `momepy.street_profile(...,
+    height=buildings["height"])`, whose numerator is that same column. So a height error does not
+    perturb one dimension of the metric, it perturbs two — and under `bernard2024_partial` those
+    two carry 9 of the 17 applied weight units between them.
+
+    Recorded as data rather than as prose because the manifest states the figure, and a
+    hand-written constant would go stale the moment a weight preset or a dimension changed.
+    """
+
 
 PROPERTIES: tuple[PropertySpec, ...] = (
     PropertySpec("sky_view_factor", None, "fraction", 1.0, STEWART_OKE_2012),
-    PropertySpec("aspect_ratio", "aspect_ratio", "fraction", 1.0, STEWART_OKE_2012),
+    PropertySpec(
+        "aspect_ratio",
+        "aspect_ratio",
+        "fraction",
+        1.0,
+        STEWART_OKE_2012,
+        reads_building_height=True,
+    ),
     PropertySpec(
         "building_surface_fraction", "building_surface_fraction", "percent", 0.01, STEWART_OKE_2012
     ),
@@ -77,6 +104,7 @@ PROPERTIES: tuple[PropertySpec, ...] = (
         "m",
         1.0,
         STEWART_OKE_2012,
+        reads_building_height=True,
     ),
     PropertySpec("terrain_roughness_class", None, "class", 1.0, STEWART_OKE_2012),
     PropertySpec("surface_admittance", None, "J m-2 s-1/2 K-1", 1.0, STEWART_OKE_2012),
@@ -84,6 +112,7 @@ PROPERTIES: tuple[PropertySpec, ...] = (
     PropertySpec("anthropogenic_heat_output", None, "W m-2", 1.0, STEWART_OKE_2012),
     PropertySpec("tree_fraction", "tree_fraction", "fraction", 1.0, LCZKIT),
     PropertySpec("water_fraction", "water_fraction", "fraction", 1.0, LCZKIT),
+    PropertySpec("mean_building_area", "mean_building_area_m2", "m2", 1.0, LCZKIT),
 )
 
 PROPERTY_NAMES: tuple[str, ...] = tuple(spec.name for spec in PROPERTIES)
@@ -299,6 +328,18 @@ _RANGES: dict[str, dict[str, tuple[float | None, float | None]]] = {
     },
 }
 
+#: `label -> property -> (min, max)`, transcribed verbatim from
+#: `docs/references/tables/lczkit_building_size_ranges.md`. **lczkit's own, not Stewart & Oke** —
+#: their table has no building-size column at all. Only the two classes whose published *name*
+#: asserts a building size are constrained; every other class is unbounded on both sides and takes
+#: no penalty here, because giving LCZ 3 or LCZ 9 a range would invent a claim the scheme does not
+#: make. The dimension carries weight 0.0 in every shipped preset, so none of this moves a label
+#: until a sweep says what weight it should carry.
+_BUILDING_SIZE: dict[str, dict[str, tuple[float | None, float | None]]] = {
+    "7": {"mean_building_area": (None, 100.0)},
+    "8": {"mean_building_area": (500.0, None)},
+}
+
 DEFAULT_DOMINANT_FRACTION = 0.50
 """Tree or water cover at which a natural class is "dense trees" or "water" - the majority of
 the unit. lczkit's own, from `docs/references/tables/lczkit_natural_class_ranges.md`."""
@@ -372,7 +413,11 @@ def build_prototypes(
     cover = _natural_cover(dominant_fraction, negligible_fraction)
     ranges: list[PrototypeRange] = []
     for entry in LCZ_CLASSES:
-        by_property = {**_RANGES[entry.label], **cover.get(entry.label, {})}
+        by_property = {
+            **_RANGES[entry.label],
+            **cover.get(entry.label, {}),
+            **_BUILDING_SIZE.get(entry.label, {}),
+        }
         for spec in PROPERTIES:
             if spec.column is None or spec.name not in by_property:
                 continue
@@ -395,6 +440,12 @@ PROTOTYPES: tuple[PrototypeRange, ...] = build_prototypes()
 
 DIMENSIONS: tuple[str, ...] = tuple(spec.column for spec in PROPERTIES if spec.column is not None)
 """The parameter columns classification runs over, in `PROPERTIES` order."""
+
+HEIGHT_DEPENDENT_DIMENSIONS: tuple[str, ...] = tuple(
+    spec.column for spec in PROPERTIES if spec.column is not None and spec.reads_building_height
+)
+"""Dimensions whose value moves when the Phase 3 height cascade does. See
+`PropertySpec.reads_building_height` — there are two, and one of them is not called a height."""
 
 
 def ranges_for(code: int) -> dict[str, tuple[float | None, float | None]]:
@@ -476,12 +527,19 @@ def _check() -> None:
                 raise RuntimeError(
                     f"LCZ {label} {name}: both ends blank; omit the property instead"
                 )
+    # Scoped to the land-cover pair rather than to every lczkit-owned property. Tree and water
+    # cover exist to separate the *natural* classes and constraining a built type with them would
+    # silently change what LCZ 1-10 mean; `mean_building_area` is lczkit's too and is deliberately
+    # the opposite — it constrains two built types and no natural one.
+    natural_only = {"tree_fraction", "water_fraction"}
     built = {code_of(entry.label) for entry in LCZ_CLASSES if entry.label.isdigit()}
     for prototype in PROTOTYPES:
-        if prototype.source == LCZKIT and prototype.code in built:
+        if prototype.property_name in natural_only and prototype.code in built:
             raise RuntimeError(
                 f"{prototype.property_name} is lczkit's and must not constrain a built type"
             )
+        if prototype.property_name == "mean_building_area" and prototype.code not in built:
+            raise RuntimeError("mean_building_area must not constrain a natural type")
     if code_of("G") not in {prototype.code for prototype in PROTOTYPES}:
         raise RuntimeError("LCZ G produced no prototype ranges")
 

@@ -144,8 +144,9 @@ def test_the_classification_block_carries_the_metric_and_the_thresholds(
         "industrial_fraction_of_building_area"
     )
     # 10 built classes x 5 published dimensions, plus 7 natural x 7 (the five published plus tree
-    # and water), less the height range LCZ G does not have: 50 + 49 - 1.
-    assert len(block["prototypes"]) == 98
+    # and water), less the height range LCZ G does not have, plus the two lczkit-owned mean
+    # building area ranges on LCZ 7 and LCZ 8: 50 + 49 - 1 + 2.
+    assert len(block["prototypes"]) == 100
 
 
 def test_the_legend_travels_with_its_citation(settings: Settings) -> None:
