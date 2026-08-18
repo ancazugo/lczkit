@@ -101,6 +101,8 @@ plugins:
 markdown_extensions:
   - admonition
   - attr_list
+  # The glossary is a definition list. Built into python-markdown, so no new dependency.
+  - def_list
   - md_in_html
   - tables
   - toc:
@@ -114,6 +116,7 @@ markdown_extensions:
 
 nav:
   - Home: index.md
+  - Glossary: glossary.md
   - Demonstration: demo/bogota.ipynb
   - API reference:
       - Overview: api/index.md
