@@ -1651,7 +1651,11 @@ package's prose, 119 in `config.py` alone.**
 
 - **`ci.yml` triggered on `main`, which does not exist** — neither locally nor on the remote. The
   *remote* is named `main` and its only branch is `master`, which is what makes it easy to
-  misread. **CI had therefore only ever fired on pull requests, since Phase 0.**
+  misread. **CI had therefore never fired at all, since Phase 0** — corrected in Phase 24
+  from the Actions API: the workflow has 4 runs in the repository's history, all `push`,
+  all after this fix, and **this repository has never had a pull request**. "Fired only on
+  pull requests" was an inference from the trigger, and the stronger true statement was one
+  API call away.
 - **`ruff format --check .` was already failing**, on two Python files and on
   `docs/references/tables/osm_lcz_tag_mapping.md` — ruff 0.16 formats Python fences *inside
   Markdown*. Unseen for exactly the reason above. The Python files are formatted; the table is
@@ -2121,8 +2125,55 @@ with only the `docs/experiments/` links rebased for the file's new depth), and t
 as: what it is, the three locators and what each covers, what a run writes, what it will *not* tell
 you, **and a section saying not to use the bundled labels as a quality gate over your own city** —
 they reach 51 cities at most and two expert label sets agree at a median 79.7%, so an agreement
-figure without that context is not interpretable. This is the README half of item 13; the docs half
+figure without that context is not interpretable. This is the README half of the release item; the docs half
 landed as Phase 20 and the notebook half as Phase 22.
+
+---
+
+### Phase 24 — the argument, not the environment — CONCLUDED
+
+**Opened by CI, which had just started running for the first time.** Not a diagnostic phase; it
+moved no measurement. Phase 20 fixed a workflow trigger that named a branch this repository does
+not have, and the first thing the newly-live gate reported was a defect that had been sitting in
+`lczkit run` since Phase 15.
+
+**The defect.** `lczkit run --bbox 1,2,3` on a machine with no `DATA_DIR` answered *"DATA_DIR is
+not set"*. `_load_settings` ran before `parse_bbox` and `parse_basemaps`, so every argument error
+that needs nothing on disk arrived as a config error — blaming the environment for a typo, at the
+one moment the reader has configured neither and cannot tell which is really wrong. `--basemap`
+and `--extent-km` misreported the same way.
+
+`site build` has always had the right shape, so the fix is `run` catching up to a sibling command
+rather than a new idea. The city locators stay behind the environment deliberately: they read
+`guppd_bounds.csv` and the So2Sat archive through `settings.source_dir`, so there `DATA_DIR`
+genuinely is the blocker and saying so is correct.
+
+**Why 987 local passes proved less than they looked.**
+`test_a_malformed_bbox_is_refused_with_the_reason` pins exactly the right behaviour in six
+parametrisations, and **all six passed locally and failed in CI**. `_clean_data_dir_env` deletes
+`DATA_DIR` from the environment and stops; `Settings.load` then calls `load_dotenv()`, whose
+upward search starts at `src/lczkit/config.py` and finds the repository's own `.env`, putting it
+straight back. The fixture guarded the variable and not the file.
+
+The answer was already in the repository and had been applied once —
+`test_a_missing_data_dir_is_a_message_and_not_a_traceback` neutralised `load_dotenv` inline, with
+a docstring explaining precisely this mechanism — and was never made the default. It is autouse
+now.
+
+**Scope, measured rather than assumed.** A full suite run in a `.env`-free extracted tree, which
+is what CI sees: **6 failed, 979 passed, 2 skipped**. The six are the bbox parametrisations and
+nothing else, so closing the leak has no collateral. The two skips are the test that reads
+`REPO/.env` off disk, which the extracted tree does not have; the working tree still runs it, at
+**988 passed**.
+
+**Pre-existing, checked rather than asserted.** The same six fail against an extracted `38bce20`,
+so this is not a regression from the Phase 23 commits.
+
+**The Actions API also corrected a committed claim.** Phase 20 recorded that CI "had only ever
+fired on pull requests"; the history says **4 runs ever, all `push`, all after that fix, all
+failed, and zero pull requests ever opened**. CI had never fired at all, and this repository has
+never had a green run. The stronger true statement was one API call from the one that was
+inferred — the same shape as attributing a cost by adjacency in a call graph.
 
 ---
 
@@ -2168,8 +2219,12 @@ Remaining work, in order:
     moved a number is pinned to 1e-9 against the values recorded before it. It found that no
     manifest on disk records what ground its run covered, and that the only city locator read the
     So2Sat label archive and therefore knew 28 places out of 5 558.
-12. **The paper.**
-13. **Cleanup** — release. **The docs half landed as Phase 20, the notebook half as Phase 22 and
+12. ~~**Phase 24 — the argument, not the environment.**~~ **Concluded**, opened by CI rather than
+    by request. Not measurement: an ordering defect in `lczkit run`, and the `.env` leak that kept
+    the six tests pinning it green on every machine that had one. It found that CI has never had a
+    green run in this repository's history, and had never fired at all before Phase 20.
+13. **The paper.**
+14. **Cleanup** — release. **The docs half landed as Phase 20, the notebook half as Phase 22 and
     the README split as Phase 23**; what is left here is the release itself.
 
 **`OA_w` was blocked and is now closed.** Bechtel, Demuzere & Stewart (2020) supplied both the
@@ -2533,7 +2588,7 @@ reconcile silently.** That flagging behaviour is working; keep it.
 | Superseded text left in concluded phase blocks | Phase 8's block opened with a nine-minute runtime and later asserted the package could not process a city; Phase 3 still carried the corrected-away axis pairing; deferred still listed SVF first. **Concluded phases keep measurements and rulings and drop imperatives.** | 3, 6, 8, 13 |
 | Run outputs reported as having no CRS in QGIS | **Not a defect in the files, and checked before anything was changed.** All ten runs on disk carry valid GeoParquet 1.0.0 with the extent's UTM CRS as PROJJSON *and an EPSG authority code*, in `units.parquet` and every `layers/*.parquet` — `EPSG:32618` Bogotá through `EPSG:32737` Nairobi. GDAL's Parquet driver is an **optional build component**, so a QGIS without it opens a correct file as a non-spatial table and the symptom names the producer. `units.gpkg` ships beside the GeoParquet by default (measured 0.86 exponent, 1.83 s / 67.3 MB at 116 491 units), never instead of it. **The archival GeoParquet and its CRS are unchanged** — the export CRS was *not* switched to lat/lon, because that would move every stored run's geometry and make every area statistic in this file incomparable. | 6, 19 |
 | The run CRS recorded nowhere | Derived by `estimate_utm_crs()` from the extent, so it is in no config and was in no manifest — a run directory could state its own CRS only through the file format the complaining reader could not open. `manifest.crs` and `crs_wkt` added; `lczkit export` backfills them for runs already written, editing the JSON directly rather than round-tripping through `RunManifest`, which would fill today's defaults into an archived run. | 0, 6, 19 |
-| `ci.yml` triggered on a branch that does not exist | `push: branches: [main]` since Phase 0, against a repository whose only branch is `master` — the *remote* is named `main`, which is what makes it misread. **CI had only ever fired on pull requests**, which is why a `ruff format --check` failure sat unnoticed in the tree. Fixed to `master`. A workflow that never runs is indistinguishable from one that passes. | 0, 20 |
+| `ci.yml` triggered on a branch that does not exist | `push: branches: [main]` since Phase 0, against a repository whose only branch is `master` — the *remote* is named `main`, which is what makes it misread. **CI had never fired at all**, which is why a `ruff format --check` failure sat unnoticed in the tree. Fixed to `master`. A workflow that never runs is indistinguishable from one that passes. **Phase 20 wrote "fired only on pull requests" and Phase 24 measured it**: 4 runs in the repository's history, all `push`, all after the fix, and **zero pull requests ever opened**. The claim was an inference from reading the trigger, and checking it costs one API call — the same shape as attributing cost by adjacency in a call graph. | 0, 20, 24 |
 | `ruff format` reads Python fences inside Markdown | ruff 0.16 formats ```` ```python ```` blocks in `.md`, so `docs/references/tables/osm_lcz_tag_mapping.md` — a hand-checked Tier 1 transcription — was a standing `ruff format --check` failure. Excluded via `[tool.ruff.format] exclude`, not reformatted: the file's whole value is that it is a faithful copy, and `ruff check` does not read `.md` at all, so the two commands disagree about what a "Python file" is. | 20 |
 | pydocstyle convention for a prose-docstring codebase | **`google`, chosen on measurement.** No `Args:`/`Parameters` section exists anywhere in the package, so no convention's *section* rules apply and the choice only decides which nuisance rules switch off. `google` leaves 68 in `src/` against `numpy`'s 123 and `pep257`'s 136, by disabling D401 non-imperative-mood — 67 hits against docstrings that deliberately open with a claim rather than a verb — and it is mkdocstrings-python's own default, so linter and renderer read the docstrings the same way. `tests/**` and `scripts/**` exempt. | 20 |
 | Protocol implementations documented only on the Protocol | The one member that *is* the implementation was blank in ten places — `generate`, `fill`, `ensure`, `name`. Defensible as authorial intent, and **not recoverable by a doc generator**: the implementations satisfy the Protocols structurally and subclass nothing, so there is no base to inherit a docstring from. Written out, each stating what it does differently rather than restating the interface. Checked before relying on it, not after. | 20 |
@@ -2562,6 +2617,9 @@ reconcile silently.** That flagging behaviour is working; keep it.
 | Two `CleaningConfig`s and six `load_script`s in the tests, and script constants copied from `lczkit.presets` | The preset copies are gone: the scripts derive from `lczkit.presets`, copied rather than aliased since several build variants by mutation. The two guard tests lost their subject and were replaced — one pins the eight metropolitan values as literals, which is what comparing two copies was standing in for. **`scripts/unit_scale_experiment.CLEANING` stays**: a genuinely different measured configuration is not a duplicate, and the two named test constants stay two for the same reason. | 15, 18, 23 |
 | The two locators collided on a name | **Found by checking the marker, and the worse half was silent.** `lczkit cities` marks the 28 rows `--so2sat-window` works for, and matching on the name alone marked **London, Ontario**, **Los Ángeles, Chile** and **Santiago, Philippines** — none of which carry So2Sat labels. The consequential half: `--city london --country CAN --so2sat-window` resolved the registry by name and ignored `--country`, so it would have run *London, UK's* window while the caller was disambiguating away from it. Silent wrong ground, reachable through the flag whose whole purpose is to keep ground straight. `City` carries an `iso` now; the marker keys on (name, country) and the flag checks the country rather than ignoring it. | 16, 18, 23 |
 | A run without tippecanoe reported as a run that produced nothing | The site is the **last** stage and every other file is written before it starts, but `TippecanoeMissingError` propagated out of `run_pipeline` and became an exit code *before* the line naming the run directory was printed. A ten-minute city whose only problem was an absent tool looked like a failure. `PipelineResult.site` had documented the skip behaviour since Phase 15 and the code never had it — so the behaviour was changed to match the docstring, not the reverse. `site_skipped` records the reason, the CLI names the run directory and `lczkit site build`, and the exit code stays non-zero because a site was asked for and not produced. **Found by writing a README sentence about it and then checking whether the sentence was true.** | 7, 15, 23 |
+| `lczkit run` loaded the environment before it read its own arguments | **`--bbox 1,2,3` with no `DATA_DIR` answered "DATA_DIR is not set"** — it blamed the environment for a typo, at the one moment the reader has configured neither and cannot tell which is really wrong. `_load_settings` ran before `parse_bbox` and `parse_basemaps`, so every argument error that needs nothing on disk arrived as a config error. **`site build` had always had the right shape** — parse the argument, then touch the environment — so the fix is `run` catching up to a sibling command rather than a new idea. The city locators stay behind the wall deliberately: they read `guppd_bounds.csv` and the So2Sat archive through `settings.source_dir`, so there the environment genuinely is the blocker. `--preset` is **not** hoisted, because validating the name early would be a second copy of the membership check `apply_preset` already owns. | 15, 24 |
+| The test suite could not see it, because it was reading the developer's `.env` | **`test_a_malformed_bbox_is_refused_with_the_reason` pins exactly the right behaviour in six parametrisations, and all six passed here and failed in CI.** `_clean_data_dir_env` deletes `DATA_DIR` from the environment and stops — then `Settings.load` calls `load_dotenv()`, whose upward search starts at `src/lczkit/config.py`, finds the repository's own `.env` and puts it straight back. The fixture guarded the variable and not the file, and its docstring claimed a guarantee the CLI tests cannot honour, since they invoke `app` and cannot pass `dotenv_path`. **The repository already knew the answer and had applied it once** — `test_a_missing_data_dir_is_a_message_and_not_a_traceback` neutralised `load_dotenv` inline, with a docstring explaining precisely this — and never made it the default. Now autouse, so every test says what it depends on. Third instance: **agreeing with your machine is not passing.** | 0, 15, 21, 22, 24 |
+| CI red on `master`, and red before the cleanup pass too | Checked rather than assumed, by running the same test against an extracted `38bce20`: **identical failures, so this predates the nine commits and is not their regression.** The Actions API gives the fuller picture: **4 CI runs in the repository's history, all `push`, all after Phase 20 fixed the trigger, all failed** — this repository has never had a green CI run, and before Phase 20 it had none at all. **A gate turned on after the fact reports the past, not just the future**, and the first thing it says is usually not about the change that turned it on. | 20, 24 |
 
 ---
 
@@ -2799,6 +2857,13 @@ city where the class exists *and* is tagged, and the coverage table suggests the
   Under pytest there is no kernel, DuckDB draws nothing, and the assignment succeeds — so the
   entire suite agreed the code was fine. Where a defect is a property of the *host* rather than of
   the inputs, the only thing a test can check is the source, and that is worth doing.
+- **A test that can read the developer's `.env` is not testing a clean checkout.** Deleting the
+  variable is half the guard: `load_dotenv()` searches *upward from the module that calls it*, so
+  from anywhere inside a checkout it finds the repository's own `.env` and restores what the
+  fixture just removed. Six tests pinning the right CLI behaviour passed here and failed in CI for
+  that reason, hiding a real defect for as long as they did. Neutralise the loader, not just the
+  variable — and note the failure is one-directional: the machine with the `.env` is the one that
+  cannot see the problem, so "it passes locally" is the symptom rather than the reassurance.
 - **Pin the kernel before believing a notebook.** A probe written to diagnose the above reported
   the opposite of the truth, because `jupytext --execute` with no kernel named silently chose one
   from a different environment with different package versions. `kernelspec` is the notebook's

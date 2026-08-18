@@ -150,14 +150,22 @@ def load_script(name: str) -> ModuleType:
 
 @pytest.fixture(autouse=True)
 def _clean_data_dir_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Ensure `DATA_DIR` from the real shell environment never leaks into a test.
+    """Ensure the developer's `DATA_DIR` never leaks into a test, from the variable or from `.env`.
 
-    Tests that need `DATA_DIR` set do so explicitly via `monkeypatch.setenv`. Tests also pass
-    an explicit, non-existent `dotenv_path` to `Settings.load()` so `python-dotenv`'s upward
-    search never picks up the real repo `.env` (it searches from the calling module's
-    location, not the current working directory, so `chdir` alone would not isolate this).
+    Both halves are needed and only the first was here. `Settings.load` calls `load_dotenv()`,
+    whose upward search starts at `src/lczkit/config.py` and finds the repository's own `.env` —
+    so deleting the variable and stopping there put it straight back, and every test that is
+    supposed to run without `DATA_DIR` was quietly running with the one on this machine. Six
+    parametrisations of `test_a_malformed_bbox_is_refused_with_the_reason` passed here and failed
+    in CI for exactly that reason, hiding a real defect in `lczkit run` for as long as they did.
+
+    Neutralising `load_dotenv` rather than pointing it somewhere empty, because a test that wants
+    to exercise dotenv itself passes an explicit `dotenv_path`, and none of them assert that a
+    real file is read — every `Settings.load(dotenv_path=...)` in the suite passes a path
+    guaranteed not to exist. Tests that need `DATA_DIR` set it with `monkeypatch.setenv`.
     """
     monkeypatch.delenv("DATA_DIR", raising=False)
+    monkeypatch.setattr("lczkit.config.load_dotenv", lambda **_: None)
 
 
 class FixtureVectorSource:

@@ -135,13 +135,26 @@ def run(
     Writes `$DATA_DIR/output/lczkit/<run_id>/`, plus the caches the Overture and height-product
     sources own under `input/`. Nothing existing under `input/` is modified.
     """
+    # Everything that can be judged from the command line alone comes first, because
+    # `_load_settings` needs `DATA_DIR` and a caller who has not set one yet is exactly the caller
+    # most likely to mistype an argument. Loading first answered "--bbox 1,2,3" with "DATA_DIR is
+    # not set", which blames the environment for a typo and buries the fixable half. `site build`
+    # has always split it this way; this is `run` catching up.
     if (bbox is None) == (city is None):
         fail("give exactly one of --bbox or --city (see --help for the forms)")
     if city is None and (country is not None or so2sat_window):
         fail("--country and --so2sat-window only apply to --city")
+    if extent_km is not None and extent_km <= 0:
+        fail(f"--extent-km must be positive, got {extent_km}")
+    basemap_keys = parse_basemaps(basemap)
 
     parsed: BBox
     extent: ExtentRecord
+    located: tuple[BBox, ExtentRecord] | None = None
+    if bbox is not None:
+        parsed = parse_bbox(bbox)
+        located = (parsed, ExtentRecord(kind="bbox", bbox=parsed))
+
     settings = _load_settings(run_id=run_id, create=not dry_run)
     try:
         apply_preset(settings, preset)
@@ -150,19 +163,18 @@ def run(
     if config is not None:
         apply_config_file(settings, config)
     settings.viz.include_buildings = buildings
-    apply_basemaps(settings.viz, parse_basemaps(basemap))
+    apply_basemaps(settings.viz, basemap_keys)
 
-    if bbox is not None:
-        parsed = parse_bbox(bbox)
-        extent = ExtentRecord(kind="bbox", bbox=parsed)
+    # The city locators stay here on purpose: they read `guppd_bounds.csv` and the So2Sat archive
+    # through `settings.source_dir`, so unlike a bbox they genuinely cannot answer without one.
+    if located is not None:
+        parsed, extent = located
     elif so2sat_window:
         parsed, extent = _so2sat_extent(city, country, settings)
     else:
         parsed, extent = _guppd_extent(city, country, settings)
 
     if extent_km is not None:
-        if extent_km <= 0:
-            fail(f"--extent-km must be positive, got {extent_km}")
         parsed = shrink(parsed, extent_km)
         extent = extent.shrunk(parsed, extent_km)
 

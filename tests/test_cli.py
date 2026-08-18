@@ -260,21 +260,42 @@ def test_a_non_positive_extent_is_refused(data_dir: Path) -> None:
 # --------------------------------------------------------------------------- configuration
 
 
-def test_a_missing_data_dir_is_a_message_and_not_a_traceback(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_a_missing_data_dir_is_a_message_and_not_a_traceback() -> None:
     """CLAUDE.md asks config problems to fail loudly and early. A stack trace is loud but not
     clear — the message already names the fix, and the trace only buries it.
 
-    `load_dotenv` is neutralised because `Settings.load` searches upward for a `.env` and the tests
-    run with the repository root as the working directory, so the real `DATA_DIR` would otherwise
-    be found. That search is not what this test is about.
+    The `.env` neutralisation this used to do inline now lives in `conftest._clean_data_dir_env`,
+    where it applies to every test rather than to the one that noticed it was needed.
     """
-    monkeypatch.setattr("lczkit.config.load_dotenv", lambda **_: None)
     result = runner.invoke(app, ["run", "--bbox", "13.0,52.0,13.1,52.1"])
     assert result.exit_code == EXIT_CONFIG
     assert "DATA_DIR is not set" in result.output
     assert "Traceback" not in result.output
+
+
+def test_an_argument_is_judged_before_the_environment_is_consulted() -> None:
+    """A malformed argument must name the argument, even with no `DATA_DIR` anywhere.
+
+    `run` used to load `Settings` first, so `--bbox 1,2,3` answered "DATA_DIR is not set" — it
+    blamed the environment for a typo, at the one moment the reader has neither configured yet and
+    cannot tell which of the two is really wrong. `--city` is the deliberate exception below: its
+    locators read their tables through `settings.source_dir`, so there the environment genuinely
+    is the blocker and saying so is correct.
+    """
+    for argv, expected in (
+        (["run", "--bbox", "1,2,3"], "four comma-separated"),
+        (["run", "--bbox", "10,2,5,4"], "-180 <= W < E <= 180"),
+        (["run", "--bbox", "13.0,52.0,13.1,52.1", "--basemap", "nonesuch"], "unknown basemap"),
+        (["run", "--bbox", "13.0,52.0,13.1,52.1", "--extent-km", "0"], "must be positive"),
+    ):
+        result = runner.invoke(app, argv)
+        assert result.exit_code != 0, f"{argv} was accepted"
+        assert expected in result.output, f"{argv} said:\n{result.output}"
+        assert "DATA_DIR" not in result.output, f"{argv} blamed the environment:\n{result.output}"
+
+    blocked = runner.invoke(app, ["run", "--city", "berlin"])
+    assert blocked.exit_code == EXIT_CONFIG
+    assert "DATA_DIR is not set" in blocked.output
 
 
 def test_an_unknown_preset_lists_the_ones_that_exist(data_dir: Path) -> None:
