@@ -44,3 +44,11 @@ Precomputed here and written into the manifest, so the map site is a pure transf
 outputs. The site build must never recompute a parameter or a quantile.
 
 ::: lczkit.output.breaks
+
+## Extent
+
+What ground a run covered, and how that ground was chosen. Derived rather than configured — the
+extent is an argument to `run_pipeline`, so it reaches no `Settings` field — which is why it needs
+a manifest slot of its own, exactly as the run CRS does.
+
+::: lczkit.output.extent

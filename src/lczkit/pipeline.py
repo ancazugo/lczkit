@@ -38,6 +38,7 @@ from lczkit.heights.inherit import inherit_heights
 from lczkit.heights.tiers import build_cascade
 from lczkit.landcover.local import LocalRasterSource
 from lczkit.output import RunOutputs, write_run
+from lczkit.output.extent import ExtentRecord
 from lczkit.protocols import BBox, SpatialUnitStrategy
 from lczkit.sources.height_products import resolve_areal_tiers
 from lczkit.sources.overture import OvertureSource
@@ -146,6 +147,7 @@ def run_pipeline(
     *,
     build_site_after: bool = True,
     observer: StageObserver | None = None,
+    extent: ExtentRecord | None = None,
 ) -> PipelineResult:
     """Clean, fill heights, classify, write a run directory and optionally build its map site.
 
@@ -156,8 +158,13 @@ def run_pipeline(
     Every path comes from `settings`: the run directory, the tile cache, and the `input/`
     subdirectories the Overture and height-product fetchers own. Nothing existing under `input/`
     is modified or removed.
+
+    `extent` records **how** `bbox` was chosen — a named place, a So2Sat window, or four numbers —
+    and goes into the manifest. It defaults to the bbox alone, which is all a library caller who
+    computed their own window can honestly claim.
     """
     watch = observer if observer is not None else _NullObserver()
+    covered = extent if extent is not None else ExtentRecord(kind="bbox", bbox=bbox)
     stages: dict[str, float] = {}
 
     @contextmanager
@@ -249,6 +256,7 @@ def run_pipeline(
             classifier,
             extras=fractions.join(provenance),
             cleaning=cleaned.report,
+            extent=covered,
             units_report=getattr(strategy, "report", None),
             height_fill=height_fill,
             height_source_availability=availability,

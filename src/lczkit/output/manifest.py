@@ -30,6 +30,7 @@ from lczkit.config import Settings
 from lczkit.heights.cascade import HeightFillReport
 from lczkit.heights.diagnostic import SourceAvailability
 from lczkit.output.breaks import VariableBreaks
+from lczkit.output.extent import ExtentRecord
 from lczkit.ucp.registry import LIMITATIONS, NOT_COMPUTED, PARAMETERS, semantic_specs
 from lczkit.ucp.tag_diagnostic import TagAvailability
 from lczkit.units.patches import PatchReport
@@ -130,6 +131,18 @@ class RunManifest(BaseModel):
     breaks: list[VariableBreaks] = Field(default_factory=list)
     """Precomputed classification breaks. Phase 7 reads these and never recomputes a quantile."""
 
+    extent: ExtentRecord | None = None
+    """The ground this run covered, and the locator that chose it.
+
+    **Derived, like `crs`, and for the same reason absent until it was asked for.** The extent is an
+    argument to `run_pipeline`, so it appears in no `Settings` field and therefore in none of the
+    `config` block below — leaving a run directory unable to say which city it was, which is not a
+    recoverable question from a bbox once `--city` reaches 5 558 named regions.
+
+    `None` on runs written before this field existed. `lczkit export` backfills those from the
+    units' own bounds, under `kind="recovered"` so a reconstruction is never read as a record.
+    """
+
     cleaning: CleaningReport | None = None
     units: PatchReport | None = None
     """What the patch merge did, where `units.strategy` is `"patch"`.
@@ -191,6 +204,7 @@ def build_manifest(
     breaks: list[VariableBreaks] | None = None,
     classification_summary: dict[str, Any] | None = None,
     cleaning: CleaningReport | None = None,
+    extent: ExtentRecord | None = None,
     units: PatchReport | None = None,
     height_fill: HeightFillReport | None = None,
     height_source_availability: SourceAvailability | None = None,
@@ -244,6 +258,7 @@ def build_manifest(
         classification_summary=classification_summary or {},
         legend=legend(),
         breaks=breaks or [],
+        extent=extent,
         cleaning=cleaning,
         units=units,
         height_fill=height_fill,

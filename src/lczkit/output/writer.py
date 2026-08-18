@@ -30,6 +30,7 @@ from lczkit.config import Settings
 from lczkit.heights.cascade import HeightFillReport
 from lczkit.heights.diagnostic import SourceAvailability
 from lczkit.output.breaks import breaks_for
+from lczkit.output.extent import ExtentRecord
 from lczkit.output.manifest import RunManifest, build_manifest
 from lczkit.ucp.tag_diagnostic import TagAvailability
 from lczkit.units import check_units
@@ -87,6 +88,7 @@ def write_run(
     *,
     extras: pd.DataFrame | None = None,
     cleaning: CleaningReport | None = None,
+    extent: ExtentRecord | None = None,
     units_report: PatchReport | None = None,
     height_fill: HeightFillReport | None = None,
     height_source_availability: SourceAvailability | None = None,
@@ -146,6 +148,7 @@ def write_run(
         breaks=breaks_for(attributes, continuous, settings.output.break_count),
         classification_summary=classification_summary(classification),
         cleaning=cleaning,
+        extent=extent,
         units=units_report,
         height_fill=height_fill,
         height_source_availability=height_source_availability,
