@@ -406,8 +406,35 @@
     const config = manifest.config || {};
     const rows = [{ label: "Run", value: meta.run_id || "—" }];
 
-    const units = config.viz ? "grid, 100 m" : null;
-    if (units) rows.push({ label: "Units", value: units });
+    /*
+     * Where this run was, and how big. Absent from every manifest written before the field
+     * existed, so the row is omitted rather than guessed at — the extent is derived from the bbox
+     * and appears in no config, which is exactly why it needed a manifest slot of its own.
+     */
+    const extent = manifest.extent;
+    if (extent) {
+      const place = extent.name
+        ? extent.name + (extent.iso ? " (" + extent.iso + ")" : "")
+        : "an explicit window";
+      const area = extent.area_km2 ? Math.round(extent.area_km2).toLocaleString() + " km²" : null;
+      rows.push({ label: "Extent", value: area ? place + " — " + area : place });
+    }
+
+    /*
+     * Read from `config.units` rather than asserted. This said "grid, 100 m" for every run,
+     * whatever `units.strategy` was, because it predates `UnitsConfig` — a patch-units run would
+     * have described itself as a 100 m grid on its own map.
+     */
+    const unitsConfig = config.units;
+    if (unitsConfig && unitsConfig.strategy) {
+      rows.push({
+        label: "Units",
+        value:
+          unitsConfig.strategy === "grid"
+            ? "grid, " + (unitsConfig.cell_size_m || 100) + " m"
+            : unitsConfig.strategy,
+      });
+    }
 
     const heights = config.heights || {};
     const tiers = (heights.areal_tiers || [])
