@@ -65,3 +65,16 @@ beside a **coverage** column, and that is the point: a `lightweight` fraction of
 ::: lczkit.ucp.semantics
 
 ::: lczkit.ucp.tag_diagnostic
+
+## Measuring on one unit set and classifying on another
+
+A street canyon has to be measured against streets, and a 100 m grid cell is not bounded by any —
+so `aspect_ratio`, which is 3 of the 17 applied weight units and the only dimension separating
+LCZ 8 from LCZ 3 and 6, is null on **10.8%** of one Istanbul extent's built grid cells against
+**0.9%** of its enclosures. The two unit systems are complementary rather than rival: an enclosure
+is a block and not an LCZ patch, and it is still the better thing to measure a canyon on.
+
+`UcpConfig.measure_on` defaults to `"units"`. **No accuracy claim is attached** — the sixteen-city
+sweep is wired and has not been run, and the pre-registered reading is in the module below.
+
+::: lczkit.ucp.measure

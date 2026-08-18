@@ -19,6 +19,7 @@ from conftest import (
     FixtureVectorSource,
 )
 
+from lczkit.classify.classifier import PrototypeClassifier
 from lczkit.cleaning.pipeline import CleanedVectors, clean_vectors
 from lczkit.config import LandCoverConfig, UcpConfig
 from lczkit.heights.cascade import cascade_height_sources, fill_heights
@@ -27,6 +28,7 @@ from lczkit.heights.inherit import inherit_heights
 from lczkit.heights.tiers import build_cascade
 from lczkit.landcover.local import LocalRasterSource
 from lczkit.ucp import PARAMETER_COLUMNS, compute_parameters
+from lczkit.ucp.measure import COVERAGE_COLUMN, transfer_parameters
 from lczkit.ucp.registry import spec
 from lczkit.ucp.semantics import group_columns
 from lczkit.units.enclosures import EnclosureUnits, assemble_barriers
@@ -84,6 +86,13 @@ def parameters_for(
         config=_UCP,
         land_cover_config=_LAND_COVER,
     )
+
+
+@pytest.fixture(scope="module")
+def enclosure_parameters(
+    enclosure_units: gpd.GeoDataFrame, cleaned: CleanedVectors, buildings: gpd.GeoDataFrame
+) -> pd.DataFrame:
+    return parameters_for(enclosure_units, cleaned, buildings)
 
 
 @pytest.fixture(scope="module")
@@ -206,3 +215,59 @@ def test_industrial_evidence_is_present_but_finds_almost_nothing_in_mitte(
     assert grid_parameters["industrial_fraction"].notna().all()
     assert grid_parameters["industrial_fraction"].max() < 0.1
     assert set(grid_parameters["industrial_evidence"]) <= {"none", "buildings"}
+
+
+def test_measuring_on_enclosures_fills_the_aspect_ratio_a_grid_cell_cannot_have(
+    grid_units: gpd.GeoDataFrame,
+    enclosure_units: gpd.GeoDataFrame,
+    grid_parameters: pd.DataFrame,
+    enclosure_parameters: pd.DataFrame,
+) -> None:
+    """The measurement `UcpConfig.measure_on` exists for, on the fixture rather than on squares.
+
+    A street canyon has to be measured against streets and a grid cell is not bounded by any, so
+    `momepy.street_profile` reports nothing for a cell no street crosses. An enclosure is bounded
+    *by* streets by construction. Transferring the enclosure measurement onto the grid should
+    therefore leave fewer cells with no H/W at all than measuring on the grid directly — H/W being
+    3 of the 17 applied weight units and the only dimension separating LCZ 8 from LCZ 3 and 6.
+
+    An inequality rather than a figure: the size of the gap is a property of this 9 km² fixture,
+    and the sixteen-city sweep that would make a claim about it has not been run.
+    """
+    transferred = transfer_parameters(enclosure_parameters, enclosure_units, grid_units)
+
+    assert transferred.index.equals(grid_units.index)
+    assert transferred["aspect_ratio"].isna().sum() < grid_parameters["aspect_ratio"].isna().sum()
+
+
+def test_a_transferred_table_keeps_the_schema_the_registry_documents(
+    grid_units: gpd.GeoDataFrame,
+    enclosure_units: gpd.GeoDataFrame,
+    enclosure_parameters: pd.DataFrame,
+) -> None:
+    """Every column survives the move, in order, plus the coverage the move itself introduces.
+
+    The classifier selects dimensions by name, but the table is also written to disk against a
+    registry that documents each column — so a transfer that quietly dropped one would produce a
+    run whose parameters and whose manifest disagree.
+    """
+    transferred = transfer_parameters(enclosure_parameters, enclosure_units, grid_units)
+
+    assert list(transferred.columns) == [*enclosure_parameters.columns, COVERAGE_COLUMN]
+    assert set(PARAMETER_COLUMNS) <= set(transferred.columns)
+    assert transferred["building_surface_fraction"].dropna().between(0.0, 1.0).all()
+
+
+def test_a_transferred_table_still_classifies(
+    grid_units: gpd.GeoDataFrame,
+    enclosure_units: gpd.GeoDataFrame,
+    enclosure_parameters: pd.DataFrame,
+) -> None:
+    """The point of the transfer is to be classified, so the seam is worth crossing once in a test
+    rather than discovering at the end of a ten-minute run that a dtype did not survive."""
+    transferred = transfer_parameters(enclosure_parameters, enclosure_units, grid_units)
+
+    result = PrototypeClassifier().classify(transferred)
+
+    assert result.index.equals(grid_units.index)
+    assert result["lcz_primary"].notna().any()
