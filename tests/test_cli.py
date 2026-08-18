@@ -25,7 +25,7 @@ from lczkit.cli import app
 from lczkit.cli._render import EXIT_CONFIG
 from lczkit.config import Settings
 from lczkit.output import MANIFEST_FILE
-from lczkit.presets import PRESETS, apply_preset
+from lczkit.presets import AREAL_CONFIDENCE, PRESETS, apply_preset
 
 runner = CliRunner()
 
@@ -425,28 +425,60 @@ def test_export_refuses_a_directory_that_is_not_a_run(tmp_path: Path) -> None:
 # --------------------------------------------------------------------------- the drift guard
 
 
-def test_the_published_preset_holds_the_values_the_published_runs_used() -> None:
-    """The preset moved into the package; the constants it was built from are still in the script
-    that measured them. If either is edited alone, the command line stops reproducing the sites.
+def test_the_published_preset_still_holds_the_measured_metropolitan_values() -> None:
+    """The eight cleaning numbers the published sites went through, pinned to literals.
 
-    This is the check CLAUDE.md's Phase 14 ruling asks for — the two must be compared to each
-    other, because nothing else notices when one moves.
+    They used to be pinned by comparing two copies — one in `lczkit.presets` and one in
+    `scripts/berlin_metropolitan.py` — which answered "have these drifted apart?" and not "are
+    these the right numbers?". The scripts now derive theirs from the preset, so that comparison
+    has no subject left; this asserts the values themselves, which is what it was standing in for.
+    `lczkit.presets._published_cleaning` records what each was measured against.
+
+    `building_max_area_m2` is the one to watch. `scripts/unit_scale_experiment.py` carries a
+    genuinely different `CleaningConfig` for the 9 km² arms whose value is 50 000, and CLAUDE.md
+    records taking the wrong one of the two as a real failure — it would make `lczkit run`
+    silently irreproducible against every published figure.
     """
-    script = load_script("berlin_metropolitan")
+    cleaning = PRESETS["published"].cleaning
+
+    assert cleaning.building_max_area_m2 == 100_000.0
+    assert cleaning.building_min_area_m2 == 20.0
+    assert cleaning.building_merge_limit_m2 == 50.0
+    assert cleaning.building_overlap_limit == 0.1
+    assert cleaning.building_road_buffer_m == 4.0
+    assert cleaning.building_road_overlap_limit == 0.5
+    assert cleaning.street_tile_size_m == 2000.0
+    assert cleaning.street_tile_buffer_m == 600.0
+    assert PRESETS["published"].overture_release == "2026-07-22.0"
+
+
+def test_the_experiment_scripts_take_their_configuration_from_the_preset() -> None:
+    """One definition, and the scripts read it rather than restating it.
+
+    `scripts/berlin_metropolitan.CLEANING`/`RELEASE` and
+    `scripts/unit_scale_experiment.AREAL_CONFIDENCE`/`HEIGHTS` were copies of what
+    `lczkit.presets` holds, guarded by tests asserting the copies still matched. The copies are
+    gone; this asserts the derivation is still in place, so a future edit cannot reintroduce a
+    literal without failing here.
+
+    Equal but **not identical**: each script copies the model rather than aliasing it, because
+    several drivers build variants by mutation and a mutation reaching the preset would
+    reconfigure every later run in the same process.
+    """
     published = PRESETS["published"]
+    metropolitan = load_script("berlin_metropolitan")
+    experiment = load_script("unit_scale_experiment")
 
-    assert published.overture_release == script.RELEASE
-    assert published.cleaning.model_dump() == script.CLEANING.model_dump()
+    assert metropolitan.RELEASE == published.overture_release
+    assert metropolitan.CLEANING.model_dump() == published.cleaning.model_dump()
+    assert metropolitan.CLEANING is not published.cleaning
 
+    assert experiment.AREAL_CONFIDENCE == AREAL_CONFIDENCE
+    assert experiment.HEIGHTS.model_dump() == published.heights.model_dump()
+    assert experiment.HEIGHTS is not published.heights
 
-def test_the_published_preset_keeps_the_areal_confidences_the_experiments_share() -> None:
-    """`AREAL_CONFIDENCE` is an ordinal quality ranking with no published number behind it. The
-    experiment arms and a command-line run must not disagree about it, or two runs of the same city
-    carry different confidence claims into their manifests."""
-    from lczkit.presets import AREAL_CONFIDENCE
-
-    script = load_script("unit_scale_experiment")
-    assert AREAL_CONFIDENCE == script.AREAL_CONFIDENCE
+    # The other `CLEANING` is a different measured configuration and must stay different.
+    assert experiment.CLEANING.building_max_area_m2 != published.cleaning.building_max_area_m2
 
 
 def test_the_publish_driver_configures_a_run_the_same_way_the_cli_does(

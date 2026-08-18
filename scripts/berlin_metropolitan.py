@@ -26,29 +26,27 @@ import time
 from typing import Any
 
 from lczkit.cleaning.pipeline import clean_vectors
-from lczkit.config import CleaningConfig, Settings
+from lczkit.config import Settings
+from lczkit.presets import OVERTURE_RELEASE, preset
 from lczkit.protocols import BBox
 from lczkit.sources.overture import OvertureSource
 
 #: Land Berlin's administrative extent, 891 km2 — the whole city, not a window onto it.
 BERLIN: BBox = (13.0884, 52.3383, 13.7612, 52.6755)
 
-RELEASE = "2026-07-22.0"
+RELEASE = OVERTURE_RELEASE
 """The same pinned release the fixtures use, so only the extent differs from every other run."""
 
-#: Phase 8's fixture-derived working values. 2000 m tiles keep the largest face-artifact
-#: component tractable; the 600 m buffer is where seam agreement stops improving — measured on
-#: 16 km2 of Berlin at 99.77 percent (300 m), 99.97 percent (600 m) and 99.95 percent (900 m).
-CLEANING = CleaningConfig(
-    building_max_area_m2=100_000.0,
-    building_min_area_m2=20.0,
-    building_merge_limit_m2=50.0,
-    building_overlap_limit=0.1,
-    building_road_buffer_m=4.0,
-    building_road_overlap_limit=0.5,
-    street_tile_size_m=2000.0,
-    street_tile_buffer_m=600.0,
-)
+#: Phase 8's fixture-derived working values — 2000 m tiles and a 600 m buffer, plus the building
+#: thresholds. **Read from `lczkit.presets` rather than restated here.** These are the values every
+#: published site was built with, so a copy of them in a script is a second definition of the
+#: configuration `lczkit run` uses, and CLAUDE.md records two same-named `CleaningConfig` constants
+#: diverging as a real failure that a test had to be written to notice. The four sibling scripts
+#: that import `CLEANING` from this module still get the same object; there is now one place it
+#: comes from. Copied rather than aliased, so a consumer that mutates this cannot reach into
+#: the preset every other run is configured from. See `lczkit.presets._published_cleaning` for
+#: what each number was measured against.
+CLEANING = preset("published").cleaning.model_copy(deep=True)
 
 
 def _shrink(bbox: BBox, extent_km: float) -> BBox:

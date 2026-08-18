@@ -62,7 +62,6 @@ from lczkit.classify.prototypes import ranges_for
 from lczkit.cleaning.pipeline import CleanedVectors, clean_vectors
 from lczkit.config import (
     CleaningConfig,
-    HeightConfig,
     LandCoverConfig,
     Settings,
     UcpConfig,
@@ -73,6 +72,8 @@ from lczkit.heights.completeness import FRACTION_PREFIX, height_metrics
 from lczkit.heights.inherit import inherit_heights
 from lczkit.heights.tiers import build_cascade
 from lczkit.landcover.local import LocalRasterSource
+from lczkit.presets import AREAL_CONFIDENCE as PRESET_AREAL_CONFIDENCE
+from lczkit.presets import preset
 from lczkit.protocols import BBox, HeightSource, VectorSource
 from lczkit.ucp import compute_parameters
 from lczkit.units.aggregate import aggregate
@@ -101,25 +102,25 @@ CLEANING = CleaningConfig(
     building_road_buffer_m=4.0,
     building_road_overlap_limit=0.5,
 )
-AREAL_CONFIDENCE = {"gob25d": 0.5, "wsf3d": 0.35, "ghsl": 0.25}
+AREAL_CONFIDENCE = PRESET_AREAL_CONFIDENCE
 """`height_confidence` per areal tier, descending with coarseness below tier 1's 0.9 / 0.6.
 
 Ordinal, with no published number behind it — the same standing as the two Overture confidences
-beside them, and set here rather than defaulted in `lczkit.config` for exactly the reason
-`HeightConfig` gives: an invented default would travel into every run's manifest as if it were
-measured. Every script that shares `HEIGHTS` therefore has a cascade that can actually run, and
-the choice is recorded in the manifest where it is visible.
+beside them, and set in `lczkit.presets` rather than defaulted in `lczkit.config` for exactly the
+reason `HeightConfig` gives: an invented default would travel into every run's manifest as if it
+were measured.
+
+**Read from the package rather than restated here**, along with `HEIGHTS` below. Four sibling
+scripts import these, and until they came from one place a divergence between an experiment's
+cascade and `lczkit run`'s would have shown up only as two results that disagree for no visible
+reason.
 """
 
+HEIGHTS = preset("published").heights.model_copy(deep=True)
+"""Tier 1 plus the `coarse` cascade — the configuration every run since Phase 11 has used.
 
-def _heights() -> HeightConfig:
-    config = HeightConfig(overture_height_confidence=0.9, overture_num_floors_confidence=0.6)
-    for tier in config.areal_tiers:
-        tier.confidence = AREAL_CONFIDENCE[tier.name]
-    return config
-
-
-HEIGHTS = _heights()
+Copied rather than aliased: `height_tier_experiment` builds variant cascades from this, and a
+mutation reaching the preset would reconfigure `lczkit run` for the rest of the process."""
 LAND_COVER = LandCoverConfig()
 UCP = UcpConfig()
 VALIDATION = ValidationConfig()
