@@ -170,3 +170,45 @@ def test_an_empty_group_is_null_where_the_raster_never_reached() -> None:
 
     assert result.loc["seen", "water_fraction"] == 0.0
     assert pd.isna(result.loc["unseen", "water_fraction"])
+
+
+def test_the_clip_is_flagged_where_the_buildings_exceed_the_raster_built_up() -> None:
+    """`building + impervious + pervious` is exactly 1.0 by construction — except here.
+
+    The subtraction that moves roofs out of the raster's built-up class goes negative wherever the
+    vector footprints cover more ground than a 10 m product calls built-up, and the clip that stops
+    the fraction going negative is what breaks the partition. Dense low-rise mapped from imagery
+    does this routinely, which is why it is reported per unit rather than absorbed.
+    """
+    result = surface_fractions(
+        land_cover(clipped=(0.0, 0.70, 0.30, 0.0), fine=(0.0, 0.20, 0.80, 0.0)),
+        buildings(clipped=0.55, fine=0.30),
+        WORLDCOVER,
+        CONFIG,
+    )
+
+    assert bool(result.loc["clipped", "impervious_clipped"]) is True
+    assert bool(result.loc["fine", "impervious_clipped"]) is False
+    assert result.loc["clipped", "impervious_surface_fraction"] == 0.0
+
+    total = (
+        result["impervious_surface_fraction"]
+        + result["pervious_surface_fraction"]
+        + buildings(clipped=0.55, fine=0.30)
+    )
+    assert total["fine"] == pytest.approx(1.0)
+    assert total["clipped"] > 1.0
+
+
+def test_a_unit_the_raster_never_reached_has_a_null_clip_flag_not_a_false_one() -> None:
+    """ "The clip did not fire" and "nothing was measured" are different statements, and False
+    would claim a partition held over a unit that has no fractions at all."""
+    result = surface_fractions(
+        land_cover(covered=(0.0, 0.5, 0.5, 0.0)),
+        buildings(covered=0.1, missing=0.1),
+        WORLDCOVER,
+        CONFIG,
+    )
+
+    assert pd.isna(result.loc["missing", "impervious_clipped"])
+    assert result.loc["covered", "impervious_clipped"] is not pd.NA

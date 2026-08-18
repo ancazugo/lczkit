@@ -119,6 +119,21 @@ PARAMETERS: tuple[ParameterSpec, ...] = (
         reference=BERNARD_2024,
     ),
     ParameterSpec(
+        name="impervious_clipped",
+        label="Impervious fraction was clipped",
+        unit="category",
+        description=(
+            "True where the building surface fraction exceeded the raster's impervious class, so "
+            "the subtraction that separates roofs from other sealed ground was clipped at zero. "
+            "`building + impervious + pervious` is exactly 1.0 by construction everywhere else; "
+            "here it exceeds 1.0, because the vector footprints cover more ground than a 10 m "
+            "land-cover product calls built-up. That is dense low-rise mapped from imagery — the "
+            "same fabric the height cascade is weakest in — so the flag is not a rare corner and "
+            "is reported per unit rather than absorbed."
+        ),
+        reference=COMPUTED_HERE,
+    ),
+    ParameterSpec(
         name="height_of_roughness_elements_m",
         label="Height of roughness elements",
         unit="m",

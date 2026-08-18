@@ -22,11 +22,27 @@ import pandas as pd
 
 from lczkit.config import LandCoverDatasetConfig, UcpConfig
 
+CLIPPED_COLUMN = "impervious_clipped"
+"""Per-unit flag: the building share exceeded the raster's impervious class and the subtraction
+was clipped at zero.
+
+The three Stewart & Oke fractions partition the surface — `building + impervious + pervious` is
+exactly 1.0 by construction here, because the raster's own classes sum to 1.0 and the building
+share is moved from one term to another. The clip is the one place that identity breaks, and it
+breaks upward: the unit reports more than a whole surface.
+
+It is not a rare corner. It fires wherever the vector footprints cover more ground than the
+raster calls built-up, which is dense low-rise mapped from imagery a 10 m product under-detects —
+the same fabric, and the same cities, that the height cascade is worst in. Reported rather than
+silently absorbed, for the same reason `height_tier_fractions` is reported: the number is still
+usable, but not without knowing it was adjusted."""
+
 COLUMNS = (
     "impervious_surface_fraction",
     "pervious_surface_fraction",
     "tree_fraction",
     "water_fraction",
+    CLIPPED_COLUMN,
 )
 
 #: Which `UcpConfig` field names the classes for each surface type.
@@ -72,7 +88,8 @@ def surface_fractions(
     tree = total("tree_classes")
     water = total("water_classes")
     pervious = total("pervious_classes") + tree + water
-    impervious = (total("impervious_classes") - building_surface_fraction).clip(lower=0.0)
+    raw = total("impervious_classes") - building_surface_fraction
+    impervious = raw.clip(lower=0.0)
 
     return pd.DataFrame(
         {
@@ -80,6 +97,10 @@ def surface_fractions(
             "pervious_surface_fraction": pervious,
             "tree_fraction": tree,
             "water_fraction": water,
+            # Nullable, and null where the raster reached nothing: "the clip did not fire" and
+            # "nothing was measured here" are different statements, and answering False for the
+            # second would claim a partition held over a unit that has no fractions at all.
+            CLIPPED_COLUMN: (raw < 0.0).astype("boolean").mask(raw.isna()),
         }
     )
 
