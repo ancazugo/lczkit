@@ -1,19 +1,34 @@
 # Urban canopy parameters
 
+An **urban canopy parameter** is a number describing the shape of the urban surface inside one
+spatial unit — how much of the ground is building, how tall the buildings are, how deep the street
+canyons are. These are the inputs the classification runs on. Each is defined in the
+[glossary](../glossary.md).
+
 The parameter table, keyed by `unit_id`. Every column is registered with a documented unit and a
 source reference — see [the registry](#registry) — because a parameter written to the output
 without those is a number nobody can check.
 
 Two definitions are load-bearing and easy to get wrong:
 
-- **`Hr`, height of roughness elements, is the *geometric* mean of building heights**, per Stewart
+- **`Hr`, the height of roughness elements — the typical height of whatever sticks up into the
+  wind — is the *geometric* mean of building heights**, per Stewart
   & Oke and Bernard et al. (2024) Table 1 — not the area-weighted arithmetic mean. The two diverge
   materially in units mixing tall and short buildings, and the ranges classification normalises
   against were defined for the geometric mean. `h_mean_area_weighted`, `h_std` and
   `h_geometric_area_weighted` are secondary columns and are not used for classification.
-- **Building surface fraction comes from `buildings_area`**, never `buildings_topo`. Using the
-  topology layer discards roughly a quarter of footprint area and was the single largest known
-  source of classification error.
+- **Building surface fraction — the share of a unit's ground covered by building — comes from
+  `buildings_area`**, never `buildings_topo`. Cleaning produces two building layers: one made
+  valid for topology, at the cost of some footprint area, and one that preserves area. Using the
+  topology layer here discards roughly a quarter of the footprint area and was the single largest
+  known source of classification error.
+
+One further column is a flag rather than a measurement. `impervious_clipped` marks the units where
+the building share exceeded the raster's built-up class, so the subtraction that separates roofs
+from other sealed ground had to be clipped at zero. Everywhere else building, impervious and
+pervious shares sum to exactly one; where this fires they exceed it. It fires wherever vector
+footprints cover more ground than a 10 m land-cover product calls built-up, which is dense
+low-rise mapped from imagery.
 
 ::: lczkit.ucp
     options:

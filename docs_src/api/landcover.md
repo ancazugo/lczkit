@@ -6,16 +6,18 @@
       show_root_heading: false
       show_symbol_type_toc: false
 
-[`RasterSource`][lczkit.protocols.RasterSource] returns a **fractions table keyed by `unit_id`** —
-never pixels. Two implementations behind one interface: a local COG read with `exactextract`,
-which is what CI tests against, and an Earth Engine reduction computed server-side.
+[`RasterSource`][lczkit.protocols.RasterSource] returns a **table of land-cover shares per spatial
+unit** — never pixels. Two implementations sit behind one interface: a local cloud-optimised
+GeoTIFF read with `exactextract`, which is what continuous integration tests against, and a Google
+Earth Engine reduction computed on Google's servers.
 
 The class-to-fraction mapping is **config, never hardcoded**. Reading a product's own class
 definitions and putting them in config is the difference between a reproducible run and a
 plausible-looking wrong one.
 
-This layer is also what supplies every dimension separating the natural classes A–G, so a raster
-short of its window is not a cosmetic problem: it produces `NaN` fractions rather than an error.
+This layer is also what supplies every parameter separating the natural classes A–G, so a raster
+that does not cover the whole window is not a cosmetic problem: it produces missing values rather
+than an error.
 
 ::: lczkit.landcover.local
 

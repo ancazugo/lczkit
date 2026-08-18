@@ -6,12 +6,13 @@
       show_root_heading: false
       show_symbol_type_toc: false
 
-Phase 1, and the phase that determines whether everything downstream works.
+Repairing and simplifying the raw Overture layers. Everything downstream depends on this, and the
+building surface fraction it produces carries the largest single weight in the classification.
 
 **Cleaning produces two building layers, not one.** This is the most important structural rule
 in the package:
 
-- **`buildings_topo`** — planar and non-overlapping. Feeds enclosure generation and anything
+- **`buildings_topo`** — planar and non-overlapping, meaning no two footprints share any area. Feeds enclosure generation and anything
   needing a valid partition. Destructive operations are permitted.
 - **`buildings_area`** — area-preserving. Feeds building surface fraction and **every area
   statistic**. Only validity fixes, multipolygon explosion, non-polygon removal,

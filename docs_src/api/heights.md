@@ -6,20 +6,23 @@
       show_root_heading: false
       show_symbol_type_toc: false
 
-**This is what differentiates `lczkit` from GeoClimate-on-OSM.** Overture solves footprint
-coverage; it does not solve height. In ML-dominated areas — much of the Global South, but also
-plenty of developed cities outside the centre — tier-1 heights are near-absent: Cairo, Nairobi and
-Islamabad each carry tier-1 heights for about 1% of building area.
+**This is what differentiates `lczkit` from an implementation running on OpenStreetMap alone.**
+Overture Maps solves footprint coverage; it does not solve height. Overture merges several sources
+winner-takes-all per building, and only OpenStreetMap among them carries heights — so wherever a
+machine-learning footprint source won the geometry, there is no height at all. That is much of the
+Global South, and plenty of developed cities outside the centre: Cairo, Nairobi and Islamabad each
+carry a directly measured height for about 1% of their building area.
 
-The answer is a graded cascade plus honest reporting, not a pretence of completeness. Tiers, in
-order:
+The answer is a graded **cascade** — a series of sources tried in order, each filling only what the
+last left empty — plus honest reporting of which one answered. The tiers, in order:
 
 1. Overture `height`, else `num_floors × storey_height`
 2. Google Open Buildings 2.5D — **retired from the default cascade, measured harmful**
 3. WSF-3D, global ~90 m
 4. GHS-BUILT-H, global 100 m
 
-Tiers 2–4 are areal products: they assign a neighbourhood mean to individual buildings. That is a
+Tiers 2–4 are *areal* products: a raster giving one value per cell, so every building inside a
+cell is assigned the same neighbourhood average. That is a
 categorically weaker measurement than tier 1 and the output says so, per building via
 `height_source` and per unit via `height_tier_fractions` — because "90% real heights" and "90%
 coarse raster fallback" produce the same label with very different trustworthiness.

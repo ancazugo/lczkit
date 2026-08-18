@@ -10,17 +10,18 @@ A run directory is written to `output/lczkit/<run_id>/` and contains:
 
 | Artefact | What it is |
 |---|---|
-| `units.parquet` | the archival GeoParquet, in the run's projected CRS |
-| `units.gpkg` | the same table in GeoPackage, written **beside** it and never instead |
-| `units_viz.parquet` | the viz-ready attribute table the map site reads |
-| `manifest.json` | the full serialised config, source versions and cleaning report |
+| `units.parquet` | the archival table with geometry attached, in the run's projected coordinate system |
+| `units.gpkg` | the same table as a GeoPackage, written **beside** it and never instead |
+| `units_viz.parquet` | the display-ready attribute table the map site reads |
+| `manifest.json` | the full serialised config, source versions and every report |
 
 !!! note "Why both Parquet and GeoPackage"
 
-    Every run's GeoParquet is valid 1.0.0 carrying the extent's UTM CRS as PROJJSON with an EPSG
-    authority code. But GDAL's Parquet driver is an **optional build component**, so a QGIS built
-    without it opens a correct file as a non-spatial table and reports "this layer has no CRS" —
-    naming the producer for a gap in the reader. GeoPackage is SQLite and is in GDAL's core.
+    Every run's GeoParquet is valid 1.0.0 and carries the extent's coordinate reference system with
+    an EPSG authority code. But the Parquet driver in GDAL — the format layer under most geographic
+    software — is an **optional build component**, so a copy of QGIS built without it opens a
+    correct file as a plain table and reports "this layer has no CRS", naming the producer for a
+    gap in the reader. GeoPackage is SQLite and is in GDAL's core.
     A correct file is not a readable file, and correctness is not what the recipient measures.
 
 The manifest also carries `crs` and `crs_wkt`. The CRS is *derived* from the extent via

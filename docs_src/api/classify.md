@@ -6,7 +6,10 @@
       show_root_heading: false
       show_symbol_type_toc: false
 
-Prototype-distance classification, implemented from the Stewart & Oke parameter table.
+**Prototype-distance classification**, implemented from the Stewart & Oke parameter table. Each of
+the seventeen classes has a published range for every surface property, so a class is a box in
+parameter space and a unit is a point; the distance is the gap from the point to the box, zero
+inside it, and the nearest class wins. Terms are defined in the [glossary](../glossary.md).
 
 **The distance vector is the primary output.** Every unit carries its full 17-way distance to
 each prototype, plus `lcz_primary`, `lcz_secondary` and a `uniqueness` measure. Hard labelling is
@@ -16,10 +19,13 @@ a downstream convenience — nothing in the core API returns a bare LCZ integer.
 
 Two presets ship, and the active one appears in the manifest:
 
-- **`bernard2024_partial`** (default). Bernard's published weights are SVF 4, H/W 3, `FB` 8,
-  `FI` 0, `FP` 0, `Hr` 6, z₀ 0.5 — 21.5 units in total. `lczkit` can apply only 17 of them: SVF
-  and z₀ are deferred and `FI`/`FP` are zero-weighted, leaving three non-zero dimensions. `FB`
-  therefore carries roughly 47% of the metric on its own. The preset is named `_partial` for
+- **`bernard2024_partial`** (default). Bernard's published weights, in his notation, are sky view
+  factor 4, aspect ratio 3, building surface fraction (`FB`) 8, impervious fraction (`FI`) 0,
+  pervious fraction (`FP`) 0, height of roughness elements (`Hr`) 6 and roughness length (z₀) 0.5 —
+  21.5 units in total. `lczkit` can apply only 17 of them: sky view factor and roughness length are
+  not computed, and the impervious and pervious fractions carry zero weight in Bernard's own
+  scheme, leaving three parameters with any weight at all. Building surface fraction therefore
+  carries roughly 47% of the result on its own. The preset is named `_partial` for
   exactly that reason; it is not Bernard's metric, and the unapplied dimensions and the
   renormalisation are recorded in the manifest.
 - **`equal`** — uniform weights, for comparison.
@@ -65,6 +71,18 @@ weight and its two bounds are for a sweep to set.
 ## Functional rules
 
 ::: lczkit.classify.rules
+
+## Two things worth reading per unit
+
+`n_params_used` says how many of the weighted parameters the unit actually had a value for — a
+unit scored on two dimensions and one scored on seven are not comparable, and this is what tells
+them apart. `n_tied_classes` counts the classes sitting at *exactly* the minimum distance: two or
+more means the unit fell inside more than one class's box and the label was settled by an
+arbitrary tie-break rather than by any measurement.
+
+Both differ from `uniqueness`, which measures how far the runner-up was from the winner. That is a
+statement about the metric's geometry; these two are statements about what the unit had to be
+scored on.
 
 ## Spatial smoothing
 

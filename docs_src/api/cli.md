@@ -3,7 +3,7 @@
 `lczkit cities`, `lczkit run`, `lczkit site build|serve`, and `lczkit export`. Installed as the
 `lczkit` console script.
 
-The CLI is deliberately thin. It configures a run by calling the same `apply_preset` the publish
+The command line is deliberately thin. It configures a run by calling the same `apply_preset` the publish
 driver calls, rather than by listing the same settings again — anything a command line restates
 is a place two answers can diverge, and the divergence shows up as a map that disagrees with a
 published figure for no visible reason.

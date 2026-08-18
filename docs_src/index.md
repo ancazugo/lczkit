@@ -1,15 +1,26 @@
 # lczkit
 
-Map a city into **Local Climate Zones** (Stewart & Oke 2012) from open vector and raster data.
+Map a city into **Local Climate Zones** from open data, anywhere in the world.
 
-`lczkit` follows the conceptual approach of GeoClimate — partition into spatial units, compute
-urban canopy parameters, classify by distance to LCZ prototypes — as an independent MIT-licensed
-implementation with a pluggable data layer: Overture Maps for vector, Google Earth Engine, STAC or
-local rasters for land cover, and a tiered cascade for building heights.
+A [Local Climate Zone](https://doi.org/10.1175/BAMS-D-11-00019.1) (Stewart & Oke 2012) describes
+the surface around a place — how much of the ground is building, how tall, how dense, how green —
+using seventeen classes: ten built types numbered 1 to 10, and seven natural land-cover types
+lettered A to G. The scheme exists so that temperature measurements from different cities can be
+compared by the kind of surface they were taken over, rather than by the word "urban".
+
+`lczkit` follows the approach of [GeoClimate](https://doi.org/10.5194/gmd-17-2077-2024): cut the
+city into spatial units, measure the shape of the surface in each one, and label each unit with the
+class whose published parameter ranges it sits closest to. It is an **independent, MIT-licensed
+implementation from the published papers**, with a pluggable data layer — Overture Maps for vector
+data, Google Earth Engine, a SpatioTemporal Asset Catalog or local files for land-cover rasters,
+and a tiered cascade of global products for building heights. Nothing here is trained.
 
 The design bet is that **building height completeness, and the honest reporting of it, is the
-binding constraint** on morphology-based LCZ classification outside Europe. Every run records
-which tier answered for each building, and what fraction of a unit's building area that covers.
+binding constraint** on this kind of LCZ classification outside Europe. Every run records which
+source answered for each building, and what share of a unit's building area that covers.
+
+New to the vocabulary? The **[glossary](glossary.md)** defines every term and abbreviation used
+here — spatial unit, prototype distance, height cascade, ceiling, and the rest.
 
 ## Install
 
@@ -17,7 +28,8 @@ which tier answered for each building, and what fraction of a unit's building ar
 pip install lczkit
 ```
 
-The map site is an optional extra, because it invokes `tippecanoe`:
+The map site is an optional extra, because it invokes `tippecanoe`, a tile-building command-line
+tool:
 
 ```bash
 pip install "lczkit[viz]"
@@ -35,9 +47,10 @@ lczkit run --city cambridge --country GBR
 lczkit site serve output/lczkit/<run_id>
 ```
 
-`lczkit cities` prints each region's bounding box and its area in km², which is the one number
-that predicts how long a run takes — the median urban region is 80 km² and a few minutes, and the
-largest is 17 661 km². `--extent-km N` trims any extent to a concentric square.
+`lczkit cities` searches a gazetteer of urban regions and prints each one's bounding box and its
+area in km², which is the one number that predicts how long a run takes — the median urban region
+is 80 km² and a few minutes, and the largest is 17 661 km². `--extent-km N` trims any extent to a
+concentric square.
 
 Or from Python:
 
@@ -50,26 +63,29 @@ result = run_pipeline(settings, bbox=(13.30, 52.45, 13.50, 52.55))
 print(result.run_dir)
 ```
 
-Every run writes a GeoParquet of classified units, a GeoPackage beside it for GIS readers whose
-GDAL lacks the optional Parquet driver, a viz-ready attribute table, and a JSON manifest carrying
-the full serialised config, the pinned Overture release, the resolved package versions and the
-cleaning report.
+Every run writes a [GeoParquet](glossary.md#outputs-and-tooling) file of classified units — a table
+with geometry attached — and a GeoPackage beside it, because GeoParquet support is optional in
+GDAL, the format layer under most geographic software, and a program built without it opens a valid
+file as a table with no location. Alongside those: a display-ready attribute table for the map
+site, and a JSON manifest carrying the full serialised configuration, the pinned Overture release,
+the resolved package versions and the cleaning report.
 
 ## What this documentation covers
 
 The [demonstration](demo/bogota.ipynb) runs the whole pipeline over a window of Bogotá, twice —
 once on the 100 m grid and once on organic patch units — and embeds the map site each run
 produced. Bogotá is there because it is close to the worst case for the constraint this package
-exists to report: **0.50%** of its building heights come from Overture, and a 90 m radar mosaic
-answers for the rest.
+exists to report: **0.50%** of its building heights come from Overture, and a 90 m satellite radar
+mosaic answers for the rest.
 
-The [API reference](api/index.md) is generated from the source and is the reference for every
-public class and function.
+The [API reference](api/index.md) is generated from the source and documents every public class and
+function.
 
 Two things live in the repository rather than here, deliberately:
 
-- **The full README**, which carries the project's measured status across nineteen phases — per
-  city agreement, ceilings, and what each of them does and does not license you to conclude.
+- **[`docs/status.md`](https://github.com/ancazugo/lczkit/blob/master/docs/status.md)** — the
+  measured record, phase by phase: per-city agreement, the ceilings that bound it, and what each
+  figure does and does not license you to conclude.
 - **The phase write-ups** in `docs/experiments/`, which are the experimental record: what was
   predicted, what was measured, and which hypotheses were refuted.
 
@@ -77,16 +93,35 @@ Both are on [GitHub](https://github.com/ancazugo/lczkit).
 
 ## Known omissions
 
-**Sky view factor is not computed.** It is the most expensive component and is strongly
-correlated with aspect ratio, which is computed. This is a documented omission, not an oversight —
-see the deferred list in the repository.
+**Sky view factor is not computed.** That is the share of sky visible from street level, and it is
+the most expensive parameter to derive. It is also strongly correlated with aspect ratio — building
+height over street width — which *is* computed. A documented omission rather than an oversight; the
+run manifest records which parameters were unavailable and how the remaining weights were
+renormalised.
+
+**Roughness length and displacement height are not computed either**, which is why a run's output
+is not yet a complete input to a weather model.
 
 **Overture exposes a single `industrial` value**, with no heavy/light split, so a light-industrial
-estate and a refinery are indistinguishable to the LCZ 10 rule. This is a limit of Overture's
-normalised schema and is recorded in every run's manifest.
+estate and a refinery are indistinguishable to the rule that assigns class 10, heavy industry. This
+is a limit of Overture's normalised schema and is recorded in every run's manifest.
+
+**Classes 7 and 8 come out inverted on building size.** Class 8 is *large* low-rise and class 7 is
+*lightweight* low-rise — the informal-settlement class — and neither one's published parameter
+ranges mention building size, so nothing in the classification separates them on it. Measured
+across four cities the units labelled 8 hold the *smaller* buildings, by a factor of 17 to 100.
+`mean_building_area_m2` is computed and carries zero weight pending a calibration sweep.
+
+**Two options ship switched off**, because their thresholds have not been calibrated against a
+reference and this package does not pick thresholds. `ucp.measure_on = "enclosures"` measures
+street-canyon geometry on street-bounded blocks, where a canyon can actually be measured, and
+transfers it to the units being classified. `classification.modal_filter` replaces an isolated
+unit's label with the one its neighbours carry, which is standard practice in this literature.
+Every figure this project has recorded was measured with both off.
 
 ## Licence and citation
 
-MIT. The reference data carries its own terms: Overture is ODbL, and WUDAPT's training polygons
-are CC BY-SA and CC BY-NC-SA 4.0 *per polygon* — non-commercial in the second case. A run's
-manifest states those from the data rather than from a constant.
+MIT. The reference data carries its own terms: Overture is ODbL, and the training polygons of
+WUDAPT — the World Urban Database and Access Portal Tools — are CC BY-SA and CC BY-NC-SA 4.0 *per
+polygon*, non-commercial in the second case. A run's manifest states those from the data it read
+rather than from a constant.

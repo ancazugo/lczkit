@@ -6,8 +6,11 @@
       show_root_heading: false
       show_symbol_type_toc: false
 
-A static site written to `output/lczkit/<run_id>/site/`: MapLibre GL over the PMTiles protocol,
-a vendored front end, and `tippecanoe` — the pinned `lczkit[viz]` extra — invoked as a subprocess.
+A static web map written to `output/lczkit/<run_id>/site/`. It is drawn by MapLibre GL, a browser
+mapping library, reading PMTiles — a single-file tile archive served over ordinary HTTP range
+requests, so no tile server is needed. The tiles are built by `tippecanoe`, a command-line tool
+installed by the `lczkit[viz]` extra and invoked as a subprocess. The front end is vendored, so the
+site depends on nothing remote.
 
 The site **opens with no network and no software the user must install**. It is served by its own
 bundled `serve.py`, standard library only, over loopback.
@@ -45,7 +48,8 @@ zoom, the rest once at maximum zoom where only a click reads them.
 ## Basemaps
 
 Each provider records its licence and its usage terms, and the CLI prints them when one is
-selected — the OSMF tile policy in particular is a donated resource, not a CDN.
+selected — OpenStreetMap's own tile service in particular is a donated resource rather than a
+commercial one, and its usage policy applies to whoever opts in.
 
 ::: lczkit.viz.basemaps
 
