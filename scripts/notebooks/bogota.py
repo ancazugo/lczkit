@@ -14,14 +14,28 @@
 # %% [markdown]
 # # Bogotá, two ways
 #
-# This notebook runs `lczkit` end to end over a 25 km² window of Bogotá, twice — once on the
-# **100 m grid** and once on **organic patch units** — and embeds the map site each run produced.
+# A **Local Climate Zone** is a way of describing the surface around a place — how much of the
+# ground is building, how tall, how dense, how green — using seventeen classes: ten built types
+# numbered 1 to 10 and seven natural land-cover types lettered A to G. Stewart & Oke introduced the
+# scheme in 2012 so that temperature measurements taken in different cities could be compared by
+# the kind of surface they were taken over, rather than by the word "urban". Throughout this
+# notebook the abbreviation is **LCZ**.
 #
-# Bogotá is here for a measurable reason. Across its full 1 169 km² extent the package resolves
-# **0.50%** of its building heights from Overture. A 90 m TanDEM-X radar mosaic answers for 97.8%
-# of them, and Berlin's equivalent Overture figure is about 80%. This is the constraint the
-# package exists to report, and Bogotá is close to the worst case for it, so the height-provenance
-# layer — not the LCZ layer — is the thing to look at first in both maps below.
+# This notebook runs `lczkit` end to end over a 25 km² window of Bogotá, twice — once on a
+# **100 m grid** and once on **organic patch units**, larger polygons grown from city blocks — and
+# embeds the interactive map each run produced.
+#
+# Bogotá is here for a measurable reason. `lczkit` takes its buildings from **Overture Maps**, an
+# open dataset that merges OpenStreetMap, Esri, Google and Microsoft sources — and does so
+# *winner-takes-all per building*, so a footprint's attributes come from whichever source won its
+# geometry and are never blended. Only OpenStreetMap among those carries building heights. Across
+# Bogotá's full 1 169 km² extent that leaves **0.50%** of building heights coming from Overture. A
+# 90 m radar mosaic derived from the German TanDEM-X satellites answers for 97.8% of the rest, and
+# Berlin's equivalent Overture figure is about 80%.
+#
+# That gap is the constraint this package exists to report, and Bogotá is close to the worst case
+# for it — so the **height-provenance layer**, not the LCZ layer, is the thing to look at first in
+# both maps below.
 #
 # **What this is not.** It is a demonstration over one window, not a validated map of Bogotá. The
 # window is 25 km² against the city's 1 169; the reference at the end is a handful of hand-drawn
@@ -61,13 +75,19 @@ plt.rcParams.update({"figure.dpi": 120, "font.size": 9, "axes.grid": True, "grid
 # %% [markdown]
 # ## The extent, and why Bogotá is not a registry city
 #
-# `lczkit run --city bogota` works — it resolves against NASA GUPPD's gazetteer of 5 558 urban
-# regions, and Bogotá is one of them, `SMOD_ID 30_3370`. What Bogotá is *not* is one of the 28
-# cities in `lczkit.cities`, and that registry exists for a different purpose: every city in it is
-# there because So2Sat LCZ42 covers it densely enough to validate against, the screen being 500
-# labelled patches across at least 4 classes. **Bogotá carries 8 patches, all of them LCZ 7** —
-# eight against five hundred, one class against four. So `--so2sat-window` has nothing to offer
-# here, and no ceiling can be computed for this window.
+# `lczkit run --city bogota` works. It resolves against the **Global Urban Polygons and Points
+# Dataset (GUPPD)**, a gazetteer of 5 558 urban regions from NASA's Socioeconomic Data and
+# Applications Center and the European Commission's Joint Research Centre; Bogotá is one of them,
+# identified by `SMOD_ID 30_3370`. That identifier is used rather than the name because 149 of the
+# 5 558 names are shared by more than one region.
+#
+# What Bogotá is *not* is one of the 28 cities in `lczkit.cities`, and that registry exists for a
+# different purpose: every city in it is there because **So2Sat LCZ42** — a set of hand-drawn LCZ
+# labels produced for a machine-learning benchmark, covering 51 cities in 320 m patches — covers it
+# densely enough to validate against. The screen is 500 labelled patches across at least 4 classes.
+# **Bogotá carries 8 patches, all of them LCZ 7** — eight against five hundred, one class against
+# four. So the `--so2sat-window` option has nothing to offer here, and no ceiling can be computed
+# for this window.
 #
 # The extent is quoted literally below rather than looked up, so this notebook reproduces from
 # itself — without a `DATA_DIR`, and without depending on which release of the bounds table is on a
@@ -92,9 +112,13 @@ print("GUPPD extent:", BOGOTA_GUPPD)
 #
 # A demonstration window has to be small enough to run in one sitting and to ship inside a
 # documentation site, and it should contain something to compare against. `densest_window` is the
-# helper the multi-city sweep uses to place a square on the thickest part of a reference; pointing
-# it at Bogotá's WUDAPT polygons puts the window where the evidence is rather than in the middle
-# of the bounding box.
+# helper the multi-city comparison uses to place a square on the thickest part of a reference;
+# pointing it at Bogotá's **WUDAPT** polygons puts the window where the evidence is rather than in
+# the middle of the bounding box.
+#
+# WUDAPT — the World Urban Database and Access Portal Tools — is a community effort to describe
+# cities by LCZ. Its training areas are polygons drawn by contributors worldwide: far wider coverage
+# than So2Sat, and irregular, overlapping and of uneven vintage.
 
 # %%
 wudapt_city = read_wudapt(wudapt_path, BOGOTA_GUPPD, layer=WUDAPT_LAYER)
@@ -107,16 +131,20 @@ print(f"\n{WINDOW_KM:.0f} km window: {tuple(round(v, 6) for v in window)}")
 print(f"  100 m cells it will contain: {len(GridUnits().generate(window)):,}")
 
 # %% [markdown]
-# ## Arm A — the 100 m grid
+# ## The first run — a 100 m grid
 #
-# The grid is the default and is what every published LCZ map, validation dataset and WRF
-# workflow uses. `run_pipeline` runs nine stages: clean the Overture vectors, fill building
-# heights through the cascade, build units, read land cover, compute provenance, compute the
-# urban canopy parameters, classify, write the run, build the site.
+# The grid is the default. It is what published LCZ maps, the reference label sets, and the
+# workflows that feed LCZ maps into the Weather Research and Forecasting model all use.
 #
-# The configuration comes from `apply_preset`, never restated here — `CleaningConfig` and
-# `HeightConfig` both have fields that default to `None` and raise at call time, and the preset
-# is what fills them with the values every published figure was produced under.
+# `run_pipeline` runs nine stages: clean the Overture vectors, fill building heights through the
+# cascade of sources, build the spatial units, read land cover, record where each height came from,
+# measure the urban canopy parameters — the numbers describing the shape of the surface — classify,
+# write the run, and build the map site.
+#
+# The configuration comes from `apply_preset` and is never restated here. Several settings default
+# to nothing and raise if used, deliberately, so that an invented value cannot travel into a run's
+# record looking like a measurement; the preset is what fills them with the values every published
+# figure was produced under.
 
 # %%
 settings.units.strategy = "grid"
@@ -128,11 +156,12 @@ print(f"grid run -> {grid_dir}  ({grid_result.seconds / 60:.1f} min)")
 
 # %% [markdown]
 # `No threshold found` above is expected at this size and is not an error. Street simplification
-# runs per tile, and a tile whose network is too sparse cannot fit the face-artifact-index
-# distribution the threshold is read from. The threshold is **pooled across tiles** rather than
-# taken from any one of them — the Phase 8 change that took a metropolitan run from ~8.6 hours to
-# ~70 seconds — so tiles that abstain cost nothing as long as some do not. A window small enough
-# that *every* tile abstains would fall back, and that is a reason not to shrink this one further.
+# runs tile by tile, and a tile whose street network is too sparse cannot supply the distribution
+# the simplification threshold is read from. The threshold is **pooled across tiles** rather than
+# taken from any one of them — the change that took a whole-city run from roughly 8.6 hours to
+# about 70 seconds — so tiles that abstain cost nothing as long as some do not. A window small
+# enough that *every* tile abstains would fall back to a default, and that is a reason not to
+# shrink this one further.
 
 # %%
 stages = pd.Series(grid_result.stages, name="seconds").rename_axis("stage").round(1)
@@ -209,15 +238,19 @@ fig.tight_layout()
 plt.show()
 
 # %% [markdown]
-# ## Arm B — organic patch units
+# ## The second run — organic patch units
 #
-# A 100 m cell is not the object Stewart & Oke's parameter ranges describe, and it is not the
-# object the reference label sets describe either: a So2Sat patch is 10.24 ha and a WUDAPT
-# polygon runs 2.2–52 ha, against the cell's 1.00 ha. `PatchUnits` seeds enclosures over a
-# barrier set with the pedestrian classes removed, then merges each seed into its most
-# morphologically similar contiguous neighbour until it reaches an area floor.
+# A 100 m cell is not the object Stewart & Oke's parameter ranges describe, and it is not the object
+# the reference label sets describe either: a So2Sat patch is 10.24 ha and a WUDAPT polygon runs
+# 2.2–52 ha, against the cell's 1.00 ha.
 #
-# `patch_min_area_m2` is a **floor, not a target**. Merging stops when a unit reaches it and the
+# `PatchUnits` builds larger units in two steps. First it cuts the area into **enclosures** — the
+# faces left when the street network, railways and water are treated as barriers, which is to say
+# city blocks. Footpaths are left out of that barrier set, because including them makes the result
+# mostly a measure of how thoroughly a city's paths have been surveyed. Then it merges each block
+# into the contiguous neighbour it most resembles, until it reaches an area floor.
+#
+# `patch_min_area_m2` is a **floor, not a target**. Merging stops when a unit reaches it, and the
 # merge that got it there overshoots, so the resulting median lands at roughly twice the value —
 # 5 ha gives a median near 10 ha, which is where the reference patches are.
 
@@ -287,7 +320,7 @@ for name, areas in (("grid ", grid_ha), ("patch", patch_ha)):
     print(f"{name} median {p50:6.2f} ha   p10 {p10:6.2f}   p90 {p90:6.2f}")
 
 # %% [markdown]
-# ## What the two arms classified
+# ## What the two runs classified
 
 # %%
 legend = {int(k): v for k, v in grid_manifest["legend"].items()}
@@ -314,15 +347,20 @@ summary.assign(
 # %% [markdown]
 # ## Agreement against WUDAPT — with the caveat that carries it
 #
-# `run_pipeline` never runs validation, deliberately: wiring it into the chain would make every
-# run depend on a reference dataset being present. Validation is a separate call, and this is it.
+# `run_pipeline` never runs validation, deliberately: wiring it into the chain would make every run
+# depend on a reference dataset being present. Validation is a separate call, and this is it.
 #
-# **Read the numbers below as a demonstration of the instrument, not as a result.** Bogotá's
-# WUDAPT coverage inside this window is a handful of polygons from two submissions. A per-class
-# figure computed on single-digit counts is noise, and no ceiling accompanies these numbers
-# because Bogotá has no independent labelled set to compute one against — its 8 So2Sat patches
-# are all one class. Everywhere this project reports a real agreement figure it reports the
-# ceiling beside it; here there is nothing honest to put there.
+# Two scores appear below. **Overall accuracy (`OA`)** counts a unit right only if its class matches
+# the reference exactly. **Weighted overall accuracy (`OA_w`)** gives partial credit according to
+# how similar the two classes are — the next cell explains why the gap between them is the
+# interesting part.
+#
+# **Read the numbers as a demonstration of the instrument, not as a result.** Bogotá's WUDAPT
+# coverage inside this window is a handful of polygons from two submissions. A per-class figure
+# computed on single-digit counts is noise, and no ceiling accompanies these numbers because Bogotá
+# has no independent labelled set to compute one against — its 8 So2Sat patches are all one class.
+# Everywhere this project reports a real agreement figure it reports the ceiling beside it; here
+# there is nothing honest to put there.
 
 
 # %%
@@ -382,30 +420,32 @@ pd.DataFrame({"grid": grid_score, "patch": patch_score})
 # %% [markdown]
 # ## The maps
 #
-# Each run wrote a self-contained map site — MapLibre GL over PMTiles, a vendored front end, no
-# CDN and no API key. The two below are those sites, copied into this documentation unchanged.
+# Each run wrote a self-contained web map. It is drawn by MapLibre GL, a browser mapping library,
+# reading **PMTiles** — a single-file tile archive served over ordinary web requests, so no tile
+# server is involved. Nothing is fetched from a content delivery network and no interactive-map
+# account key is needed. The two below are those maps, copied into this documentation unchanged.
 #
-# **Open the layer selector and choose a height-provenance layer.** On the LCZ layer the two arms
-# look like ordinary maps; on `WSF-3D, 90 m raster` they show that almost every building's height
-# in this city came from a 90 m radar mosaic, which is the finding. Click any unit for its full
-# parameter table, its distance to all 17 prototypes, and its height provenance.
+# **Open the layer selector and choose a height-provenance layer.** On the LCZ layer the two runs
+# look like ordinary maps; on `WSF-3D, 90 m raster` they show that almost every building's height in
+# this city came from a 90 m radar mosaic, which is the finding. Click any unit for its full
+# parameter table, its distance to all 17 classes, and where its height came from.
 #
-# > **If these frames are blank, you are previewing locally.** PMTiles reads byte ranges over
-# > HTTP, and `pmtiles.js` raises rather than guessing when a server answers a range request with
-# > the whole file. GitHub Pages honours ranges — measured, `206 Partial Content` with
-# > `Accept-Ranges: bytes` — so the published page is fine. **`mkdocs serve` does not**, so the
-# > maps are blank under it. Build the site and serve it with the range-capable server this
-# > package already ships for exactly this reason:
+# > **If these frames are blank, you are previewing locally.** PMTiles asks a server for byte ranges
+# > of a file, and `pmtiles.js` raises rather than guessing when a server answers such a request
+# > with the whole file instead. GitHub Pages honours ranges — measured, `206 Partial Content` with
+# > `Accept-Ranges: bytes` — so the published page is fine. **`mkdocs serve` does not**, so the maps
+# > are blank under it. Build the site and serve it with the range-capable server this package
+# > already ships for exactly this reason:
 # >
 # > `mkdocs build` &nbsp;then&nbsp; `python -c "from lczkit.viz import serve; serve('site')"`
 
 # %% [markdown]
-# ### Arm A — 100 m grid
+# ### The 100 m grid
 #
 # <iframe src="../bogota-grid/index.html" title="Bogotá on the 100 m grid" width="100%" height="620"
 #         loading="lazy" style="border:1px solid rgba(128,128,128,0.35);border-radius:4px"></iframe>
 #
-# ### Arm B — organic patch units
+# ### Organic patch units
 #
 # <iframe src="../bogota-patch/index.html" title="Bogotá on patch units" width="100%" height="620"
 #         loading="lazy" style="border:1px solid rgba(128,128,128,0.35);border-radius:4px"></iframe>
@@ -413,25 +453,26 @@ pd.DataFrame({"grid": grid_score, "patch": patch_score})
 # %% [markdown]
 # ## What to take from this, and what not to
 #
-# **The height cascade is doing nearly all the work, and the map says so.** That is the design
-# bet: a run that fills 97.8% of its heights from a 90 m raster and a run that measures them are
-# not the same product, and only one of them can resolve the low-rise / mid-rise / high-rise
-# distinction inside a heterogeneous unit. The provenance layers exist so that difference is
-# visible rather than inferred.
+# **The height cascade is doing nearly all the work, and the map says so.** That is the design bet:
+# a run that fills 97.8% of its heights from a 90 m raster and a run that measures them are not the
+# same product, and only one of them can tell low-rise from mid-rise from high-rise inside a mixed
+# unit. The provenance layers exist so that difference is visible rather than inferred.
 #
-# **The two arms are not comparable as accuracy.** No A/B claim is made here. The package's
-# sixteen-city sweep found enclosure-style units ahead on built classes and behind overall, split
-# regionally, three times — which is why `strategy` is config with `grid` as the default and no
-# auto-selection. One window of one city adds nothing to that.
+# **The two runs are not comparable as accuracy.** No claim that one is better is made here. The
+# package's sixteen-city comparison found block-based units ahead on the built classes and behind
+# overall, split along the same regional line, three times — which is why the unit strategy is
+# configuration with the grid as the default and no automatic selection. One window of one city
+# adds nothing to that.
 #
-# **Patch units read parameters the classifier then scores.** The merge uses building surface
-# fraction and height, two of the seven dimensions the prototype distance scores. That is the
-# standard shape of a regionalisation and it cannot inflate agreement with an external reference,
-# but it does make any within-run parameter statistic weaker on patches than on cells.
+# **Patch units are built using parameters the classifier then scores.** The merge compares
+# neighbours on building surface fraction and height, two of the seven quantities the classification
+# scores. That is the standard shape of this kind of region-building and it cannot inflate agreement
+# with an external reference, but it does make any within-run parameter statistic weaker on patches
+# than on cells.
 #
-# Where to go next: the [API reference](../../api/) for every public symbol, and the repository
-# for the full README and the phase write-ups that record what was predicted, what was measured,
-# and which hypotheses were refuted.
+# Where to go next: the [API reference](../../api/) for every public symbol, the
+# [glossary](../../glossary/) for any term used here, and the repository for the phase write-ups
+# that record what was predicted, what was measured, and which hypotheses were refuted.
 #
-# <!-- That link is a built-site URL, not `../api/index.md`: nbconvert renders this cell to HTML
+# <!-- Those links are built-site URLs, not `../api/index.md`: nbconvert renders this cell to HTML
 #      before mkdocs sees it, so a `.md` target is never rewritten and would ship as a 404. -->
