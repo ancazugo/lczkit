@@ -772,6 +772,25 @@ class UcpConfig(BaseModel):
     rather than buried in the code.
     """
 
+    measure_on: Literal["units", "enclosures"] = "units"
+    """Which units the parameters are *measured* on, as distinct from classified on.
+
+    `"units"` measures on whatever `UnitsConfig.strategy` produced, which is what every stored
+    figure in this project was computed with. `"enclosures"` measures on street-bounded enclosures
+    and moves the result onto the target units, area-weighted.
+
+    **The reason is `aspect_ratio`.** A street canyon has to be measured against streets, and a
+    100 m grid cell is not bounded by any — so H/W, which is 3 of the 17 applied weight units and
+    the only dimension separating LCZ 8 from LCZ 3 and 6, is null on 10.8% of one Istanbul extent's
+    built grid cells against 0.9% of its enclosures. On the densest decile the enclosures also put
+    82.2% of cells inside LCZ 2's published H/W band against the grid's 70.2%.
+
+    Defaults to `"units"` because **no accuracy claim is attached**: the sixteen-city sweep is
+    wired and has not been run, and the pre-registered reading is in `lczkit.ucp.measure`. Turning
+    it on makes a run incomparable to every recorded figure until that sweep says how far it moves
+    them.
+    """
+
     land_cover_dataset: str = "worldcover"
     """Which `LandCoverConfig.datasets` entry supplies the surface fractions. The ETH canopy
     dataset is a second, competing tree estimate rather than a full land-cover product, and Phase 4
@@ -1025,8 +1044,39 @@ class ClassificationConfig(BaseModel):
     would be a worse failure than the over-prediction it guards against.
     """
 
+    modal_filter: bool = False
+    """Whether to replace an isolated unit's label with the modal label of its neighbours.
+
+    **Off, and that is a ruling rather than caution.** Every unit in this package is classified
+    independently of its neighbours, so a cell whose parameters wobble across a prototype boundary
+    takes a different label from the fabric it sits in — salt-and-pepper at a grain Stewart & Oke
+    never intended a class to be read at, given an LCZ patch is a neighbourhood and the So2Sat
+    patches this project validates against are 320 m across. A spatial filter is the standard
+    answer in this literature and lczkit has never had one.
+
+    It stays off because `modal_filter_min_like_neighbours` is a threshold and CLAUDE.md requires
+    a threshold to be swept against a reference and chosen at an operating point. It is also worth
+    saying plainly that **every stored figure in this project was measured without one**, so a run
+    with it on is not comparable to a recorded result until the sweep says how far it moves them.
+
+    See `lczkit.classify.smoothing`.
+    """
+
+    modal_filter_min_like_neighbours: int = 2
+    """A unit with fewer than this many contiguous neighbours sharing its label is isolated.
+
+    A placeholder marking where a swept number goes, not a calibrated value. Two is the weakest
+    setting that does anything at all on a Queen-contiguous grid, chosen so a caller who enables
+    the filter without sweeping it does the smallest thing rather than the boldest.
+    """
+
     @model_validator(mode="after")
     def _check_thresholds(self) -> ClassificationConfig:
+        if self.modal_filter_min_like_neighbours < 1:
+            raise ValueError(
+                "modal_filter_min_like_neighbours must be at least 1, got "
+                f"{self.modal_filter_min_like_neighbours}; zero would make every unit isolated"
+            )
         if not 0.0 < self.natural_negligible_fraction < self.natural_dominant_fraction <= 1.0:
             raise ValueError(
                 "expected 0 < natural_negligible_fraction < natural_dominant_fraction <= 1, got "

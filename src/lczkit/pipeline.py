@@ -29,6 +29,7 @@ from typing import Protocol
 import geopandas as gpd
 
 from lczkit.classify import PrototypeClassifier
+from lczkit.classify.smoothing import modal_filter
 from lczkit.cleaning.pipeline import clean_vectors
 from lczkit.config import Settings, UnitsConfig
 from lczkit.heights.cascade import cascade_height_sources, fill_heights
@@ -43,6 +44,7 @@ from lczkit.protocols import BBox, SpatialUnitStrategy
 from lczkit.sources.height_products import resolve_areal_tiers
 from lczkit.sources.overture import OvertureSource
 from lczkit.sources.worldcover import clip_worldcover
+from lczkit.ucp.measure import transfer_parameters
 from lczkit.ucp.parameters import compute_parameters
 from lczkit.ucp.tag_diagnostic import tag_availability
 from lczkit.units.enclosures import EnclosureUnits, assemble_barriers
@@ -212,7 +214,8 @@ def run_pipeline(
         # not reach anything else, because it never assembled barriers either.
         strategy = build_strategy(settings.units, buildings=buildings_area)
         barriers = None
-        if settings.units.strategy != "grid":
+        measure_on_enclosures = settings.ucp.measure_on == "enclosures"
+        if settings.units.strategy != "grid" or measure_on_enclosures:
             # `clean_vectors` does not carry rail — it is a barrier layer, not something the
             # cleaning pipeline has a rule for — so it comes straight off the source, exactly as
             # `scripts/unit_scale_experiment.build_arms` has fetched it since Phase 2.
@@ -226,14 +229,28 @@ def run_pipeline(
             )
         units = strategy.generate(bbox, barriers)
 
+        # A street canyon has to be measured against streets, and a grid cell is not bounded by
+        # any. Off by default — see `UcpConfig.measure_on` — and where the target units *are* the
+        # enclosures there is nothing to transfer, so the extra partition is skipped.
+        measurement_units = units
+        if measure_on_enclosures and settings.units.strategy != "enclosure":
+            measurement_units = EnclosureUnits().generate(bbox, barriers)
+
     with timed("land_cover"):
         # `clip_worldcover` resolves the tiles the bbox actually spans and mosaics them. A single
         # hardcoded tile is correct for one city and a 0x0 window — `RasterioIOError` — for the
         # next one, or worse, a quarter of the map silently missing.
         worldcover = clip_worldcover(bbox, settings.run_dir / "worldcover.tif")
-        fractions = LocalRasterSource(
+        raster = LocalRasterSource(
             settings.land_cover.dataset(settings.ucp.land_cover_dataset), worldcover
-        ).fractions(units)
+        )
+        fractions = raster.fractions(units)
+        # The surface fractions have to describe the units the parameters are measured on, or the
+        # building share and the impervious share it is subtracted from would come from different
+        # ground. A second zonal pass, and only when the two unit sets actually differ.
+        measurement_fractions = (
+            fractions if measurement_units is units else raster.fractions(measurement_units)
+        )
 
     with timed("provenance"):
         # The column set comes from the configured cascade, not from which tiers happened to fire,
@@ -243,19 +260,29 @@ def run_pipeline(
 
     with timed("parameters"):
         parameters = compute_parameters(
-            units,
+            measurement_units,
             buildings_area,
             buildings_topo,
             cleaned.streets,
             cleaned.land_use,
-            fractions,
+            measurement_fractions,
             config=settings.ucp,
             land_cover_config=settings.land_cover,
         )
+        if measurement_units is not units:
+            parameters = transfer_parameters(parameters, measurement_units, units)
 
     with timed("classify"):
         classifier = PrototypeClassifier(config=settings.classification)
         classification = classifier.classify(parameters)
+        # Off by default, so this is a no-op that still produces a report — a run has to be able to
+        # say the filter did not fire as distinct from never having been configured.
+        classification, smoothing = modal_filter(
+            units,
+            classification,
+            enabled=settings.classification.modal_filter,
+            min_like_neighbours=settings.classification.modal_filter_min_like_neighbours,
+        )
 
     with timed("write_run"):
         outputs = write_run(
@@ -271,6 +298,7 @@ def run_pipeline(
             height_fill=height_fill,
             height_source_availability=availability,
             tag_availability=tags,
+            smoothing=smoothing,
             # The site draws its basemap and its extrusions from these, so that an archived run
             # directory rebuilds its own map with no access to `input/`.
             layers={

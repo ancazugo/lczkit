@@ -25,10 +25,12 @@ import pandas as pd
 from pandas.api.types import is_bool_dtype, is_numeric_dtype
 
 from lczkit.classify.classifier import DISTANCE_COLUMNS, PrototypeClassifier
+from lczkit.classify.smoothing import SmoothingReport
 from lczkit.cleaning.report import CleaningReport
 from lczkit.config import Settings
 from lczkit.heights.cascade import HeightFillReport
 from lczkit.heights.diagnostic import SourceAvailability
+from lczkit.heights.dispersion import dispersion_report
 from lczkit.output.breaks import breaks_for
 from lczkit.output.extent import ExtentRecord
 from lczkit.output.manifest import RunManifest, build_manifest
@@ -93,6 +95,7 @@ def write_run(
     height_fill: HeightFillReport | None = None,
     height_source_availability: SourceAvailability | None = None,
     tag_availability: TagAvailability | None = None,
+    smoothing: SmoothingReport | None = None,
     validation: AgreementReport | None = None,
     layers: Mapping[str, gpd.GeoDataFrame] | None = None,
 ) -> RunOutputs:
@@ -151,8 +154,13 @@ def write_run(
         extent=extent,
         units=units_report,
         height_fill=height_fill,
+        # From the joined table rather than from a separate argument: the dispersion is a statistic
+        # *of what this run wrote*, and reading the same frame is what guarantees it describes the
+        # units on disk rather than an intermediate that no longer matches them.
+        height_dispersion=dispersion_report(attributes),
         height_source_availability=height_source_availability,
         tag_availability=tag_availability,
+        smoothing=smoothing,
         validation=validation,
         crs=units.crs,
         outputs=[

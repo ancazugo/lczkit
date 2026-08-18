@@ -24,11 +24,13 @@ from pyproj import CRS
 from lczkit.classify.classifier import PrototypeClassifier
 from lczkit.classify.labels import DEMUZERE_2022, legend
 from lczkit.classify.prototypes import UNUSED_PROPERTIES
+from lczkit.classify.smoothing import SmoothingReport
 from lczkit.classify.weights import BERNARD2024, UNAPPLIED_BERNARD_WEIGHTS
 from lczkit.cleaning.report import CleaningReport
 from lczkit.config import Settings
 from lczkit.heights.cascade import HeightFillReport
 from lczkit.heights.diagnostic import SourceAvailability
+from lczkit.heights.dispersion import DispersionReport
 from lczkit.output.breaks import VariableBreaks
 from lczkit.output.extent import ExtentRecord
 from lczkit.ucp.registry import LIMITATIONS, NOT_COMPUTED, PARAMETERS, semantic_specs
@@ -154,6 +156,19 @@ class RunManifest(BaseModel):
     stopped it."""
 
     height_fill: HeightFillReport | None = None
+
+    height_dispersion: DispersionReport | None = None
+    """Within-unit height spread per tier — what the cascade did to the *shape* of the height
+    distribution, not just to its coverage.
+
+    `height_fill` and `height_completeness` say where a height came from. Neither says whether the
+    substitute resolves anything inside a unit, and `Hr` is a geometric mean, so it is depressed by
+    spread and rises as spread collapses. Phase 10 rejected Open Buildings 2.5D for having too much
+    within-unit spread (0.441 against reality's 0.195); the tiers that shipped have too little —
+    measured at a median CV of 0.192 for WSF-3D in Nairobi and 0.112 for GHS-BUILT-H in Bogota,
+    against 0.266 for real Overture heights in Berlin, with 23.6% of the GHSL units carrying a
+    single height throughout. Same mechanism, opposite sign. See `lczkit.heights.dispersion`."""
+
     height_source_availability: SourceAvailability | None = None
     tag_availability: TagAvailability | None = None
     """Overture attribute availability by upstream dataset — the Phase 18 counterpart of
@@ -163,6 +178,14 @@ class RunManifest(BaseModel):
     Read every `sem_*` column against `tagged_area_fraction`. Without it a semantic fraction of 0.0
     cannot be told from an untagged city, which is the same mistake `height_tier_fractions` exists
     to prevent for the cascade."""
+    smoothing: SmoothingReport | None = None
+    """What the modal filter did, if it was enabled.
+
+    Off by default, and the report is written either way: a run has to be able to say the filter
+    did not fire as distinct from never having been configured. **Every stored figure in this
+    project was measured with no filter at all**, so a run reporting `enabled: true` is not
+    comparable to a recorded result until the sweep says how far one moves them."""
+
     validation: AgreementReport | None = None
     """Agreement against the Demuzere global map. A comparator, not ground truth - read it against
     `reference_ceiling`."""
@@ -207,8 +230,10 @@ def build_manifest(
     extent: ExtentRecord | None = None,
     units: PatchReport | None = None,
     height_fill: HeightFillReport | None = None,
+    height_dispersion: DispersionReport | None = None,
     height_source_availability: SourceAvailability | None = None,
     tag_availability: TagAvailability | None = None,
+    smoothing: SmoothingReport | None = None,
     validation: AgreementReport | None = None,
     validation_ground_truth: AgreementReport | None = None,
     reference_ceiling: AgreementReport | None = None,
@@ -262,8 +287,10 @@ def build_manifest(
         cleaning=cleaning,
         units=units,
         height_fill=height_fill,
+        height_dispersion=height_dispersion,
         height_source_availability=height_source_availability,
         tag_availability=tag_availability,
+        smoothing=smoothing,
         validation=validation,
         validation_ground_truth=validation_ground_truth,
         reference_ceiling=reference_ceiling,
