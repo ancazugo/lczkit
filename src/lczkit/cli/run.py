@@ -44,7 +44,6 @@ from lczkit.pipeline import PipelineResult, run_pipeline
 from lczkit.places import load_places, normalise, place
 from lczkit.presets import DEFAULT_PRESET, PRESETS, apply_preset
 from lczkit.protocols import BBox
-from lczkit.viz import TippecanoeMissingError
 
 
 def run(
@@ -174,23 +173,38 @@ def run(
 
     console.print(f"run [bold]{settings.run_id}[/bold] over {label} {_format_bbox(parsed)}")
     _report_extent(extent)
-    try:
-        result = run_pipeline(
-            settings,
-            parsed,
-            build_site_after=site,
-            observer=StageProgress(quiet=quiet),
-            extent=extent,
-        )
-    except TippecanoeMissingError as error:
-        fail(str(error), EXIT_MISSING_TOOL)
+    result = run_pipeline(
+        settings,
+        parsed,
+        build_site_after=site,
+        observer=StageProgress(quiet=quiet),
+        extent=extent,
+    )
 
     if not quiet:
         out.print(render_stages(result))
     console.print(f"  wrote [bold]{result.run_dir}[/bold]")
     _report_gis(result)
+    _report_site(result)
+
+
+def _report_site(result: PipelineResult) -> None:
+    """Report the map site, or say why there is none and how to get one later.
+
+    **Reported after the run directory, never instead of it.** A missing tippecanoe used to
+    propagate out of `run_pipeline` and become an exit code before the line naming the run
+    directory was printed, so a run whose only problem was an absent tool looked like a run that
+    produced nothing — when in fact every file but the site was already written. The exit code is
+    still non-zero, because a site was asked for and not produced.
+    """
     if result.site is not None:
         report_site(result.site)
+        return
+    if result.site_skipped is None:
+        return
+    console.print(f"  [yellow]no map site[/yellow] {result.site_skipped}")
+    console.print(f"  build it later: [bold]lczkit site build {result.run_dir}[/bold]")
+    raise typer.Exit(EXIT_MISSING_TOOL)
 
 
 def _report_gis(result: PipelineResult) -> None:

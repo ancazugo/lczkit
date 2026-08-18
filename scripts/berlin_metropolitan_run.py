@@ -107,6 +107,13 @@ def run_and_publish(settings: Settings, bbox: BBox, *, build_site_after: bool = 
         for name, reason in report.skipped.items():
             print(f"    skipped {name}: {reason}", flush=True)
         print(f"  serve it: python {report.site_dir / 'serve.py'}", flush=True)
+    elif result.site_skipped is not None:
+        # The site is the last stage and everything else is already written, so a missing
+        # tippecanoe is reported rather than raised. Saying so here keeps this driver's output as
+        # honest as the command line's — a run with no site line and no explanation reads as one
+        # that was asked not to build one.
+        print(f"  no map site: {result.site_skipped}", flush=True)
+        print(f"  build it later: lczkit site build {result.run_dir}", flush=True)
 
     print(f"\ntotal {result.seconds / 60:.1f} min", flush=True)
     return result.run_dir

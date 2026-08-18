@@ -15,16 +15,23 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
+from typing import cast
 
 import pytest
-
+import typer
 from conftest import load_script
 from typer.testing import CliRunner
 
 from lczkit.cli import app
-from lczkit.cli._render import EXIT_CONFIG
+from lczkit.cli._render import EXIT_CONFIG, EXIT_MISSING_TOOL
+
+# By function, not by module: `lczkit.cli.__init__` binds the name `run` to the command function,
+# which shadows the submodule of the same name for `from lczkit.cli import run`.
+from lczkit.cli.run import _report_site
 from lczkit.config import Settings
 from lczkit.output import MANIFEST_FILE
+from lczkit.pipeline import PipelineResult
 from lczkit.presets import AREAL_CONFIDENCE, PRESETS, apply_preset
 
 runner = CliRunner()
@@ -622,3 +629,34 @@ def test_the_publish_driver_configures_a_run_the_same_way_the_cli_does(
     from_cli.viz.include_buildings = False
 
     assert from_script.model_dump() == from_cli.model_dump()
+
+
+# --------------------------------------------------------------------------- the site is last
+
+
+def _result(tmp_path: Path, *, skipped: str | None) -> PipelineResult:
+    """A `PipelineResult` carrying only what `_report_site` reads."""
+    outputs = SimpleNamespace(run_dir=tmp_path / "20260101T000000Z")
+    return cast(
+        PipelineResult,
+        SimpleNamespace(site=None, site_skipped=skipped, outputs=outputs, run_dir=outputs.run_dir),
+    )
+
+
+def test_a_missing_tippecanoe_is_reported_without_losing_the_run(tmp_path: Path) -> None:
+    """The site is the last stage and every other file is on disk before it starts.
+
+    The error used to propagate out of `run_pipeline` and become an exit code *before* the line
+    naming the run directory was printed, so a ten-minute city whose only problem was an absent
+    tool reported as a run that produced nothing. The exit code stays non-zero — a site was asked
+    for and not produced — but the directory is named and so is the command that finishes it.
+    """
+    with pytest.raises(typer.Exit) as exit_info:
+        _report_site(_result(tmp_path, skipped="tippecanoe is required"))
+
+    assert exit_info.value.exit_code == EXIT_MISSING_TOOL
+
+
+def test_a_run_that_wanted_no_site_reports_nothing_and_exits_cleanly(tmp_path: Path) -> None:
+    """`--no-site` is not a failure, so it must not take the non-zero path."""
+    _report_site(_result(tmp_path, skipped=None))

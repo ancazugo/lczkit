@@ -48,7 +48,7 @@ from lczkit.ucp.tag_diagnostic import tag_availability
 from lczkit.units.enclosures import EnclosureUnits, assemble_barriers
 from lczkit.units.grid import GridUnits
 from lczkit.units.patches import PatchUnits, filter_street_barriers
-from lczkit.viz import SiteReport, build_site
+from lczkit.viz import SiteReport, TippecanoeMissingError, build_site
 
 STAGES = (
     "clean_vectors",
@@ -119,6 +119,16 @@ class PipelineResult:
 
     site: SiteReport | None
     """`None` when the run was asked not to build one, or when tippecanoe is absent."""
+
+    site_skipped: str | None = None
+    """Why no site was built, where one was asked for. `None` when one was built or not wanted.
+
+    The site is the **last** stage and everything else is already on disk by the time it runs, so
+    a missing tippecanoe must not cost a caller the run. It used to: the error propagated out of
+    `run_pipeline`, the command line turned it into an exit code, and the line naming the run
+    directory was never printed — a ten-minute city reported as a failure with no mention that its
+    output existed. `lczkit site build <run_dir>` completes it later.
+    """
 
     stages: dict[str, float] = field(default_factory=dict)
     """Wall seconds per stage, in the order they ran."""
@@ -272,8 +282,21 @@ def run_pipeline(
         )
 
     site: SiteReport | None = None
+    skipped: str | None = None
     if build_site_after:
         with timed("build_site"):
-            site = build_site(outputs.run_dir, config=settings.viz)
+            try:
+                site = build_site(outputs.run_dir, config=settings.viz)
+            except TippecanoeMissingError as error:
+                # Caught rather than raised, and only this one: it is a statement about the
+                # machine rather than about the run, and everything the run produced is already
+                # written. Any other failure here is a defect and stays loud.
+                skipped = str(error)
 
-    return PipelineResult(outputs=outputs, site=site, stages=stages, height_products=dict(placed))
+    return PipelineResult(
+        outputs=outputs,
+        site=site,
+        site_skipped=skipped,
+        stages=stages,
+        height_products=dict(placed),
+    )
