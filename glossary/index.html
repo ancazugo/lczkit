@@ -1,0 +1,1373 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Map cities into Local Climate Zones from open vector and raster data">
+      
+      
+      
+        <link rel="canonical" href="https://ancazugo.github.io/lczkit/glossary/">
+      
+      
+        <link rel="prev" href="..">
+      
+      
+        <link rel="next" href="../demo/bogota/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Glossary - lczkit</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="teal">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#glossary" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="lczkit" class="md-header__button md-logo" aria-label="lczkit" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            lczkit
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Glossary
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="teal"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m17.75 4.09-2.53 1.94.91 3.06-2.63-1.81-2.63 1.81.91-3.06-2.53-1.94L12.44 4l1.06-3 1.06 3zm3.5 6.91-1.64 1.25.59 1.98-1.7-1.17-1.7 1.17.59-1.98L15.75 11l2.06-.05L18.5 9l.69 1.95zm-2.28 4.95c.83-.08 1.72 1.1 1.19 1.85-.32.45-.66.87-1.08 1.27C15.17 23 8.84 23 4.94 19.07c-3.91-3.9-3.91-10.24 0-14.14.4-.4.82-.76 1.27-1.08.75-.53 1.93.36 1.85 1.19-.27 2.86.69 5.83 2.89 8.02a9.96 9.96 0 0 0 8.02 2.89m-1.64 2.02a12.08 12.08 0 0 1-7.8-3.47c-2.17-2.19-3.33-5-3.49-7.82-2.81 3.14-2.7 7.96.31 10.98 3.02 3.01 7.84 3.12 10.98.31"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="teal"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0-7 2.39 3.42C13.65 5.15 12.84 5 12 5s-1.65.15-2.39.42zM3.34 7l4.16-.35A7.2 7.2 0 0 0 5.94 8.5c-.44.74-.69 1.5-.83 2.29zm.02 10 1.76-3.77a7.131 7.131 0 0 0 2.38 4.14zM20.65 7l-1.77 3.79a7.02 7.02 0 0 0-2.38-4.15zm-.01 10-4.14.36c.59-.51 1.12-1.14 1.54-1.86.42-.73.69-1.5.83-2.29zM12 22l-2.41-3.44c.74.27 1.55.44 2.41.44.82 0 1.63-.17 2.37-.44z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/ancazugo/lczkit" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    ancazugo/lczkit
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="lczkit" class="md-nav__button md-logo" aria-label="lczkit" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    lczkit
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/ancazugo/lczkit" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    ancazugo/lczkit
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Glossary
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Glossary
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-classification-scheme" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The classification scheme
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#surface-parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Surface parameters
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#spatial-units" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Spatial units
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#data-sources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Data sources
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#references-and-their-metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        References and their metrics
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#outputs-and-tooling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Outputs and tooling
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-this-project-describes-its-own-work" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How this project describes its own work
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../demo/bogota/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Bogotá, two ways
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/protocols/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Protocols
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/sources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sources
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/cleaning/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cleaning
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/units/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Spatial units
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/heights/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Height cascade
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/landcover/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Land cover
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/ucp/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Urban canopy parameters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/classify/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Classification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/validation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Validation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/output/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Output
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/viz/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Map site
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Command line
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-classification-scheme" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The classification scheme
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#surface-parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Surface parameters
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#spatial-units" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Spatial units
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#data-sources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Data sources
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#references-and-their-metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        References and their metrics
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#outputs-and-tooling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Outputs and tooling
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-this-project-describes-its-own-work" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How this project describes its own work
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="glossary">Glossary<a class="headerlink" href="#glossary" title="Permanent link">&para;</a></h1>
+<p>Every term and abbreviation this documentation uses, in one place. Pages expand an abbreviation on
+first use as well, so you should not have to come here to read a sentence — this is for depth, and
+for the terms that carry more than a sentence's worth of meaning.</p>
+<h2 id="the-classification-scheme">The classification scheme<a class="headerlink" href="#the-classification-scheme" title="Permanent link">&para;</a></h2>
+<dl>
+<dt><strong>Local Climate Zone (LCZ)</strong></dt>
+<dd>Stewart &amp; Oke (2012) define these as <em>"regions of uniform surface cover, structure, material,
+and human activity that span hundreds of meters to several kilometers in horizontal scale"</em>.
+The scheme was built so that urban heat island measurements taken in different cities could be
+compared: instead of "urban" and "rural", a site is described by the kind of surface around it.</dd>
+<dt><strong>The seventeen classes</strong></dt>
+<dd>Ten <strong>built</strong> types, numbered 1 to 10, and seven <strong>natural</strong> land-cover types, lettered A to G.
+The built numbering is a grid of two ideas. <em>Compactness</em> — how much of the ground is
+building — separates compact (1, 2, 3) from open (4, 5, 6) from sparse (9). <em>Height</em> separates
+high-rise (1, 4) from midrise (2, 5) from low-rise (3, 6). The remaining three are named for
+what they are: <strong>7 lightweight low-rise</strong> (small, densely packed, often informal settlement),
+<strong>8 large low-rise</strong> (warehouses, malls, hangars), <strong>10 heavy industry</strong>. The natural types run
+A dense trees, B scattered trees, C bush or scrub, D low plants, E bare rock or paved, F bare
+soil or sand, G water.</dd>
+<dt><strong>Patch</strong></dt>
+<dd>The area an LCZ label is meant to describe: uniform, and hundreds of metres across. This
+matters because <code>lczkit</code> classifies 100 m cells by default, which are smaller than a patch —
+see <em>grid</em> below, and the note in <a href="../#known-omissions">Known omissions</a>.</dd>
+<dt><strong>Prototype distance</strong></dt>
+<dd>How <code>lczkit</code> assigns a class. Stewart &amp; Oke publish, for each of the seventeen classes, the
+range each surface property is expected to fall in. A class is therefore a box in parameter
+space and a spatial unit is a point; the distance is the gap from the point to the box, zero
+inside it, and the class with the smallest distance wins. This is the approach GeoClimate
+takes, implemented independently here. Nothing is trained.</dd>
+<dt><strong>Uniqueness</strong></dt>
+<dd>How clearly the nearest class won, on a scale of 0 to 1. Zero means the two nearest classes
+were equidistant and the label is a coin toss; one means nothing rivalled it. It is a statement
+about the metric, not about the data — a unit can sit squarely inside its class and still be
+ambiguous, or far from every class and still be unambiguously nearest one.</dd>
+</dl>
+<h2 id="surface-parameters">Surface parameters<a class="headerlink" href="#surface-parameters" title="Permanent link">&para;</a></h2>
+<dl>
+<dt><strong>Urban canopy parameter (UCP)</strong></dt>
+<dd>A number describing the shape of the urban surface in one spatial unit — how much of it is
+building, how tall the buildings are, how deep the street canyons are. These are the inputs the
+classification runs on, and the ones below are the ones <code>lczkit</code> computes.</dd>
+<dt><strong>Building surface fraction (BSF)</strong></dt>
+<dd>The share of a unit's ground covered by building footprint. It carries the largest single
+weight in the classification, so read it first.</dd>
+<dt><strong>Height of roughness elements (<code>Hr</code>)</strong></dt>
+<dd>The typical height of whatever sticks up into the wind — buildings, in a built zone. <code>lczkit</code>
+reports the <strong>geometric</strong> mean of building heights, which is what Stewart &amp; Oke's published
+ranges were defined for. The geometric mean sits below the ordinary arithmetic mean whenever a
+unit mixes tall and short buildings, so the two are not interchangeable.</dd>
+<dt><strong>Aspect ratio (H/W)</strong></dt>
+<dd>Building height divided by street width — how deep and narrow the street canyons are. A high
+ratio means a canyon that traps heat and shades itself. <code>lczkit</code> measures it against the street
+network, so it has no value where no street reaches a building.</dd>
+<dt><strong>Impervious and pervious surface fraction</strong></dt>
+<dd>The shares of ground that water cannot and can soak through — paving against vegetation and
+bare soil. With building surface fraction they partition the surface: the three sum to one.</dd>
+<dt><strong>Sky view factor (SVF)</strong></dt>
+<dd>The share of the sky visible from street level, between zero (fully enclosed) and one (open
+ground). <strong><code>lczkit</code> does not compute it</strong> — it is the most expensive parameter and is strongly
+correlated with aspect ratio, which is computed.</dd>
+<dt><strong>Plan area index (λp) and frontal area index (λf)</strong></dt>
+<dd>The share of ground covered by building, and the building wall area facing the wind per unit of
+ground. They are the standard inputs to roughness calculations. <code>lczkit</code> computes λp — it is
+building surface fraction — and does not compute λf.</dd>
+<dt><strong>Roughness length (z₀) and displacement height (z_d)</strong></dt>
+<dd>How much a surface slows the wind, and how far above the ground the wind profile effectively
+starts. Weather models need both. <strong><code>lczkit</code> computes neither</strong>, which is why its output is not
+yet a complete input to a weather model.</dd>
+</dl>
+<h2 id="spatial-units">Spatial units<a class="headerlink" href="#spatial-units" title="Permanent link">&para;</a></h2>
+<dl>
+<dt><strong>Spatial unit</strong></dt>
+<dd>The polygon everything is measured on and a class is assigned to. Every stage of the pipeline
+joins on its identifier, <code>unit_id</code>, and every choice below is a different way of cutting the
+study area into them.</dd>
+<dt><strong>Partition</strong></dt>
+<dd>The units must tile the study area exactly: no gaps, no overlaps. This is asserted rather than
+assumed, because units that overlap or spill outside the area silently corrupt the denominator
+of every share the package computes.</dd>
+<dt><strong>Bounding box (bbox)</strong></dt>
+<dd>The rectangle a run covers, given as west, south, east and north in longitude and latitude.</dd>
+<dt><strong>Grid, enclosure and patch</strong></dt>
+<dd>
+<p>The three ways <code>lczkit</code> can cut units, differing mostly in size:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th style="text-align: right;">median unit</th>
+<th>what it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>enclosure</td>
+<td style="text-align: right;">0.04 ha</td>
+<td>a city block, bounded by streets</td>
+</tr>
+<tr>
+<td>grid, 100 m</td>
+<td style="text-align: right;">1.00 ha</td>
+<td>a regular square cell — the default</td>
+</tr>
+<tr>
+<td>patch</td>
+<td style="text-align: right;">11.69 ha</td>
+<td>blocks merged until they reach an area floor</td>
+</tr>
+<tr>
+<td>a WUDAPT polygon</td>
+<td style="text-align: right;">2.2–52 ha</td>
+<td>for comparison: what a human draws</td>
+</tr>
+<tr>
+<td>a So2Sat patch</td>
+<td style="text-align: right;">10.24 ha</td>
+<td>for comparison</td>
+</tr>
+</tbody>
+</table>
+<p>The grid is the default because it is what published LCZ maps, the reference label sets and
+weather-model workflows all use. An enclosure is a <em>block</em>, which is smaller than an LCZ patch;
+patch units are built to land at patch scale.</p>
+</dd>
+</dl>
+<h2 id="data-sources">Data sources<a class="headerlink" href="#data-sources" title="Permanent link">&para;</a></h2>
+<dl>
+<dt><strong>Overture Maps</strong></dt>
+<dd>The open map data this package reads for buildings, streets, water and land use. It merges
+several sources — OpenStreetMap, Esri, Google Open Buildings, Microsoft's machine-learning
+footprints — <strong>winner-takes-all per feature</strong>: a building's attributes come from whichever
+source won its geometry, and are never blended. That is why a well-mapped city can still have
+almost no building heights: if a machine-learning source won the footprints, it supplied
+geometry and no attributes.</dd>
+<dt><strong>OpenStreetMap (OSM)</strong></dt>
+<dd>The volunteer-built global map. Inside Overture it is one contributing source among several,
+and the only one that carries building heights.</dd>
+<dt><strong>ESA WorldCover</strong></dt>
+<dd>A 10 m global land-cover map from the European Space Agency, used here for the impervious,
+pervious, tree and water shares.</dd>
+<dt><strong>WSF-3D</strong></dt>
+<dd>The World Settlement Footprint 3D building-height layer from DLR, the German Aerospace Centre,
+derived from TanDEM-X radar. About 90 m resolution, global. It is the third tier of the height
+cascade and, outside Europe and North America, the one that answers for most buildings.</dd>
+<dt><strong>TanDEM-X</strong></dt>
+<dd>The German radar satellite pair whose measurements WSF-3D is derived from.</dd>
+<dt><strong>GHS-BUILT-H</strong></dt>
+<dd>A 100 m global building-height layer from the Joint Research Centre of the European Commission,
+part of its Global Human Settlement Layer (GHSL). <code>lczkit</code> reads the ANBH band, which is
+building volume divided by <em>built-up</em> surface — the mean height of the built fabric rather than
+a height averaged over open ground.</dd>
+<dt><strong>GUPPD</strong></dt>
+<dd>The Global Urban Polygons and Points Dataset, from NASA's Socioeconomic Data and Applications
+Center and the Joint Research Centre. <code>lczkit</code> reads its bounds table — 5 558 urban regions
+across 173 countries, with a name, a country and a rectangle — to turn a city name into an
+extent. <strong><code>SMOD_ID</code></strong> is its identifier for a region, and it is unambiguous where a name is
+not: 149 of the 5 558 names are shared by more than one region.</dd>
+</dl>
+<h2 id="references-and-their-metrics">References and their metrics<a class="headerlink" href="#references-and-their-metrics" title="Permanent link">&para;</a></h2>
+<p>Three independent LCZ maps or label sets ship with loaders. They are research instruments; see
+<a href="../">On validating the output</a> for why they are not a quality gate for your own city.</p>
+<dl>
+<dt><strong>So2Sat LCZ42</strong></dt>
+<dd>A hand-labelled set of LCZ patches over 51 cities, produced for a machine-learning benchmark
+(Zhu et al. 2020). Each patch is 320 m square. It is the primary reference where it exists.</dd>
+<dt><strong>WUDAPT</strong></dt>
+<dd>The World Urban Database and Access Portal Tools — a community effort to describe cities by
+LCZ. Its training areas are polygons drawn by contributors worldwide: much wider coverage than
+So2Sat, and irregular, overlapping and of uneven vintage.</dd>
+<dt><strong>The Demuzere global map (<code>lcz_v3.tif</code>)</strong></dt>
+<dd>A global LCZ map produced from satellite imagery. It is <strong>an estimate with its own error</strong>, not
+ground truth, so agreement with it measures the disagreement between two models.</dd>
+<dt><strong>Ceiling</strong></dt>
+<dd>How well the Demuzere map itself agrees with hand labels on the same cells. It bounds what any
+map can score against that comparator, and it varies enormously by city — 22.8% in Mumbai,
+83.2% in Rio. A raw agreement figure is not comparable across cities without it beside it.</dd>
+<dt><strong>Overall accuracy (OA) and weighted overall accuracy (OA_w)</strong></dt>
+<dd><code>OA</code> is the share of units whose label matches the reference exactly. <code>OA_w</code> gives partial
+credit by how similar the two classes are, using Bechtel, Demuzere &amp; Stewart's (2020)
+similarity matrix, so calling a compact midrise an open midrise scores most of a point while
+calling it water scores near zero. <code>OA_w</code> above <code>OA</code> says the map is landing in <em>neighbouring</em>
+classes rather than at random. It is reported beside <code>OA</code> and never instead of it.</dd>
+<dt><strong>Built-class agreement</strong></dt>
+<dd>Agreement restricted to the built types, reported separately because an overall figure can be
+dominated by water and vegetation, which are easy, and then says nothing about the classifier.</dd>
+<dt><strong>Confusion axes</strong></dt>
+<dd>Two different ways a label can be wrong, and they diagnose different things. The <strong>height axis</strong>
+(1↔2↔3, 4↔5↔6) holds compactness fixed and varies the height band, so it tracks height-data
+quality. The <strong>compactness axis</strong> (1↔4, 2↔5, 3↔6) holds height fixed and varies building
+surface fraction, so it tracks footprint coverage and how units are drawn.</dd>
+</dl>
+<h2 id="outputs-and-tooling">Outputs and tooling<a class="headerlink" href="#outputs-and-tooling" title="Permanent link">&para;</a></h2>
+<dl>
+<dt><strong>GeoParquet</strong></dt>
+<dd>A columnar file format that stores geometry alongside ordinary table columns. Compact and fast,
+but its reader is optional in some geographic software — which is why a GeoPackage is written
+beside it.</dd>
+<dt><strong>GeoPackage</strong></dt>
+<dd>A single-file geographic format built on SQLite, readable by essentially every geographic
+information system (GIS) without extra components.</dd>
+<dt><strong>Coordinate reference system (CRS)</strong></dt>
+<dd>How coordinates map to places on earth. <code>lczkit</code> computes in a <strong>projected</strong> system, where
+coordinates are metres, so areas and distances are meaningful; longitude and latitude appear
+only when reading and writing data. The projection used is a <strong>UTM</strong> (Universal Transverse
+Mercator) zone chosen from the extent, identified by an <strong>EPSG</strong> code such as <code>EPSG:32618</code>.</dd>
+<dt><strong>GDAL</strong></dt>
+<dd>The Geospatial Data Abstraction Library, the file-format layer underneath most geographic
+software including QGIS. Its GeoParquet support is an optional build component, so a correct
+file can still fail to open in a GIS that was built without it.</dd>
+<dt><strong>PMTiles and MapLibre</strong></dt>
+<dd>The map site's two halves. PMTiles is a single-file tile archive read over ordinary HTTP range
+requests; MapLibre is the browser library that draws it. Together they need no tile server.</dd>
+<dt><strong>tippecanoe</strong></dt>
+<dd>The command-line tool that turns the run's geometry into tiles. It is an optional dependency;
+without it a run writes everything except the map site.</dd>
+<dt><strong>WRF and W2W</strong></dt>
+<dd>The Weather Research and Forecasting model, a widely used atmospheric model, and the tool that
+converts an LCZ map into input for it. This is the main downstream use for an LCZ map — and
+<code>lczkit</code> does not yet write the raster W2W expects.</dd>
+</dl>
+<h2 id="how-this-project-describes-its-own-work">How this project describes its own work<a class="headerlink" href="#how-this-project-describes-its-own-work" title="Permanent link">&para;</a></h2>
+<dl>
+<dt><strong>Height cascade, and tiers</strong></dt>
+<dd>Building heights are filled from a series of sources in order, each tried only where the last
+left a gap. Tier 1 is Overture's own height or storey count; tiers 3 and 4 are the global
+rasters. Which tier answered is recorded <strong>per building</strong> and summarised <strong>per unit</strong>, because
+a height measured on the ground and a height read off a 90 m raster produce the same label with
+very different trustworthiness.</dd>
+<dt><strong>Provenance</strong></dt>
+<dd>Which source a value came from, carried alongside the value. The package's central claim is
+that for building heights this matters as much as the value.</dd>
+<dt><strong>Preset</strong></dt>
+<dd>A named bundle of configuration. <code>Settings.load()</code> deliberately cannot produce a runnable
+configuration on its own — several measured thresholds default to nothing and raise if used —
+so a preset is what fills them, and which preset ran is recorded in the manifest.</dd>
+<dt><strong>Sweep</strong></dt>
+<dd>Trying a threshold at many values against a reference and choosing an operating point from the
+result, rather than picking a plausible number. Anything in this package whose threshold has
+not been swept ships <strong>disabled</strong>, which is why several options default to off.</dd>
+<dt><strong>Arm</strong></dt>
+<dd>One configuration in a controlled comparison — the experiments run the same city through two or
+three arms differing in one setting.</dd>
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.sections", "navigation.top", "navigation.instant", "navigation.tracking", "search.suggest", "search.highlight", "content.code.copy", "toc.follow"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
