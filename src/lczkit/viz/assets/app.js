@@ -350,6 +350,7 @@
       distance_natural: "nearest natural prototype",
       industrial_rule: "industrial rule (LCZ 10)",
       semantic_rule: "functional rule (Overture attributes)",
+      modal_filter: "smoothed from neighbours",
     };
     if (route === null || route === undefined || route === "") return "—";
     return routes[route] || String(route);

@@ -64,7 +64,20 @@ against the Rotterdam reference and its firing count is a figure phase write-ups
 rule sharing its route value would silently change what that count means. Which rule fired is in
 `semantic_rule_applied`."""
 
-ROUTES: tuple[str, ...] = (ROUTE_BUILT, ROUTE_NATURAL, ROUTE_INDUSTRIAL, ROUTE_SEMANTIC)
+ROUTE_SMOOTHED = "modal_filter"
+"""A label taken from the unit's neighbours rather than from its own parameters.
+
+Only `lczkit.classify.smoothing` emits it, and only when that filter is enabled — which it is not
+by default. Kept in the vocabulary regardless, so the category set does not depend on a
+configuration flag and a run with the filter off is schema-identical to one with it on."""
+
+ROUTES: tuple[str, ...] = (
+    ROUTE_BUILT,
+    ROUTE_NATURAL,
+    ROUTE_INDUSTRIAL,
+    ROUTE_SEMANTIC,
+    ROUTE_SMOOTHED,
+)
 """Every value `label_route` can take. A fixed vocabulary so the column is a stable category."""
 
 

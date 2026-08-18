@@ -48,8 +48,13 @@ always. The manifest records *dominated* separately from *excluded*.
 
 ## Prototypes
 
-Transcribed from `docs/references/tables/`. The two natural-class ranges `lczkit` defines itself
-are tagged `source="lczkit"` rather than attributed to Stewart & Oke.
+Transcribed from `docs/references/tables/`. The three ranges `lczkit` defines itself are tagged
+`source="lczkit"` rather than attributed to Stewart & Oke: `tree_fraction` and `water_fraction`,
+without which the natural classes cannot be separated at all, and `mean_building_area_m2`, without
+which **LCZ 7 and LCZ 8 come out swapped** — measured over built cells, "large low-rise" landing on
+55–93 m² footprints and "lightweight low-rise" on 7 000–13 000 m² ones, in every city checked. The
+building-size dimension carries weight 0.0 in every shipped preset and so changes no label; its
+weight and its two bounds are for a sweep to set.
 
 ::: lczkit.classify.prototypes
 
@@ -60,6 +65,16 @@ are tagged `source="lczkit"` rather than attributed to Stewart & Oke.
 ## Functional rules
 
 ::: lczkit.classify.rules
+
+## Spatial smoothing
+
+Every unit is classified independently of its neighbours, so an isolated cell can carry a label the
+fabric around it does not — salt-and-pepper at a grain Stewart & Oke never intended a class to be
+read at. A spatial filter is the standard answer in this literature and lczkit has never had one.
+**It ships disabled**, because its threshold has not been swept and every stored figure in this
+project was measured without it.
+
+::: lczkit.classify.smoothing
 
 ## Labels and colours
 
