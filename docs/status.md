@@ -656,3 +656,194 @@ makes this a decision. The whole site builds in **67 seconds**:
   costs 59.82 MB against the split's 46.55 MB — a 22% saving, and more to the point it halves what
   a reader fetches to pan around, since the detail tileset is touched only by a click at z14.
 
+
+## A run a GIS can open
+
+Reported from outside the repository: a run's units "had no coordinate reference system" in QGIS.
+They did. Every geometry-bearing file every run has ever written is valid GeoParquet 1.0.0 carrying
+the extent's coordinate system with an EPSG authority code — verified across all ten runs on disk,
+`EPSG:32618` (Bogotá) through `EPSG:32737` (Nairobi). Nothing was wrong with the files.
+
+**The format is standard; the reader is optional.** The Parquet driver in GDAL — the format layer
+under most geographic software — is a build component rather than part of the core, so a copy of
+QGIS built without it opens a correct file as a plain table, and the symptom points at the
+producer. Two things shipped in response:
+
+- **`units.gpkg`**, the same unit table as a GeoPackage, written by default beside the GeoParquet
+  and never instead of it. GeoPackage is SQLite, is in GDAL's core, and stores its coordinate
+  system in a table rather than in file metadata a driver has to know how to parse. Measured at
+  four sizes on a 116 491-unit run before being made the default: 0.22 s and 5.6 MB at 10 000
+  units, 1.83 s and 67.3 MB at 116 491 — sublinear, and 0.3% of a ten-minute run.
+  `output.gis_format = "none"` skips it.
+- **The coordinate system in the manifest**, which was a real gap and the more interesting half.
+  The system is *derived from the extent*, so no configuration carries it — meaning a run directory
+  could not state its own coordinate system without a GeoParquet reader, which is exactly the tool
+  the reader who needs telling does not have.
+
+`lczkit export <run_dir>` converts a run already on disk: it reads only what the run wrote, adds
+the GeoPackage, and fills in the two manifest fields. It edits the manifest as plain JSON rather
+than through the model, because revalidating an archived run against today's code would fill in
+defaults for fields that run never had and make it look like it came from software that did not
+produce it.
+
+## The API reference
+
+Every public symbol documented, `pydocstyle` rules enforced in continuous integration, and an
+MkDocs site published from a documentation directory that *cannot* leak the reference PDFs — it is
+a separate directory rather than the internal `docs/`, which is 205 MB on disk and would otherwise
+be published wholesale by one deploy from a working tree. A directory that cannot hold a PDF is a
+stronger guarantee than a rule that has to keep being correct.
+
+The docstring gap was narrow and shaped, which is the finding. Module docstrings were already
+complete and public classes nearly so; almost the whole gap was one pattern — **the single member
+that *is* the implementation was blank**, because the contract is stated once on the protocol it
+satisfies. Docstring inheritance does not rescue that, and it was checked rather than assumed: the
+implementations satisfy the protocols *structurally* and subclass nothing, so a generated page
+would have shown those methods blank.
+
+It also found that **continuous integration had never run.** The workflow triggered on a branch
+named `main`, and this repository's only branch is `master` — the *remote* is named `main`, which
+is what makes it easy to misread. A `ruff format` failure had been sitting in the tree unseen. A
+check that never runs is indistinguishable from a check that passes.
+
+## Base maps a reader can choose
+
+Six grounds behind a dropdown — OpenStreetMap, two Carto styles, Esri satellite imagery and two
+MapTiler styles — with the run's own streets and water as a separate overlay drawn over whichever
+is chosen. No Google tiles: their tile endpoint is undocumented and using it outside a Google Maps
+product breaks Google's terms, so it can record no licence, and every provider in the table records
+one.
+
+Three constants were set by measurement rather than assumption, including one that no status code
+would have caught: **Esri's tile URL is `{z}/{y}/{x}`, not `{z}/{x}/{y}`**, and transposing it
+returns valid imagery of the wrong place. It was settled by reading pixels — at zoom 5 the shipped
+order gives ocean mid-Pacific and sand over the Sahara; the transposition puts the Sahara in the
+sea.
+
+The offline guarantee survives as the library default and is bounded by a test rather than by a
+promise: `build_site()` with no configuration still names no remote host anywhere. What changed is
+that the *command line* offers the keyless grounds by default, after a report from outside that a
+plain `lczkit site build` produced no picker at all. A feature reachable only through an
+undocumented flag is not shipped. Anyone building an archival site now passes `--basemap none`, and
+that is a real regression in defaults for archival use, accepted knowingly.
+
+## The demonstration notebook
+
+Bogotá, on the 100 m grid and on patch units, with both maps embedded in the page. It found that
+**`OvertureSource` could not be constructed inside a Jupyter kernel at all**, and had not been able
+to since the first phase: a cosmetic setting that switches off a progress bar causes DuckDB to
+reinitialise its display, which raises in a kernel without `ipywidgets` — an error about a missing
+package, for an assignment whose entire purpose is to draw nothing. Every code path that reads
+Overture went with it. Under `pytest` there is no kernel, DuckDB draws nothing, and the assignment
+succeeds, so the whole test suite agreed the code was fine.
+
+The probe that diagnosed it **first returned the opposite answer**, because it was run without
+naming a kernel and silently picked one from another environment. A notebook's `kernelspec` decides
+which interpreter answers, and it is not visible in the output.
+
+## One overlay, any city, and a run that says where it was
+
+Three things were out of line with the package's stated purpose — a decent LCZ map for any city in
+the world, quickly, from open data.
+
+**The city locator was gated on validation data.** `--city` resolved 28 cities and read the So2Sat
+label archive to do it; for every other city on earth the interface was "find four numbers
+yourself". Meanwhile a 564 KB table of 5 558 urban regions across 173 countries had been on disk
+unread since the beginning, named in the specification's own layout diagram and in no source file.
+`lczkit cities` searches it now, and `--city` resolves against it. Two rulings came with it: an
+**ambiguous name is refused rather than resolved to the first match** — 149 of the names are
+shared, and taking the first would run the wrong continent under a manifest that looks entirely
+correct — and `--so2sat-window` is **a flag, not a fallback**, because a whole urban region and a
+30 km labelled window of the same city are different ground.
+
+**No run directory could say what ground it covered.** Checked before anything was built: 0 of the
+18 manifests on disk carried an extent, a bounding box or a place name, and no key in any of them
+mentioned one. The cause was structural rather than an oversight — the extent is an argument to the
+pipeline, so it appears in no configuration field and therefore in none of the configuration block
+the manifest serialises. The same gap as the coordinate system, and closed the same way.
+
+**Seventeen overlay operations answered questions about two layers.** Consolidated to two. The
+saving is honest but small on a fixture — 1.3 s of a 90 s run — and it scales with city size and
+with how many semantic groups are configured. Measured at four concentric extents before and after,
+because "fewer, larger operations" is exactly the shape of change that can be faster on a fixture
+and steeper at city scale: the exponent in extent is 0.890 before and 0.908 after, both sublinear
+and the same to within two parts in a hundred.
+
+## The argument, not the environment
+
+`lczkit run --bbox 1,2,3` on a machine with no `DATA_DIR` answered *"DATA_DIR is not set"* — it
+blamed the environment for a typo, at the one moment a reader has configured neither and cannot
+tell which is really wrong. Settings were loaded before the arguments were parsed, so every
+argument error that needs nothing on disk arrived as a configuration error.
+
+**Six tests pinned exactly the right behaviour and all six passed locally while failing in
+continuous integration.** The fixture that clears `DATA_DIR` deleted the variable and stopped —
+and then `load_dotenv()` searched upward from the module that called it, found the repository's own
+`.env`, and put it straight back. The fixture guarded the variable and not the file. The repository
+already knew the answer and had applied it once, in a single test, with a docstring explaining
+precisely this; it had never been made the default. **A test that can read the developer's `.env`
+is not testing a clean checkout**, and the failure is one-directional: the machine with the `.env`
+is the one that cannot see the problem, so "it passes locally" is the symptom rather than the
+reassurance.
+
+## The dimensions the classification was missing
+
+A scientific review, and the first phase since the stop rule to open a new question — because the
+review measured something the record did not contain. Two tiers, agreed in advance: instruments
+first, then the metric.
+
+**Classes 7 and 8 come out inverted on building size, in every city measured.** Class 8 is *large*
+low-rise — warehouses, malls, hangars. Class 7 is *lightweight* low-rise, the informal-settlement
+class. Over built cells of four runs on disk:
+
+| | class 7, median footprint | class 8, median footprint | ratio 8/7 |
+|---|---:|---:|---:|
+| Berlin | 13 419 m² | 767 m² | 0.06 |
+| Istanbul | 13 172 m² | 462 m² | 0.04 |
+| Bogotá | 6 756 m² | 55 m² | **0.01** |
+| Nairobi | 3 749 m² | 93 m² | 0.02 |
+
+The map assigns "large low-rise" to cells of 55–93 m² buildings and "lightweight low-rise" to cells
+of 7 000–13 000 m² sheds. **This needs no external reference to call wrong; it is internally
+contradictory.** The mechanism is structural rather than a matter of tuning: a big flat warehouse
+has a high building surface fraction and a low height, which is class 7's published box on two of
+the three weighted parameters, while a dense informal settlement has moderate building cover and —
+because Overture's street network does not contain its alleys — a low measured aspect ratio, which
+is class 8's box. **Neither box mentions how big a building is.** `mean_building_area_m2` has been
+computed since the parameters were first written and has never reached the classification.
+
+It also predicts, from the published table alone, two results this project had already measured and
+explained differently: class 8 scoring 0.0% on the Rotterdam fixture, and class 7 reaching its
+published building-cover range in only 8.2% of cells. The second was attributed to Overture's
+coverage of informal settlements, which is at most half of it.
+
+Four further measurements:
+
+- **A height error moves 53% of the classification, not 35%.** The height of roughness elements
+  carries weight 6 of 17 *and* is the numerator of the aspect ratio, weight 3. Every error budget
+  this project has written treated them as independent parameters. They share an input.
+- **The coarse height rasters compress within-unit height variation**, which is the earlier finding
+  running backwards. Median coefficient of variation: 0.266 for measured Overture heights in
+  Berlin, 0.192 for the 90 m radar product in Nairobi, and **0.112** for the 100 m product in
+  Bogotá, where 23.6% of units carry a single height throughout. Google Open Buildings was rejected
+  for having *too much* spread; what shipped has too little, and the height of roughness elements
+  is a geometric mean, so compression biases it upward.
+- **Class 7 is unreachable by arithmetic, not only by coverage.** Its box wants an aspect ratio of
+  1–2 together with a height of 2–4 m, which is a street 1–4 m wide. Neither a 100 m cell nor
+  Overture's street network contains one. Perfect footprints would not fix it.
+- **The three unit strategies are complementary and the record treated them as rivals.** A canyon
+  has to be measured against streets, and a grid cell is bounded by none: on one extent the aspect
+  ratio is missing from 10.8% of built grid cells against 0.9% of enclosures.
+
+Six instruments shipped and **none of them moves a label** — verified by reclassifying three runs
+on disk, bit-identical across 195 787 cells. Four changes to the classification shipped with them,
+three of which are inert by default: `mean_building_area_m2` is now a parameter the classification
+*can* read but carries zero weight in every preset; measuring on enclosures and the
+minimum-mapping-unit filter are both off; and oversized patch seeds are now split, so the area
+ceiling means what its name says. Nothing here has an accuracy claim, and each pending calibration
+has its reading recorded in advance so it cannot be chosen afterwards.
+
+One obvious fix was **tested and refuted**, and is recorded so it is not retried: a canyon ratio
+derived from plan and frontal area rather than from the street network is *worse* over the whole
+built set, though better on the densest tenth. The relation is sound; the deficit is in the height,
+not in the width.
