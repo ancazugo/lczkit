@@ -61,16 +61,17 @@ plt.rcParams.update({"figure.dpi": 120, "font.size": 9, "axes.grid": True, "grid
 # %% [markdown]
 # ## The extent, and why Bogotá is not a registry city
 #
-# `lczkit` ships a registry of 28 cities, and every one of them is there because So2Sat LCZ42
-# covers it densely enough to validate against — the screen is 500 labelled patches across at
-# least 4 classes. **Bogotá carries 8 patches, all of them LCZ 7** — eight against five hundred,
-# one class against four. So `lczkit run --city bogota` does not exist, and this notebook supplies
-# the extent directly.
+# `lczkit run --city bogota` works — it resolves against NASA GUPPD's gazetteer of 5 558 urban
+# regions, and Bogotá is one of them, `SMOD_ID 30_3370`. What Bogotá is *not* is one of the 28
+# cities in `lczkit.cities`, and that registry exists for a different purpose: every city in it is
+# there because So2Sat LCZ42 covers it densely enough to validate against, the screen being 500
+# labelled patches across at least 4 classes. **Bogotá carries 8 patches, all of them LCZ 7** —
+# eight against five hundred, one class against four. So `--so2sat-window` has nothing to offer
+# here, and no ceiling can be computed for this window.
 #
-# That extent is NASA GUPPD's urban-region bounding box for Bogotá, `SMOD_ID 30_3370` — the same
-# one the full-city run on disk used. Nothing in the package reads GUPPD; it is a reference for
-# picking an extent, and the bbox is quoted here so the run is reproducible from the notebook
-# alone.
+# The extent is quoted literally below rather than looked up, so this notebook reproduces from
+# itself — without a `DATA_DIR`, and without depending on which release of the bounds table is on a
+# given machine. It is the same window the full-city run on disk used.
 
 # %%
 BOGOTA_GUPPD = (-74.281808, 4.474229, -74.010769, 4.822439)  # NASA GUPPD SMOD_ID 30_3370

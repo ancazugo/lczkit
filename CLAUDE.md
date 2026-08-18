@@ -176,6 +176,12 @@ you must respect in every phase:
   A post processed csv file is available for all cities, including their names, countries and 
   bounding boxes. Use this as reference when I ask for a specific city to analyze.
 
+  **Built in Phase 23**: `lczkit.places` reads `guppd_bounds.csv` — 5 558 urban regions, 173
+  countries, 564 KB — and it is what `lczkit run --city` and `lczkit cities` resolve against. A
+  **locator, not a reference**: nothing there labels or validates anything, which is the point,
+  since the only city locator before it read the So2Sat label archive and therefore knew 28
+  places. The 117 MB polygon GeoPackage beside it is not read; a locator needs a rectangle.
+
 - **There is no separate cache directory.** Downloaded and derived source data is cached in
   place under `input/<Source>/`, with the cache key expressed as the file or subdirectory name.
   Caching is therefore indistinguishable from ingestion — a cache hit is just a file that is
@@ -1927,6 +1933,199 @@ to — otherwise a `TqdmWarning` about the same missing `ipywidgets` is the firs
 
 ---
 
+### Phase 23 — one overlay, any city, and a run that says where it was — CONCLUDED
+
+**Built on explicit request: "clean repeated code and improve on what's already written", against
+the package's stated purpose — a decent LCZ map for any city in the world, quickly, from open
+data.** Not a diagnostic phase. It opened no scientific question and **moved no measurement**: the
+one change that could have moved a number is pinned to 1e-9 against the values recorded before it.
+
+Three things were out of line with that purpose, and the second is the one nobody had noticed.
+
+#### The locator was gated on validation data
+
+`--city` resolved **28 So2Sat cities** and read `input/So2Sat-LCZ42/` to do it. For every other
+city on earth the interface was "find four numbers yourself". Meanwhile
+`input/NASA/GUPPD/guppd_bounds.csv` — **5 558 urban regions, 173 countries, name, ISO, country and
+bbox, 564 KB** — had been on disk unread since Phase 0, named in this file's layout diagram and in
+no `.py` file. The same shape as WUDAPT sitting unread for sixteen phases and the height cascade
+specified in Phase 3 and built in Phase 10: a capability the spec assumes and the code does not
+have is invisible until something asks for it.
+
+`lczkit.places` reads it; `lczkit cities` searches it; `--city` resolves against it.
+
+**The sizing is why a whole-region run is a sensible default**, and it was measured before the
+default was chosen rather than after:
+
+| GUPPD urban region | km² |
+|---|---:|
+| median | **80** |
+| 90th percentile | 412 |
+| above 900 km² (Berlin's 9.8-minute benchmark extent) | **239 of 5 558** |
+| largest (Jakarta) | 17 661 |
+
+So the ordinary case is minutes. `lczkit cities` prints each region's area and both commands name
+`--extent-km` above 900 km², because the area is the only thing in the interface that predicts a
+run's wall time.
+
+**Ruling: an ambiguous name is refused, never resolved to the first match.** 149 of the 5 558 names
+are shared — two Londons, two Cambridges, two Yorks — and taking the first would run the wrong
+continent and record a manifest that looks entirely correct. Nothing downstream of a bbox could
+tell. An exact match still outranks a substring one, so `london` means London and not East London;
+only a tie between regions of the *same* name asks the caller for `--country`, and the message
+lists only the tied candidates.
+
+**Ruling: `--so2sat-window` is a flag, not a fallback.** The GUPPD region and the densest 30 km
+So2Sat window of the same city are different ground — Berlin 1 152 km² against 899 — and only the
+second makes a run comparable with a recorded agreement figure. A locator that fell back to it, or
+silently past it, is how a run comes to look comparable with a published number while covering
+something else. Naming a city with no labelled window is an error that says to drop the flag.
+
+#### A run directory could not say what ground it covered
+
+**Checked before anything was built: 0 of the 18 manifests on disk carry an extent, a bbox, a
+window or a place name, and no key in any of them mentions one.** The cause is structural, not an
+oversight — the extent is an argument to `run_pipeline`, so it is in no `Settings` field and
+therefore in none of the `config` block the manifest serialises verbatim.
+
+**This is the Phase 19 CRS gap exactly, still open for the extent**, and the same rule closes it: a
+derived property has to be recorded somewhere the derivation is not. It matters more now that
+`--city` reaches 5 558 regions rather than 28.
+
+`RunManifest.extent` records the window, its area, and the locator that produced it — `bbox`,
+`guppd` (with the `SMOD_ID`, which is unambiguous where the name is not), or `so2sat_window` (with
+the registry key and the side length). A trim keeps the locator and records what it was trimmed
+from, because a 3 km trial over Cambridge is still a run about Cambridge and a directory of
+anonymous rectangles is unreadable.
+
+`lczkit export` backfills it for archived runs from the units' own bounds, tagged
+**`kind="recovered"`**. Deliberately a distinct value: a reconstruction is bounded by the units
+that were written rather than by the window requested — a grid overhangs its bbox by up to a cell —
+and nothing on disk says which city was named.
+
+#### Seventeen overlays to answer questions about two layers
+
+`ucp.industrial` carried three copies of "intersect a layer with the units, measure the pieces, sum
+by `unit_id`" and `ucp.semantics` two. Measured on the Hong Kong fixture — 5 449 buildings, 1 754
+parcels, 959 cells:
+
+| | overlays | rows pushed through `gpd.overlay` |
+|---|---:|---:|
+| `semantic_metrics` | 12 | 15 692 |
+| `industrial_metrics` | 5 | 5 539 |
+| rows actually present | — | **7 203** |
+
+Twelve is one tagged-buildings overlay, one whole-land-use overlay, and **one per configured
+semantic group per layer** — so the count grew with the configuration rather than with the city.
+
+`lczkit.units.overlay` is the one definition. `ucp.parameters` intersects each layer once and hands
+the pieces to every block, which is the move it already made for `building_area_m2` and for the
+same reason. Group selection is now a mask over pieces that exist. **Seventeen overlays to two**,
+and the seventeen is measured against the pre-consolidation implementation on the fixture, since
+that pattern no longer exists to run.
+
+**The dissolved-coverage path changed implementation, and that is the part worth recording.**
+`industrial` reached it through a whole-layer `union_all`; `semantics` through clip-then-dissolve
+per unit. The second is the form this file's anti-pattern list requires — the global union is
+superlinear *and* raises `GEOSException: side location conflict` over real Overture land use even
+after `make_valid`. `industrial` survived only because it ran on a few dozen parcels, and nothing
+about the helper's name said so. One definition means it cannot be reused onto a whole layer by
+someone who did not read that argument.
+
+**Equality is pinned, not argued.** The union of the clipped pieces inside a unit is the clip of
+the global union — equal by construction, and this project's record is full of constructions that
+measured differently. `tests/fixtures/ucp/*_evidence.parquet` holds the values **recorded from the
+implementation as it stood before the rewrite**, on all three fixtures, and
+`test_ucp_evidence_equivalence.py` asserts the shipped code reproduces every column to **1e-9**.
+Regenerating them is a separate script and deliberately not a `--update` flag: a pin a failing test
+can refresh is not a pin.
+
+**Honest sizing, stated because the headline invites overreading:** the two blocks are 1.3 s of a
+90 s fixture run. `clean_vectors` dominates and is untouched. The saving scales with city size and
+with the number of configured semantic groups, not with the fixture.
+
+`scripts/ucp_overlay_scaling.py` measures both call patterns at four extents, per the standing
+anti-pattern — "fewer, larger overlays" is exactly the shape of change that can be faster on a
+fixture and steeper at metropolitan extent.
+
+**Measured at four concentric Berlin extents, and the exponent is the answer that mattered.** The
+two arms are `shared` (what `ucp.parameters` does) and `separate` (what a direct caller gets — each
+block intersecting the layers it needs, five overlays). **`separate` is not the pre-consolidation
+code**: that pattern no longer exists to run, because group selection is now a mask over pieces, so
+the seventeen is measured on the fixture against the old implementation and the table below
+measures the two live paths.
+
+| km² | units | buildings | parcels | separate | shared | | overlay rows, separate → shared |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 16 | 1 695 | 12 361 | 2 888 | 3.44 s | 1.89 s | 1.82× | 42 859 → 15 249 |
+| 64 | 6 611 | 43 315 | 10 203 | 11.46 s | 6.51 s | 1.76× | 150 351 → 53 518 |
+| 144 | 14 751 | 99 587 | 20 472 | 24.34 s | 13.77 s | 1.77× | 339 705 → 120 059 |
+| 256 | 26 106 | 182 466 | 30 648 | 40.32 s | 23.48 s | 1.72× | 608 694 → 213 114 |
+
+**Exponent in extent: 0.890 separate against 0.908 shared.** Both sublinear, and the same to within
+two parts in a hundred — so concentrating the work into two large intersections does *not* make the
+stage steeper, which is the failure mode this measurement exists to rule out. The speed-up is flat
+across a sixteen-fold range of extent rather than decaying, which is what a constant-factor saving
+looks like. Re-runnable from `scripts/ucp_overlay_scaling.py`, which writes the full record as
+JSON into its own run directory; the numbers above are the whole of it.
+
+#### Duplication removed elsewhere
+
+- **The configuration constants.** `scripts/berlin_metropolitan.CLEANING`/`RELEASE` and
+  `scripts/unit_scale_experiment.AREAL_CONFIDENCE`/`HEIGHTS` were copies of what `lczkit.presets`
+  holds, guarded by two tests asserting the copies still matched. They now derive from the preset —
+  copied rather than aliased, since several drivers build variants by mutation and a mutation
+  reaching the preset would reconfigure every later run in the process. Every script keeps its name
+  and entry point, so the nine sibling importers are untouched. The guard tests lost their subject
+  and were replaced: one pins the eight metropolitan values as literals, which is what the
+  comparison was standing in for; the other pins that the derivation is still in place.
+  **`scripts/unit_scale_experiment.CLEANING` stays**, because it is a genuinely different measured
+  configuration for the 9 km² arms rather than a second copy of one.
+- **Six copies of `load_script`** across the test suite, and **seven copies of two
+  `CleaningConfig`s** — the fast-path `SMALL_CLEANING` (three files) and the fixture-scale
+  `FIXTURE_CLEANING` (four), which stay two constants because their values differ deliberately and
+  merging them would change what six tests exercise while looking like tidying.
+
+#### Three defects, each found by a check rather than by reading
+
+- **The two locators collided on a name, and the worse half was silent.** `lczkit cities` marks
+  the rows `--so2sat-window` works for, and matching on the name alone marked London, Ontario, Los
+  Ángeles, Chile and Santiago, Philippines — none of which carry So2Sat labels. Worse:
+  `--city london --country CAN --so2sat-window` resolved the registry by name and **ignored
+  `--country`**, so it would have run London, UK's window while the caller was disambiguating away
+  from it. `City` gained an `iso`; the marker keys on (name, country) and the flag now checks the
+  country rather than ignoring it. Found by asking how many GUPPD rows the marker would light up —
+  31, for 28 cities.
+- **`unit_pieces` called `rename_geometry` unconditionally**, and geopandas refuses to rename a
+  column to the name it already has — so the shared helper raised for every ordinary layer in the
+  package. Found by the equivalence test on its first run, which is what that test is for.
+- **`tests/test_docs_api_coverage.py` caught all five new modules** the first time it ran, exactly
+  as it caught eight subpackages on its first run in Phase 20. A coverage guard that has now fired
+  twice on real gaps is worth more than the page it protects.
+
+**And one found by writing a sentence about the code and then checking it.** The README draft said
+a run without tippecanoe "completes and reports the site as skipped rather than failing". It did
+not: the error propagated out of `run_pipeline`, the command line turned it into an exit code, and
+**the line naming the run directory was never printed** — so a ten-minute city whose only problem
+was an absent tool reported as a run that produced nothing, when every file but the site was
+already on disk. `PipelineResult.site`'s own docstring had claimed the skip behaviour since Phase
+15. The behaviour was changed to match the docstring rather than the other way round: the site is
+the last stage, `site_skipped` records why there is none, and the CLI names the run directory and
+`lczkit site build` before exiting non-zero.
+
+#### The README, and what it was hiding
+
+750 lines, of which `## Status` was 650 — a phase-by-phase research log as the front door of a
+package whose purpose is to make a map. Moved **verbatim** to `docs/status.md` (asserted verbatim,
+with only the `docs/experiments/` links rebased for the file's new depth), and the README rewritten
+as: what it is, the three locators and what each covers, what a run writes, what it will *not* tell
+you, **and a section saying not to use the bundled labels as a quality gate over your own city** —
+they reach 51 cities at most and two expert label sets agree at a median 79.7%, so an agreement
+figure without that context is not interpretable. This is the README half of item 13; the docs half
+landed as Phase 20 and the notebook half as Phase 22.
+
+---
+
 ### STOP RULE — applies after Phase 13
 
 **No further diagnostic phases.** Thirteen phases in, the finding rate remains high but the returns
@@ -1964,9 +2163,14 @@ Remaining work, in order:
     and packaging, not measurement: Bogotá on the grid and on patch units, with both map sites
     embedded in the page. It found that `OvertureSource` could not be constructed inside a Jupyter
     kernel at all, and had not been since Phase 1.
-11. **The paper.**
-12. **Cleanup** — release. **The docs half landed early as Phase 20 and the notebook half as
-    Phase 22**; what is left here is the README split and the release itself.
+11. ~~**Phase 23 — one overlay, any city, and a run that says where it was.**~~ **Concluded**, on
+    explicit request. Cleanup and packaging, not measurement, and the one change that could have
+    moved a number is pinned to 1e-9 against the values recorded before it. It found that no
+    manifest on disk records what ground its run covered, and that the only city locator read the
+    So2Sat label archive and therefore knew 28 places out of 5 558.
+12. **The paper.**
+13. **Cleanup** — release. **The docs half landed as Phase 20, the notebook half as Phase 22 and
+    the README split as Phase 23**; what is left here is the release itself.
 
 **`OA_w` was blocked and is now closed.** Bechtel, Demuzere & Stewart (2020) supplied both the
 class-similarity matrix and the definition; the matrix is transcribed in
@@ -2351,6 +2555,13 @@ reconcile silently.** That flagging behaviour is working; keep it.
 | Bogotá as a 29th registry city | **Refused.** So2Sat covers it with 8 patches of a single class against the 500-patch/4-class screen, so it cannot be validated — and adding a city changes the population every stored figure is measured over, against the standing rule to intersect city sets before differencing records. The notebook supplies GUPPD's `SMOD_ID 30_3370` extent directly and states that it is doing so. | 16, 18, 22 |
 | `mkdocs serve` and the embedded PMTiles maps | **Third instance of "correct artefact, failing reader".** Pages honours Range (`206`, measured); `mkdocs serve` returns `200` with the whole body, and `pmtiles.js` *raises* rather than degrading — so the published page is right and the local preview is two blank frames. The fix was already in the package: `lczkit.viz.serve` is a generic Range-capable server and handles the built docs site. Said on the page beside the maps, because the person who needs it is looking at the failure. | 7, 19, 22 |
 | mkdocs Markdown extensions inside a notebook cell | **Unavailable.** nbconvert renders markdown cells with its own renderer before mkdocs sees them, so `!!! note` shipped as literal text and a `../api/index.md` link would ship unrewritten and 404. Notebook cells get plain Markdown and built-site URLs; the admonition became a blockquote. The same seam that makes `execute: false` safe is what excludes the extensions. | 20, 22 |
+| Five copies of "overlay a layer against the units" | **Consolidated into `lczkit.units.overlay`, and the parameter stage went from 17 unit-vs-layer intersections to 2.** Three copies sat in `ucp.industrial` and two in `ucp.semantics`, and they disagreed about the thing that matters: one reached its dissolved coverage through a whole-layer `union_all`, which is the operation the anti-pattern list warns about, and survived only because it ran on a few dozen industrial parcels. Clip-then-dissolve per unit is exact — the union of the clipped pieces inside a unit is the clip of the global union — and **the recorded values for all three fixtures reproduce to 1e-9**, pinned in `tests/fixtures/ucp/` from before the rewrite. `semantic_metrics` alone ran twelve overlays, one per configured group per layer, so its cost grew with the configuration rather than with the city. | 5, 18, 23 |
+| `--city` resolved 28 So2Sat cities and no others | **The one easy locator was gated on validation data**, and `input/NASA/GUPPD/guppd_bounds.csv` — 5 558 urban regions, 173 countries, 564 KB — had been on disk unread since Phase 0, named in the layout diagram and in no `.py` file. Same shape as WUDAPT unread for sixteen phases. `lczkit.places` reads it and `lczkit cities` searches it. **Ruling: an ambiguous name is refused, not resolved to the first match** — 149 names are shared, and taking the first would run the wrong continent under a manifest that looks entirely correct. **Ruling: `--so2sat-window` is a flag, not a fallback** — a GUPPD region and a 30 km So2Sat window of the same city are different ground (Berlin 1 152 km² against 899), and only the second is comparable with a recorded figure. | 0, 16, 23 |
+| A run directory could not say what ground it covered | **Checked before building anything: 0 of 18 manifests on disk carry an extent, a bbox or a place name, and no key in any of them mentions one.** Structural rather than an oversight — the extent is an argument to `run_pipeline`, so it is in no `Settings` field and therefore in none of the `config` block the manifest serialises. **The Phase 19 CRS gap exactly, still open for the extent**, and closed the same way. `lczkit export` backfills archived runs from the units' own bounds under `kind="recovered"`, a distinct value because a reconstruction is bounded by the units written rather than by the window requested. | 19, 23 |
+| `app.js` described every map as a 100 m grid | `config.viz ? "grid, 100 m" : null` — a string that predates `UnitsConfig`, so Phase 17 made the strategy configurable and the front end went on asserting the old answer. A patch-units run misdescribed itself on its own page. **Fourth instance of a consumer restating what the producer already answers**, after the `label_route` vocabulary, the four `raster_*` scalars and the tippecanoe type coercion. Reads `config.units` now, and the guard strips JavaScript comments before matching — the comment explaining the removal contains the removed string, which is Phase 22's `ast` problem from the other side. | 15, 17, 21, 23 |
+| Two `CleaningConfig`s and six `load_script`s in the tests, and script constants copied from `lczkit.presets` | The preset copies are gone: the scripts derive from `lczkit.presets`, copied rather than aliased since several build variants by mutation. The two guard tests lost their subject and were replaced — one pins the eight metropolitan values as literals, which is what comparing two copies was standing in for. **`scripts/unit_scale_experiment.CLEANING` stays**: a genuinely different measured configuration is not a duplicate, and the two named test constants stay two for the same reason. | 15, 18, 23 |
+| The two locators collided on a name | **Found by checking the marker, and the worse half was silent.** `lczkit cities` marks the 28 rows `--so2sat-window` works for, and matching on the name alone marked **London, Ontario**, **Los Ángeles, Chile** and **Santiago, Philippines** — none of which carry So2Sat labels. The consequential half: `--city london --country CAN --so2sat-window` resolved the registry by name and ignored `--country`, so it would have run *London, UK's* window while the caller was disambiguating away from it. Silent wrong ground, reachable through the flag whose whole purpose is to keep ground straight. `City` carries an `iso` now; the marker keys on (name, country) and the flag checks the country rather than ignoring it. | 16, 18, 23 |
+| A run without tippecanoe reported as a run that produced nothing | The site is the **last** stage and every other file is written before it starts, but `TippecanoeMissingError` propagated out of `run_pipeline` and became an exit code *before* the line naming the run directory was printed. A ten-minute city whose only problem was an absent tool looked like a failure. `PipelineResult.site` had documented the skip behaviour since Phase 15 and the code never had it — so the behaviour was changed to match the docstring, not the reverse. `site_skipped` records the reason, the CLI names the run directory and `lczkit site build`, and the exit code stays non-zero because a site was asked for and not produced. **Found by writing a README sentence about it and then checking whether the sentence was true.** | 7, 15, 23 |
 
 ---
 

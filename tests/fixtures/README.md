@@ -234,6 +234,35 @@ column that is never written down cannot be asserted against.
 Demuzere global map, so agreement between the two is inflated by construction and is not a ceiling
 in the sense So2Sat gives one.
 
+## `ucp/` — recorded parameter values, added with the shared unit overlay
+
+`{hongkong,berlin,rotterdam}_evidence.parquet`: the functional evidence columns
+(`industrial_*`, `sem_*`, `building_tag_coverage`, `land_use_coverage`) for each fixture,
+185 KB in total. Written by `scripts/build_ucp_evidence_fixture.py`.
+
+**They were recorded before `ucp.industrial` and `ucp.semantics` were rewritten** onto
+`lczkit.units.overlay`, which collapsed five near-identical private helpers into one and took the
+parameter stage from seventeen unit-vs-layer intersections to two. That rewrite changed two things
+that were not merely structural: the dissolved coverage moved from a whole-layer `union_all` to
+clip-then-dissolve per unit, and group selection moved from the layer onto the pieces. Both are
+equal by construction, and "equal by construction" is an argument rather than a measurement —
+`tests/test_ucp_evidence_equivalence.py` is the measurement, at `atol=1e-9` on all three fixtures.
+
+Regenerating them is a separate command and deliberately **not** a `--update` flag on the test: a
+pin a failing test can refresh is not a pin.
+
+## `places/` — a slice of the GUPPD gazetteer, added with the general locator
+
+`guppd_bounds.csv`: twelve real rows from NASA/JRC's GUPPD bounds table, 1.3 KB, so
+`lczkit.places` and `lczkit cities` are testable with no `DATA_DIR` — which is also the point of
+the locator itself.
+
+Chosen for the cases that decide behaviour rather than for coverage: **three Londons** (GBR, CAN,
+and East London ZAF) and **two Cambridges** for the ambiguity path, `São Paulo` for accent folding,
+two Kenyan cities so a country filter has something to filter, and Berlin, Hong Kong, Nairobi and
+Jakarta because they are the cities the rest of the suite already talks about. Jakarta is the row
+that exercises the large-extent warning.
+
 ## Licensing
 
 All committed raster fixtures are **CC-BY-4.0** and are redistributed here under that licence:
@@ -252,6 +281,10 @@ All committed raster fixtures are **CC-BY-4.0** and are redistributed here under
 
 The Overture extracts are from Overture Maps Foundation data, which carries the licences of its
 upstream sources (ODbL for OSM-derived features, CDLA-Permissive-2.0 for the ML-derived ones).
+
+`places/guppd_bounds.csv` holds twelve rows of the Global Urban Polygons and Points Database
+(GUPPD v1, NASA SEDAC), which is **CC-BY-4.0**. The `ucp/` tables are derived from the Overture and
+land-cover fixtures above and carry no separate terms.
 
 The WUDAPT fixtures are **not** CC-BY. The LCZ Generator training areas are contributed under
 `CC BY-SA` and `CC BY-NC-SA 4.0`, per-polygon, and both licences are present in both windows — the
