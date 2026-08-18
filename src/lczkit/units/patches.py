@@ -120,6 +120,26 @@ class PatchReport:
     similar neighbour would have breached `max_area_m2`. High values mean the two thresholds are
     fighting each other."""
 
+    n_seeds_split: int
+    """Seeds that exceeded `max_area_m2` and were subdivided before merging.
+
+    Zero on a barrier set that produced no oversized face, and zero whenever `max_area_m2` is
+    `None`. High values say the barrier network left large unbounded faces — usually water, or a
+    periphery Overture does not cover — which is worth seeing rather than inferring from a
+    suspiciously round patch count."""
+
+    n_above_maximum: int
+    """Patches larger than `max_area_m2` when the merge stopped.
+
+    Non-zero only where a merge could not be avoided: `split_oversized` cuts every oversized seed
+    before the merge starts, so what remains here is a unit the merge itself pushed over the line
+    because the alternative was leaving a sliver stranded. That trade is deliberate — see
+    `n_blocked_by_max_area` — and this is the count that says how often it was taken."""
+
+    area_above_maximum: float
+    """Total area in those patches, m². The count alone understates it badly: a handful of units
+    can hold most of the extent."""
+
     min_area_m2: float
     max_area_m2: float
 
@@ -238,6 +258,78 @@ def _distance(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.sqrt(np.dot(difference, difference) / known.sum()))
 
 
+def split_oversized(
+    seeds: gpd.GeoDataFrame, max_area_m2: float | None
+) -> tuple[gpd.GeoDataFrame, int]:
+    """Subdivide any seed larger than `max_area_m2`, returning the seeds and how many were split.
+
+    **`max_area_m2` was a merge guard and not a ceiling, and this is what makes the name true.**
+    It refused to *combine* two seeds into something oversized and had no way to divide a seed that
+    already exceeded it — and enclosure seeds routinely do, because a face bounded by nothing but
+    the study edge is as large as the unmapped ground it covers. On a 4 555 km² Istanbul extent 807
+    patches exceeded the shipped 50 ha setting and held 72.7% of the total area, the largest being
+    1 073 km²; one 98 km² unit contained 1 310 buildings and was given a single LCZ label at a
+    uniqueness of 0.12. Benign where the giant faces are sea. Not benign where a city's periphery is
+    simply unsurveyed, which is the case in the cities this package exists to reach.
+
+    The cut is a regular grid of side `sqrt(max_area_m2)` anchored on each seed's own bounds, and it
+    is deliberately the dullest thing that works. It needs no building layer, so it behaves the same
+    on the unmapped hinterland that produces most oversized seeds; it is deterministic, so two runs
+    over the same extent agree; and intersecting a polygon with a grid that covers it preserves the
+    partition exactly — the pieces union back to the seed, and no ground is gained or lost. Pieces
+    that a concave seed leaves disconnected are exploded, so every unit stays a single polygon.
+
+    Slivers along the cut lines are expected and are not a problem: `merge_to_patches` runs next and
+    absorbs anything under `min_area_m2` into its most similar neighbour, which is the same
+    treatment enclosure slivers already get.
+
+    Piece count is bounded by the seed area over `max_area_m2` — that is, by the number of units the
+    caller asked for — so this adds no unbounded operation to the stage.
+    """
+    if max_area_m2 is None:
+        return seeds, 0
+    oversized = seeds.geometry.area > max_area_m2
+    if not bool(oversized.any()):
+        return seeds, 0
+
+    side = float(np.sqrt(max_area_m2))
+    kept = [seeds.loc[~oversized]]
+    for unit_id, geometry in seeds.loc[oversized, "geometry"].items():
+        pieces = _grid_pieces(geometry, side)
+        kept.append(
+            gpd.GeoDataFrame(
+                {"unit_id": [f"{unit_id}_s{index:04d}" for index in range(len(pieces))]},
+                geometry=gpd.GeoSeries(pieces, crs=seeds.crs),
+            ).set_index("unit_id")
+        )
+    out = pd.concat(kept)
+    return gpd.GeoDataFrame(out, geometry="geometry", crs=seeds.crs), int(oversized.sum())
+
+
+def _grid_pieces(geometry: shapely.Geometry, side: float) -> list[shapely.Geometry]:
+    """One polygon cut by a `side`-metre grid anchored on its own bounds, exploded and cleaned."""
+    minx, miny, maxx, maxy = shapely.bounds(geometry)
+    # Cell *origins*, so the grid covers [min, max) and one more cell always reaches past max. A
+    # degenerate bound gives a single origin rather than none — an empty grid would drop the seed.
+    columns = np.arange(minx, maxx, side) if maxx > minx else np.array([minx])
+    rowsy = np.arange(miny, maxy, side) if maxy > miny else np.array([miny])
+    cells = [
+        shapely.box(x, y, x + side, y + side) for x in columns.tolist() for y in rowsy.tolist()
+    ]
+    pieces: list[shapely.Geometry] = []
+    for part in shapely.intersection(np.asarray(cells), geometry):
+        if part.is_empty:
+            continue
+        pieces.extend(
+            piece
+            for piece in shapely.get_parts(shapely.get_parts(part))
+            if piece.geom_type in ("Polygon", "MultiPolygon") and piece.area > 0
+        )
+    # A seed smaller than one cell, or one the grid missed entirely, keeps itself rather than
+    # vanishing: losing ground here would break the partition the whole strategy rests on.
+    return pieces or [geometry]
+
+
 def merge_to_patches(
     seeds: gpd.GeoDataFrame,
     features: pd.DataFrame | None = None,
@@ -276,12 +368,28 @@ def merge_to_patches(
             "a ceiling below the target would block every merge"
         )
 
+    # Before anything else, and before the seed quantiles are taken, so those describe the seeds
+    # the merge actually ran on rather than the faces the barrier set happened to produce.
+    seeds, n_split = split_oversized(seeds, max_area_m2)
+
     seed_area = seeds.geometry.area
     quantiles = {
         q: float(seed_area.quantile(v)) for q, v in (("p10", 0.1), ("p50", 0.5), ("p90", 0.9))
     }
     if seeds.empty:
-        return seeds, PatchReport(0, 0, 0, 0, 0, 0, min_area_m2, max_area_m2 or float("inf"))
+        return seeds, PatchReport(
+            n_seeds=0,
+            n_patches=0,
+            n_merges=0,
+            n_isolates=0,
+            n_below_minimum=0,
+            n_blocked_by_max_area=0,
+            n_seeds_split=n_split,
+            n_above_maximum=0,
+            area_above_maximum=0.0,
+            min_area_m2=min_area_m2,
+            max_area_m2=max_area_m2 or float("inf"),
+        )
 
     graph = Graph.build_contiguity(seeds, rook=False)
     neighbours: dict[str, set[str]] = {
@@ -342,6 +450,7 @@ def merge_to_patches(
         n_merges,
         n_isolates,
         n_blocked,
+        n_split,
     )
 
 
@@ -391,6 +500,7 @@ def _assemble(
     n_merges: int,
     n_isolates: int,
     n_blocked: int,
+    n_split: int,
 ) -> tuple[gpd.GeoDataFrame, PatchReport]:
     """Union each surviving group's geometries and name it after its largest constituent seed."""
     area = seeds.geometry.area
@@ -417,6 +527,9 @@ def _assemble(
         n_isolates=n_isolates,
         n_below_minimum=int((patch_area < min_area_m2).sum()),
         n_blocked_by_max_area=n_blocked,
+        n_seeds_split=n_split,
+        n_above_maximum=int((patch_area > (max_area_m2 or float("inf"))).sum()),
+        area_above_maximum=float(patch_area[patch_area > (max_area_m2 or float("inf"))].sum()),
         min_area_m2=min_area_m2,
         max_area_m2=max_area_m2 if max_area_m2 is not None else float("inf"),
         seed_area_quantiles=seed_quantiles,

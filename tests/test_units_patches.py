@@ -150,6 +150,49 @@ def test_the_area_ceiling_blocks_a_merge_and_the_block_is_counted() -> None:
     assert report.n_merges == 1
 
 
+def test_a_seed_already_over_the_ceiling_is_split_rather_than_surviving_it() -> None:
+    """`max_area_m2` used to be a merge guard wearing a ceiling's name, and this is the difference.
+
+    It refused to *combine* two seeds into something oversized and had no way to divide a seed that
+    already exceeded it — and enclosure seeds routinely do, because a face bounded by nothing but
+    the study edge is as large as the unmapped ground it covers. Measured on a 4 555 km² Istanbul
+    extent: 807 patches over the shipped 50 ha setting, holding 72.7% of the area, the largest
+    1 073 km², and one 98 km² unit holding 1 310 buildings under a single label.
+    """
+    # One seed ten times the ceiling, beside a small one.
+    seeds = strip((0, 0, 1000, 100), (1000, 0, 1010, 100))
+
+    patches, report = merge_to_patches(seeds, None, min_area_m2=500.0, max_area_m2=10_000.0)
+
+    assert report.n_seeds_split == 1
+    assert report.n_above_maximum == 0
+    assert patches.geometry.area.max() <= 10_000.0
+    # The partition survives the cut: the same ground, still without overlaps.
+    assert patches.geometry.area.sum() == pytest.approx(seeds.geometry.area.sum())
+    assert patches.union_all().area == pytest.approx(seeds.geometry.area.sum())
+
+
+def test_splitting_is_off_when_no_ceiling_is_asked_for() -> None:
+    """`max_area_m2=None` means "no ceiling", and a caller who says so gets the faces they gave."""
+    seeds = strip((0, 0, 1000, 100), (1000, 0, 1010, 100))
+
+    patches, report = merge_to_patches(seeds, None, min_area_m2=500.0, max_area_m2=None)
+
+    assert report.n_seeds_split == 0
+    assert patches.geometry.area.max() == pytest.approx(100_000.0)
+
+
+def test_no_patch_over_the_ceiling_reports_zero_rather_than_nothing() -> None:
+    """ "Never fired" and "never measured" have to stay distinguishable, as everywhere else here."""
+    seeds = strip(*[(i * 10.0, 0.0, i * 10.0 + 10.0, 10.0) for i in range(10)])
+
+    _, report = merge_to_patches(seeds, None, min_area_m2=250.0, max_area_m2=10_000.0)
+
+    assert report.n_above_maximum == 0
+    assert report.area_above_maximum == 0.0
+    assert report.n_seeds_split == 0
+
+
 def test_an_isolate_stays_its_own_patch_and_is_counted() -> None:
     """An island has nothing to merge into. Leaving it below the minimum is correct; leaving it
     *unreported* would make a city full of islands look like one where the merge succeeded."""
