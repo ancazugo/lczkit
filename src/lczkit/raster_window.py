@@ -1,15 +1,14 @@
 """Raster windowing shared by the places in the package that read or clip a raster.
 
-Phase 3's height cascade reads a mean per building footprint; Phase 4's land-cover sources read
-class fractions per spatial unit. Those are different reductions over different libraries, but
+The height cascade reads a mean per building footprint; the land-cover sources read class
+fractions per spatial unit. Those are different reductions over different libraries, but
 both begin by finding the one window of a raster that covers a set of geometries, and getting the
 edge padding wrong is a quiet off-by-one rather than a crash. It lives here, next to `crs.py`,
 because it belongs to neither phase.
 
 `clip_raster` and `coverage_shortfall` join them because a run has to *materialise* a window before
 it can reduce over one — the global land-cover and reference products are read remotely and written
-into the run directory. They were script-local until Phase 15, which is how the publish driver came
-to clip Berlin's tile for every city; see `lczkit.sources.worldcover`.
+into the run directory. See `lczkit.sources.worldcover`.
 """
 
 from __future__ import annotations

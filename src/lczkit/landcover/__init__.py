@@ -1,4 +1,4 @@
-"""Phase 4 land cover: zonal class fractions per `unit_id`, never pixels.
+"""Land cover: zonal class fractions per `unit_id`, never pixels.
 
 Two interchangeable backends behind the `RasterSource` protocol — `LocalRasterSource` over a COG
 on disk, `EarthEngineSource` over `reduceRegions` — returning schema-identical tables because both

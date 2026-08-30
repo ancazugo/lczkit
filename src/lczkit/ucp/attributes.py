@@ -1,10 +1,9 @@
 """Overture's `subtype` and `class`, and how every functional parameter selects on them.
 
-Phase 1 ingests these two attributes on every building and every land-use parcel and cleaning is
-test-pinned to retain them; `industrial_fraction` read them from Phase 5 and the semantic groups
-from Phase 18. Both did their own selecting, and `semantics` imported a private helper out of
-`industrial` to avoid a third copy — which works and puts the vocabulary in whichever module
-happened to need it first.
+Ingestion reads these two attributes on every building and every land-use parcel, and cleaning is
+test-pinned to retain them. Two parameter blocks select on them — `industrial_fraction` and the
+semantic groups — so the vocabulary lives here rather than in whichever module happened to need
+it first.
 
 It lives here instead because three modules now read it: `ucp.industrial`, `ucp.semantics`, and
 `ucp.buildings`, which carries the two attributes through its overlay so the other two can select
@@ -48,7 +47,7 @@ def require_attributes(
         if wanted and column not in layer.columns:
             raise ValueError(
                 f"{name} has no {column!r} column, but ucp config selects features by it "
-                f"({', '.join(wanted)}). Phase 1 cleaning must retain subtype and class."
+                f"({', '.join(wanted)}). Cleaning must retain subtype and class."
             )
 
 

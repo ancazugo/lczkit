@@ -3,7 +3,7 @@
 Bernard et al. (2024) Sect. 2.3 make the weight vector an explicit degree of freedom rather than
 an assumption, for three stated reasons: the input data may not represent reality well, the method
 used for a given UCP may not match Stewart & Oke's definition, and a user may simply disagree that
-the seven properties matter equally. CLAUDE.md follows them - weights are config, the active
+the seven properties matter equally. lczkit follows them - weights are config, and the active
 preset appears in the manifest.
 
 **Their weights are for the built types only.** Sect. 2.5, p. 2085: "Those weights are only used
@@ -51,8 +51,8 @@ class WeightPreset:
 #: apply. Recorded rather than dropped: a reader comparing an lczkit run against a GeoClimate one
 #: needs to know that 4.5 of the published 21.5 total weight is unrepresented here, not infer it.
 UNAPPLIED_BERNARD_WEIGHTS: tuple[tuple[str, float, str], ...] = (
-    ("sky_view_factor", 4.0, "deferred in Phase 5"),
-    ("effective_terrain_roughness_length", 0.5, "deferred in Phase 5"),
+    ("sky_view_factor", 4.0, "not computed"),
+    ("effective_terrain_roughness_length", 0.5, "not computed"),
 )
 
 _BERNARD_BUILT: dict[str, float] = {
@@ -70,8 +70,8 @@ _UNIFORM: dict[str, float] = dict.fromkeys(DIMENSIONS, 1.0)
 
 # `mean_building_area_m2` is lczkit's own and ships **disabled in every preset**, `equal` included.
 # That is a departure from `equal`'s "uniform over every available dimension" and it is deliberate:
-# CLAUDE.md's standing ruling is that a threshold is swept against a reference and chosen at an
-# operating point, never picked, and neither the weight nor the two bounds in
+# a threshold is swept against a reference and chosen at an operating point, never picked, and
+# neither the weight nor the two bounds in
 # `docs/references/tables/lczkit_building_size_ranges.md` has been swept. Enabling it here would put
 # an invented number into a published label, and would do it in the preset people reach for when
 # they want a neutral comparison.

@@ -90,17 +90,16 @@ HEIGHT_AXIS_PAIRS: tuple[tuple[int, int], ...] = (
 
 1<->2<->3 among the compact types and 4<->5<->6 among the open ones, which is the axis Stewart &
 Oke separate on height: >25 m, 10-25 m and <10 m. A disagreement here is evidence about the
-**height estimate**, which is why this is the axis that pairs with `height_completeness` - CLAUDE.md
-predicts that where heights come from an areal product, error concentrates along it, because such a
-product cannot resolve those three bands within a heterogeneous unit.
+**height estimate**, which is why this is the axis that pairs with `height_completeness`: where
+heights come from an areal product, error concentrates along it, because such a product cannot
+resolve those three bands within a heterogeneous unit.
 
 Every pair within each compactness group, not only the adjacent ones. 1<->3 is a high-rise read as
 low-rise: a height confusion of two full bands rather than one, and the most severe kind. Counting
 only 1<->2 and 2<->3 would report the axis as quieter than it is.
 
-Earlier revisions of the spec called `COMPACTNESS_AXIS_PAIRS` the height axis. They are now
-reported separately and under the names that describe them; see CLAUDE.md's resolved-discrepancy
-table.
+The two axes are reported separately and under the names that describe them. They are easy to
+confuse: the compactness pairs hold height fixed and vary building surface fraction.
 """
 
 _BY_CODE = {lcz.code: lcz for lcz in LCZ_CLASSES}
@@ -124,7 +123,7 @@ def code_of(label: str) -> int:
 
 
 def legend() -> dict[str, dict[str, str | int]]:
-    """The full legend, keyed by code as a string, for the run manifest and the Phase 7 site."""
+    """The full legend, keyed by code as a string, for the run manifest and the map site."""
     return {
         str(entry.code): {
             "code": entry.code,

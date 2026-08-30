@@ -1,7 +1,7 @@
 """Vector tiles: GeoParquet in a `GeoDataFrame`, PMTiles out, `tippecanoe` in between.
 
-CLAUDE.md fixes the chain — GeoParquet -> **FlatGeobuf** via `pyogrio` -> tippecanoe -> PMTiles —
-and explicitly rules out routing through GeoJSON, which at buildings scale is dramatically slower.
+The chain is GeoParquet -> **FlatGeobuf** via `pyogrio` -> tippecanoe -> PMTiles. Routing through
+GeoJSON instead is dramatically slower at buildings scale and is not used.
 tippecanoe is a subprocess, never linked or vendored, and it is an optional extra (`lczkit[viz]`)
 so that the classification pipeline does not acquire a 36 MB binary it never calls.
 
@@ -11,8 +11,8 @@ version tippecanoe reports is the version the lockfile pinned. A `PATH` lookup w
 whatever a system package manager had put there, which is exactly the reproducibility hole the
 manifest exists to close.
 
-Every invocation is recorded verbatim, argv and all, in the site manifest. CLAUDE.md requires the
-exact tippecanoe command line to be recorded, and a recorded command is the only way a reader can
+Every invocation is recorded verbatim, argv and all, in the site manifest. A recorded command line
+is the only way a reader can
 tell a tile that is empty because the data was empty from one that is empty because
 `--drop-densest-as-needed` threw it away.
 
@@ -23,8 +23,8 @@ showed 8, 16, 32, 48, 64, 96, 128 and 192 all succeed and only 256 fails, so the
 breaks at the top of the range rather than at a particular value. Decoding two tilesets built at 8
 and 128 threads showed **identical tile content** — the only bytes that differ are the output
 filename tippecanoe records in its own metadata — so capping costs nothing but wall time, and tile
-generation is minutes rather than hours. This is the same shape of defect as Phase 8's `fork`
-deadlock: invisible on a laptop, fatal on the machine the package actually runs on.
+generation is minutes rather than hours. Like the multiprocessing start-method choice in
+`lczkit.cleaning.streets`, this is invisible on a laptop and fatal on a many-core machine.
 """
 
 from __future__ import annotations

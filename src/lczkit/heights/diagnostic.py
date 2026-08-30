@@ -1,8 +1,8 @@
 """Source-availability diagnostic: is this city viable before anyone waits for a full run?
 
-CLAUDE.md asks for non-null `height` and `num_floors` counts grouped by Overture source dataset
-over the study area. This module reports that grouping twice, because the data forces it: once
-by the dataset that won the *footprint*, and once by the dataset that supplied the *height*.
+It reports non-null `height` and `num_floors` counts grouped by Overture source dataset over the
+study area — twice, because the data forces it: once by the dataset that won the *footprint*, and
+once by the dataset that supplied the *height*.
 
 Those two tables disagree, and the disagreement is the useful part. In the Berlin test fixture,
 grouping by footprint reports 1509 heights on OpenStreetMap footprints — but 394 of those
@@ -47,7 +47,7 @@ class SourceAvailability(BaseModel):
     n_with_num_floors: int
 
     by_footprint_dataset: list[DatasetAvailability] = Field(default_factory=list)
-    """Grouped by the dataset that won each footprint's geometry — CLAUDE.md's literal ask."""
+    """Grouped by the dataset that won each footprint's geometry."""
 
     by_height_dataset: list[HeightProvenance] = Field(default_factory=list)
     """Heights only, grouped by the dataset that supplied the `height` value rather than the one

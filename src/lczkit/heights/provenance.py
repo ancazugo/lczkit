@@ -5,8 +5,8 @@ carries a `property` naming what it applies to — `''` for the footprint as a w
 pointer such as `/properties/height` for one attribute — alongside the `dataset` it came from
 and, for machine-derived values, a `confidence`.
 
-That distinction is load-bearing here, and it contradicts CLAUDE.md's Phase 1 description of
-Overture conflation as winner-takes-all with no attribute fusion. In release `2026-07-22.0`,
+That distinction is load-bearing here, and it qualifies the usual description of Overture
+conflation as winner-takes-all with no attribute fusion. In release `2026-07-22.0`,
 394 of the 6195 footprints in the Berlin test fixture are OSM-won yet carry a `height`
 attributed to Microsoft ML Buildings — a quarter of every tier-1 height in that extent. Grouping
 provenance by the footprint's dataset alone would report those as surveyed OSM heights.

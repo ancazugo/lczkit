@@ -1,8 +1,8 @@
 """Is this city's semantic evidence viable? Answered before anyone waits for a run.
 
-The exact counterpart of `lczkit.heights.diagnostic.source_availability`, which CLAUDE.md asks for
-so that "is this city viable?" can be answered empirically for *height* before a full run. Phase 18
-found the same question needs asking of the attributes, and the answer has the same shape:
+The exact counterpart of `lczkit.heights.diagnostic.source_availability`, which answers "is this
+city viable?" for *height* before a full run. The same question needs asking of the attributes,
+and the answer has the same shape:
 
 | city | tagged **area** | tagged **count** | dominant footprint source | its tagged share |
 |---|---:|---:|---|---:|
@@ -30,9 +30,9 @@ runs well above count coverage everywhere — tagged buildings are systematicall
 which is why `tagged_area_fraction` is the reported figure: it is the denominator every semantic
 fraction actually divides by.
 
-**This is the founding premise on a second, independent attribute.** Phase 9 measured tier-1 height
-at 64.3% across Europe and North America against 9.6% everywhere else, and concluded that height
-availability is the binding constraint on morphology-based LCZ mapping outside Europe. Building
+**This is the same limit on a second, independent attribute.** Tier-1 height coverage runs 64.3%
+across Europe and North America against 9.6% everywhere else, which is what makes height
+availability the binding constraint on morphology-based LCZ mapping outside Europe. Building
 attributes collapse in the same places and for the same reason — those footprints are ML-derived
 and carry geometry without tags — so a functional rule keyed on them inherits the constraint rather
 than escaping it.
@@ -93,8 +93,8 @@ class TagAvailability(BaseModel):
 
     `lczkit.cleaning.land_use` gives the layer no overlap resolution, so this double-counts shared
     ground and Milan's exceeds its own bbox. It is reported as a summed figure rather than made
-    exact because the exact version is a whole-extent `union_all`, which CLAUDE.md's standing
-    anti-pattern rules out — superlinear, and it raises `side location conflict` on real Overture
+    exact because the exact version is a whole-extent `union_all`, which is ruled out —
+    superlinear, and it raises `side location conflict` on real Overture
     land use even after `make_valid`. The per-unit `land_use_coverage` column is the dissolved
     quantity, and it gets there by clipping to units first."""
 

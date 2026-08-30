@@ -1,11 +1,12 @@
 """`LocalRasterSource`: land-cover fractions from a COG on disk.
 
-CLAUDE.md's first `RasterSource` implementation, and the one CI tests against — Earth Engine
-authentication in CI is not worth the pain, so the offline path is the one that has to be right.
+The offline `RasterSource` implementation, and the one continuous integration tests against —
+Earth Engine authentication in CI is not worth the pain, so the offline path is the one that has
+to be right.
 
 The reduction is `exactextract`, which weights each cell by the exact fraction of it the unit
-polygon covers. That is a real improvement over the `all_touched` rasterization Phase 3's height
-cascade uses: a 100 m unit against a 10 m product has ~40 boundary cells out of ~100, and counting
+polygon covers. That is a real improvement over the `all_touched` rasterization the height cascade
+uses: a 100 m unit against a 10 m product has ~40 boundary cells out of ~100, and counting
 each of those as either wholly in or wholly out would be a several-percent error on every unit.
 
 The user supplies the COG; nothing here downloads, and nothing here writes under `input/`.

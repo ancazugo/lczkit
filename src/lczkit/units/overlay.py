@@ -22,8 +22,8 @@ union of the clipped pieces inside a unit is the clip of the global union, so th
 an approximation of the unsafe one.
 
 **Splitting at unit boundaries stays the rule.** A footprint straddling a boundary contributes its
-share to each side rather than landing wholly in one, matching the Phase 3 splitting rule, so every
-fraction built here shares a denominator with `building_surface_fraction` exactly.
+share to each side rather than landing wholly in one, matching the rule the height cascade uses, so
+every fraction built here shares a denominator with `building_surface_fraction` exactly.
 """
 
 from __future__ import annotations

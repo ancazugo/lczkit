@@ -1,8 +1,8 @@
 """Running the height tiers in order, and recording what each one managed.
 
-The report is the point. A cascade that fills every building silently is indistinguishable from
-one that fell all the way through to a 100 m raster, and CLAUDE.md is explicit that those two
-outcomes must not look the same in the output.
+The report is the point. A cascade that fills every building from surveyed heights and one that
+fell all the way through to a 100 m raster produce the same labels, so the output has to tell
+them apart.
 """
 
 from __future__ import annotations

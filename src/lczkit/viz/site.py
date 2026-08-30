@@ -40,10 +40,10 @@ from lczkit.viz.tiles import TilesetReport, build_tileset, copy_tree
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
 """The vendored front end, shipped inside the wheel.
 
-This is the one place in the package that resolves a path from `__file__`, and it is not the case
-CLAUDE.md's rule is about: that rule forbids locating *data* relative to the source tree, because
-data lives under `DATA_DIR`. These are package resources — JavaScript and HTML that ship in the
-wheel — and there is no other way to find a file inside an installed package.
+This is the one place in the package that resolves a path from `__file__`. The rule against that
+is about locating *data* relative to the source tree, because data lives under `DATA_DIR`. These
+are package resources — JavaScript and HTML that ship in the wheel — and there is no other way to
+find a file inside an installed package.
 """
 
 SITE_DIR = "site"

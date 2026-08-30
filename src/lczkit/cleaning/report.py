@@ -6,8 +6,8 @@ fragments are assembled into a `CleaningReport`. This keeps every cleaning funct
 independently testable transform with no shared mutable state.
 
 **Steps record area, not only feature counts.** Counts alone are why a 23.5% loss of Berlin's
-building footprint area survived from Phase 1 to Phase 6.5 without anyone seeing it: the two
-operations responsible removed 1177 and 439 features respectively, and by count the second looks
+building footprint area went unnoticed for a long time: the two operations responsible removed
+1177 and 439 features respectively, and by count the second looks
 like the smaller of the two. By area the first costs 0.12% and the second 22.5%. Building surface
 fraction carries roughly 47% of the classification metric, so footprint area *is* the output here
 and a report that does not state it cannot be audited.
@@ -117,7 +117,7 @@ class FootprintCoverage(BaseModel):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def union_retention(self) -> float | None:
-        """`buildings_area`'s summed area over the raw **union** — Phase 1's acceptance criterion.
+        """`buildings_area`'s summed area over the raw **union** — the retention criterion.
 
         Above 1.0 means the layer holds more area than the ground it covers, i.e. residual
         double-counting; below 0.99 means ground was lost. The criterion is one-sided on the losing

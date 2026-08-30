@@ -2,7 +2,7 @@
 
 **Two city locators, and the distinction is load-bearing.** `--city` names one of GUPPD's 5 558
 urban regions and covers it; `--city ... --so2sat-window` takes the densest 30 km window of that
-city's So2Sat labels instead, which is the extent every validation sweep since Phase 9 measured
+city's So2Sat labels instead, which is the extent the published agreement figures were measured
 over. They are different ground, so a run says which one it used in its manifest rather than
 leaving a reader to infer it from a bbox.
 

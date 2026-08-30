@@ -21,10 +21,10 @@ patch's 10.24 — and has been rejected as a classification unit three times for
 still the better thing to *measure* a canyon on. This module lets a run do both: compute on
 enclosures, classify on whatever the caller asked for.
 
-**No accuracy claim is attached and none is available.** CLAUDE.md's Phase 12 lever is unit
-definition at a normalised compactness lift of 1.16 against height's 0.86, and the pre-registered
-reading is that if this is the answer the **compactness lift falls toward 1.0**. Plain enclosures
-as classification units *raised* it to 2.33, so a rise here is a refutation and not a success. That
+**No accuracy claim is attached and none is available.** The residual error this is aimed at shows
+up as a normalised compactness lift of 1.16 against height's 0.86, so if measuring on enclosures
+is the answer, that **compactness lift should fall toward 1.0**. Plain enclosures as classification
+units *raised* it to 2.33, so a rise here would be a refutation and not a success. That
 sweep is a sweep and has not been run, which is why `UcpConfig.measure_on` defaults to `"units"`
 and every stored figure remains comparable.
 """

@@ -1,4 +1,4 @@
-"""Phase 6 output - what a run writes into `output/lczkit/<run_id>/`.
+"""What a run writes into `output/lczkit/<run_id>/`.
 
 `units.parquet` is the archival record, `units_viz.parquet` the rounded table a map renders from,
 and `manifest.json` everything needed to read either of them and to reproduce the run - including

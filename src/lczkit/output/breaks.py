@@ -1,14 +1,12 @@
 """Classification breaks, precomputed once at run time so the map site never recomputes them.
 
-CLAUDE.md's Phase 7 constraint is that the static site is a pure transform of run outputs: "the
-site build must never recompute a parameter or a quantile". Breaks are the only quantity a
-choropleth needs beyond the values themselves, so computing them here is what makes that possible
-- and it also means two viewers of the same run see the same class boundaries, which they would
-not if each rendering derived its own.
+The static site is a pure transform of run outputs: it never recomputes a parameter or a quantile.
+Breaks are the only quantity a choropleth needs beyond the values themselves, so computing them
+here is what makes that possible — and it also means two viewers of the same run see the same class
+boundaries, which they would not if each rendering derived its own.
 
-Quantiles, not natural breaks. Jenks would mean a `mapclassify` dependency to save a one-line
-call, which CLAUDE.md's "don't add a dependency to save fewer than ~50 lines" rules out. The
-method name is recorded alongside the values so a consumer is never left inferring it.
+Quantiles, not natural breaks. Jenks would mean a `mapclassify` dependency to save a one-line call.
+The method name is recorded alongside the values so a consumer is never left inferring it.
 """
 
 from __future__ import annotations

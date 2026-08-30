@@ -8,15 +8,15 @@ subtly different populations. Object quantities — the count and the mean footp
 each whole building to the unit containing its representative point, because half a building is
 not a building and the mean area of a set of fragments is not the mean area of a set of buildings.
 
-For `EnclosureUnits` the two agree almost everywhere: Phase 1's cross-layer topology already drops
+For `EnclosureUnits` the two agree almost everywhere: cross-layer topology cleaning already drops
 buildings intersecting the streets that form enclosure boundaries. It is the 100 m grid where the
 distinction bites.
 
 Three height statistics come out of this module and only one of them is `Hr`. Stewart & Oke's
 height of roughness elements is the **geometric** mean of building heights — Bernard et al. (2024)
-Table 1 gives it as `exp(mean(log(h)))` — and the LCZ property ranges Phase 6 normalises against
-were defined for that quantity. The arithmetic mean sits above it whenever a unit mixes tall and
-short buildings, so substituting one for the other would bias exactly the heterogeneous units where
+Table 1 gives it as `exp(mean(log(h)))` — and the LCZ property ranges the classifier normalises
+against were defined for that quantity. The arithmetic mean sits above it whenever a unit mixes
+tall and short buildings, so substituting one for the other would bias exactly the units where
 classification is hardest, and would do it silently. `h_mean_area_weighted` and `h_std` are
 therefore shipped as **secondary** columns: the deferred roughness work (Macdonald, Kanda) needs
 them, and classification must not use them.
@@ -141,8 +141,8 @@ def _height_stats(pieces: pd.DataFrame, index: pd.Index, config: UcpConfig) -> d
     geometric means once each; assigning it to a single unit instead would leave `Hr` null in cells
     that are visibly built, which is the worse failure.
 
-    **One building, one vote.** Phase 1's shared prefix explodes multipolygons before either layer
-    forks, so a courtyard block or a multi-wing complex arrives here as N rows carrying one height.
+    **One building, one vote.** Cleaning explodes multipolygons before either layer forks, so a
+    courtyard block or a multi-wing complex arrives here as N rows carrying one height.
     Left alone that is N equal terms in an unweighted mean of logs, which quietly weights a
     multi-part footprint N times against its single-part neighbours. Parts are therefore collapsed
     on `FEATURE_ID` first, taking one height per source feature per unit. Where the column is absent
@@ -150,11 +150,11 @@ def _height_stats(pieces: pd.DataFrame, index: pd.Index, config: UcpConfig) -> d
 
     `h_geometric_area_weighted` is the same geometric mean with footprint area as the weight,
     shipped **secondary and unused by classification**. Bernard et al. Table 1 specifies the
-    unweighted form and the Stewart & Oke ranges Phase 6 normalises against were defined for it, so
-    substituting the weighted one would change the definition of `Hr` silently. It is emitted
-    because the unweighted mean gives a 5 m² shed the same vote as a tower block, and Phase 10
-    already established that `Hr`'s sensitivity to dispersion is what made the most accurate height
-    product degrade the map — this column is what makes the size of that effect measurable without
+    unweighted form and the Stewart & Oke ranges were defined for it, so substituting the weighted
+    one would change the definition of `Hr` silently. It is emitted because the unweighted mean
+    gives a 5 m² shed the same vote as a tower block, and `Hr`'s sensitivity to dispersion is what
+    made the most accurate height product degrade the map — this column is what makes the size of
+    that effect measurable without
     moving a published number.
 
     The remaining two secondaries are area-weighted, as a matched pair. The population (no Bessel

@@ -4,8 +4,8 @@
 module existed: no bbox, no place name, no extent of any kind. The reason is structural rather than
 an oversight — the extent is an argument to `run_pipeline`, so it is in no `Settings` field, no
 preset and no command-line default, and `Settings.model_dump()` is what the manifest serialises. It
-is the same shape as the CRS gap Phase 19 closed, and the same rule closes it: a derived property
-has to be recorded somewhere the derivation is not.
+is the same shape as the run CRS, and the same rule closes it: a derived property has to be
+recorded somewhere the derivation is not.
 
 It matters more now that `--city` reaches 5 558 urban regions rather than 28. Two runs of "Berlin"
 can legitimately mean the GUPPD urban region or the densest 30 km window of its So2Sat labels;

@@ -1,7 +1,7 @@
 """Where a computed parameter actually falls, against the range Stewart & Oke published for it.
 
-Agreement says *whether* a label was right. This says *why* it was wrong, and it is the instrument
-Phase 6.5 turns on: if a parameter is systematically outside the published band for the class a
+Agreement says *whether* a label was right. This says *why* it was wrong: if a parameter is
+systematically outside the published band for the class a
 unit genuinely belongs to, no weighting or threshold downstream can recover the label, because the
 prototype the unit should match is unreachable in that dimension.
 
@@ -15,10 +15,10 @@ while grouped by reference class it sits at 0.31.
 
 **"Reference" names a role, not a file, so the file has to travel with the numbers.** Two different
 references can fill that role - `lcz_v3`, which is another model's estimate, and hand-labelled
-So2Sat patches, which are the primary reference wherever they exist - and they do not agree. Phase
-6.7 measured the substitution inverting a diagnosis outright (compactness 25.8% against 55.2% on
-the same cells), and Phase 13 found this module's own caller silently grouping by `lcz_v3` across
-91 158 Berlin cells when 9 627 carried labels. `reference_file` is therefore required to mean
+So2Sat patches, which are the primary reference wherever they exist - and they do not agree.
+Substituting one for the other has inverted a diagnosis outright (compactness 25.8% against 55.2%
+on the same cells), and grouping by `lcz_v3` silently uses 91 158 Berlin cells where 9 627 carry
+labels. `reference_file` is therefore required to mean
 anything by a `RangeReport`: a table that does not name what it grouped by cannot be compared with
 another one, and the failure is invisible because both look like "the reference class".
 

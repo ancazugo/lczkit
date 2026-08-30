@@ -218,11 +218,11 @@ def test_land_use_selection_can_be_switched_off_entirely() -> None:
 
 
 def test_a_layer_missing_the_attribute_the_config_selects_on_is_refused() -> None:
-    """Phase 1 must retain `subtype` and `class` through cleaning — CLAUDE.md says `class` is the
-    only route to LCZ 10. Losing it should be loud, not a table of zeros."""
+    """Cleaning must retain `subtype` and `class`, since `class` is the only route to LCZ 10.
+    Losing it should be loud, not a table of zeros."""
     buildings, land_use = scene()
 
-    with pytest.raises(ValueError, match="Phase 1 cleaning"):
+    with pytest.raises(ValueError, match="Cleaning must retain"):
         industrial_metrics(buildings.drop(columns=["class"]), land_use, make_units(), CONFIG)
 
 

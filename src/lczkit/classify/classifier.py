@@ -1,7 +1,7 @@
 """`PrototypeClassifier` - the full 17-way distance vector and the labels drawn from it.
 
-The output CLAUDE.md asks for is the *vector*, not the label: "Don't return a bare LCZ integer
-anywhere in the core API; carry the distance vector." Hard labelling is a convenience over it, and
+The primary output is the *vector*, not the label: no core API here returns a bare LCZ integer
+without the distances that produced it. Hard labelling is a convenience over it, and
 every label this module emits records which mechanism produced it in `label_route`, so no
 consumer has to guess whether a unit was placed by morphology, by land cover or by the industrial
 rule.
@@ -91,7 +91,7 @@ class PrototypeClassifier:
         )
 
     def classify(self, parameters: pd.DataFrame) -> pd.DataFrame:
-        """Classify a Phase 5 parameter table, returning one row per `unit_id`.
+        """Classify an urban canopy parameter table, returning one row per `unit_id`.
 
         `parameters` must carry every prototype dimension plus `industrial_fraction`; the table
         `lczkit.ucp.compute_parameters()` returns does. Neither input nor index is mutated, and
@@ -262,9 +262,9 @@ class PrototypeClassifier:
     def _height_dependent_weight(self) -> dict[str, object]:
         """How much of each family's weight moves when the height cascade does.
 
-        Phase 3's height reaches the metric twice — as `height_of_roughness_elements_m` and, less
-        visibly, as the numerator of `momepy.street_profile`'s H/W. Every error budget this
-        project has written treats the two as independent dimensions. On the shipped built weights
+        Building height reaches the metric twice — as `height_of_roughness_elements_m` and, less
+        visibly, as the numerator of `momepy.street_profile`'s H/W. The two look like independent
+        dimensions and are not. On the shipped built weights
         they are 9 of 17 applied units, so a height product that moves `Hr` moves **53%** of the
         metric and not the 35% the `Hr` weight alone suggests.
 
@@ -276,7 +276,7 @@ class PrototypeClassifier:
             "reason": (
                 "height_of_roughness_elements_m is the geometric mean of building heights and "
                 "aspect_ratio is momepy.street_profile(height=buildings['height']), so both move "
-                "with the Phase 3 cascade. They are not independent dimensions."
+                "with the height cascade. They are not independent dimensions."
             ),
         }
         for family in ("built", "natural"):
@@ -325,7 +325,7 @@ FUNCTIONAL_ONLY_CODE = 10
 Bernard et al. (2024) remove it from the closest-distance approach, and the measurement behind
 following them is Rotterdam's: the pair-gated rule that assigned it morphologically was inert at
 every threshold from 0.05 to 0.5 across 671 cells of working port. Its distance stays in the
-seventeen-way vector because CLAUDE.md requires the full vector; only the argmin excludes it.
+seventeen-way vector, because the vector is always complete; only the argmin excludes it.
 """
 
 DOMINATED_CLASSES: dict[int, int] = {16: 14}

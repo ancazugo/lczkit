@@ -1,4 +1,4 @@
-"""Top-level orchestration for Phase 1.
+"""Top-level orchestration for vector cleaning.
 
 Fetch raw vectors from a `VectorSource` and run the full cleaning pipeline against them.
 """
@@ -61,8 +61,7 @@ def reproject_to_local_utm(
     an unpacked tuple at a call site.
 
     The third return value counts, per layer, the features that had to be clipped to the study
-    extent to survive the projection at all — see `_repair_unprojectable`. Zero for every city
-    measured before Phase 10.
+    extent to survive the projection at all — see `_repair_unprojectable`. Zero for most cities.
     """
     target = local_utm_crs(bbox)
     projected: dict[str, gpd.GeoDataFrame] = {}
@@ -129,8 +128,8 @@ def _repair_unprojectable(
 class CleanedVectors:
     """The cleaned output of `clean_vectors()`.
 
-    Holds live GeoDataFrames for in-process use — never itself serialized; that's Phase 6's job
-    on the eventual output GeoParquet.
+    Holds live GeoDataFrames for in-process use. It is never itself serialised; `lczkit.output`
+    writes the run's files.
 
     There is no plain `buildings` attribute, deliberately. Which of the two layers a caller wants
     is never obvious from the name, and the single ambiguous layer that used to be here is what
@@ -139,7 +138,7 @@ class CleanedVectors:
 
     buildings_area: gpd.GeoDataFrame
     """Area-preserving. Building surface fraction, `Hr`, building count, mean building area and
-    `industrial_fraction` all read this, and the Phase 3 height cascade runs on it."""
+    `industrial_fraction` all read this, and the height cascade runs on it."""
 
     buildings_topo: gpd.GeoDataFrame
     """Planar and non-overlapping. The `neatnet` exclusion mask and `momepy.street_profile` read
@@ -171,7 +170,7 @@ def _simplify(
 ) -> tuple[gpd.GeoDataFrame, CleaningStep]:
     """Dispatch to the tiled or whole-extent simplification, on `street_tile_size_m` alone.
 
-    Unset means whole-extent, which is how every figure recorded before Phase 8 was produced.
+    Unset means whole-extent, which is correct at any size and too slow above roughly 50 km2.
     Tiling is a deliberate, recorded choice rather than something that switches itself on at
     some extent — a run whose answer changed because the study area grew past a hidden
     threshold would be very hard to explain afterwards.
@@ -198,7 +197,7 @@ def clean_vectors(
     *,
     cache_dir: Path | None = None,
 ) -> CleanedVectors:
-    """Fetch raw vector layers from `source` and run the full Phase 1 cleaning pipeline.
+    """Fetch raw vector layers from `source` and run the full cleaning pipeline.
 
     `source` is typed against the `VectorSource` protocol, not any concrete implementation, so
     this stays source-agnostic — usable with `OvertureSource` or any future `VectorSource`.

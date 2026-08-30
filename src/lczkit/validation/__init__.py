@@ -1,7 +1,7 @@
-"""Phase 6 validation - agreement against a reference LCZ map, reported lczexplore-style.
+"""Agreement against a reference LCZ map, in the style of the `lczexplore` package.
 
 Per-class agreement and a confusion matrix, never a single accuracy number; plus the breakdowns
-that turn the Phase 3 height caveat into a measured quantity - agreement by `height_completeness`
+that turn the height caveat into a measured quantity - agreement by `height_completeness`
 band, and the two confusion axes reported apart: the height axis (1<->2<->3, 4<->5<->6) and the
 compactness axis (1<->4, 2<->5, 3<->6).
 
@@ -18,7 +18,7 @@ hand-labelled So2Sat LCZ42 / DFC2017 patches, which are ground truth on a unifor
 overlapping, spread over four decades, and available for every city rather than fifty-one.
 
 Where So2Sat exists it is primary and the agreement *between* it and `lcz_v3` is the ceiling on any
-score against the map. Phase 6.7 exists because that distinction was not being made. WUDAPT does
+score against the map, and that distinction is easy to lose. WUDAPT does
 **not** give a second such ceiling: the LCZ Generator's training areas are the training data behind
 the Demuzere map, so the two are not independent and their agreement is inflated by construction.
 

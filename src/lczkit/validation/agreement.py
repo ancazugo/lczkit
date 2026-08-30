@@ -1,7 +1,7 @@
 """Agreement against a reference LCZ map, reported the way the LCZ literature reports it.
 
-CLAUDE.md is specific that comparability matters more than a headline figure: per-class agreement
-and a confusion matrix, lczexplore-style, not a single accuracy number. A single number hides the
+Comparability matters more than a headline figure: per-class agreement and a confusion matrix,
+in the style of the `lczexplore` package, not a single accuracy number. A single number hides the
 thing a reader of an LCZ map actually needs to know, which is *which* classes are being confused
 for which - Bernard et al. (2024) Sect. 3.2 read their own results exactly this way, noting that
 their worst agreements sit on classes covering a negligible share of the area.
@@ -12,8 +12,8 @@ Four breakdowns beyond the standard ones are required here:
   it. An overall figure carried by water is not a statement about the classifier;
 - **agreement by `height_completeness` band**, so a city where tier-1 heights are near-absent can
   be judged rather than disclaimed;
-- **the height axis**, 1<->2<->3 and 4<->5<->6, holding compactness fixed. This is where CLAUDE.md
-  predicts error concentrates when heights come from an areal product, since such a product cannot
+- **the height axis**, 1<->2<->3 and 4<->5<->6, holding compactness fixed. This is where error
+  concentrates when heights come from an areal product, since such a product cannot
   resolve the <10 m / 10-25 m / >25 m bands within a heterogeneous unit. It is the axis that pairs
   with the stratification above; and
 - **the compactness axis**, 1<->4, 2<->5, 3<->6, holding height fixed. This is the diagnostic for
@@ -32,8 +32,8 @@ and `share_of_disagreement_area` is reported beside it. Redefining the field in 
 silently moved every stored arm-B number while leaving arm A untouched, which is the hardest kind of
 change to notice.
 
-Raw axis shares are **not comparable across cities**, and Phase 12 exists because they were compared
-anyway. Their denominator is all disagreement, so a city whose reference carries a large natural
+Raw axis shares are **not comparable across cities**, which is easy to get wrong.
+Their denominator is all disagreement, so a city whose reference carries a large natural
 share dilutes both axes, while an all-built fixture dilutes neither; and which pairs can fire at all
 depends on which classes the reference happens to contain. `axis_summary()` below reports the raw
 share alongside two corrections for exactly this - see its docstring.
@@ -210,7 +210,7 @@ class AgreementReport(BaseModel):
     built_agreement: float = 0.0
     """Agreement over the units the *reference* calls built (LCZ 1-10).
 
-    Reported separately from `overall_agreement` always, per CLAUDE.md, because an overall figure
+    Reported separately from `overall_agreement` always, because an overall figure
     can be dominated by trivially-classified natural cover and then says nothing about the
     classifier: Rotterdam's headline 42.5% was 266 water cells agreeing at 95.9% while LCZ 8 sat at
     0.0% over 224. The denominator is the reference's family, not the run's - grouping by what the
@@ -269,8 +269,8 @@ class AgreementReport(BaseModel):
     height_axis_summary: AxisSummary | None = None
     compactness_axis_summary: AxisSummary | None = None
     """The two axes pooled, with the normalised denominators. Compare cities on `lift`, never on
-    `share_of_disagreement` - Phase 12 exists because the raw shares were compared across cities
-    whose references carried different classes."""
+    `share_of_disagreement`, which is not comparable across cities whose references carry
+    different classes."""
 
     n_disagree: int = 0
     n_disagree_axis_eligible: int = 0

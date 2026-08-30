@@ -1,7 +1,7 @@
 """Labelled LCZ ground truth (So2Sat LCZ42 / DFC2017), reduced to one label per spatial unit.
 
-CLAUDE.md's ruling for Phase 6.7: `lcz_v3.tif` is an estimate carrying its own error, so measuring
-against it compares two models and reports the disagreement as lczkit's. Where hand-labelled LCZ
+`lcz_v3.tif` is an estimate carrying its own error, so measuring against it compares two models
+and reports the disagreement as lczkit's. Where hand-labelled LCZ
 polygons exist they are the **primary** reference and `lcz_v3` is a secondary comparator; the
 agreement between the two, on the same cells, is the ceiling on what lczkit can score against
 `lcz_v3` at all.
@@ -26,7 +26,7 @@ is precisely what `LabelMatch` exists to expose, so it is reported per run rathe
 10.24 ha, and is attributed to one 1 ha cell whose centre is systematically ~22 m from the patch
 centre. A 100 m cell inside a compact-midrise patch can legitimately be a courtyard. That is an
 irreducible floor under any agreement figure measured this way, and it is the same patch-versus-cell
-mismatch Phase 13 found in the published parameter ranges - the labels are patch-scale objects too.
+mismatch the published parameter ranges show - the labels are patch-scale objects too.
 
 The reduction is deliberately not raster-based. `reference_lcz` reads a categorical raster through
 `LocalRasterSource` because the Demuzere map *is* one; these patches are vector polygons whose

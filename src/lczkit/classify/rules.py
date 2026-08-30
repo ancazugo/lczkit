@@ -14,9 +14,8 @@ natural prototypes and never against the built ones.
 **LCZ 10.** Large low-rise and heavy industry are geometrically near-identical - large footprint,
 low, sparse - and the only published property separating them is anthropogenic heat output, at 300+
 W m-2 against at most 50, which nothing in open vector or raster data measures. So a functional
-attribute has to break the tie. CLAUDE.md is explicit that it must be applied *after* the distance
-and never folded into the metric, where a functional attribute would silently distort every other
-class.
+attribute has to break the tie. It is applied *after* the distance and never folded into the
+metric, where a functional attribute would silently distort every other class.
 
 **The rule is functional, not a pair gate, and the difference was measured.** The original design
 swapped LCZ 10 in only where it was already the runner-up behind LCZ 8. That was **measured inert
@@ -28,8 +27,8 @@ never the binding constraint, so no amount of tuning it could have helped.
 
 Following Bernard et al. (2024), LCZ 10 is therefore **removed from the distance metric entirely**
 and assigned functionally. Its distance is still computed and reported in the seventeen-way vector
-- CLAUDE.md requires the full vector, and a class that is unreachable *by selection* is exactly
-what the manifest's `unreachable_classes` field exists to record - but it can no longer win an
+- the vector is always complete, and a class that is unreachable *by selection* is exactly what
+the manifest's `unreachable_classes` field exists to record - but it can no longer win an
 argmin, so the only route to LCZ 10 is the industrial evidence.
 
 Note the asymmetry with LCZ 8, which is a deliberate divergence from Bernard, who excludes both.
@@ -57,11 +56,11 @@ ROUTE_BUILT = "distance_built"
 ROUTE_NATURAL = "distance_natural"
 ROUTE_INDUSTRIAL = "industrial_rule"
 ROUTE_SEMANTIC = "semantic_rule"
-"""A label assigned by a Phase 18 functional rule other than the industrial one.
+"""A label assigned by a functional rule other than the industrial one.
 
 Distinct from `industrial_rule` rather than folded into it: that rule's threshold is calibrated
-against the Rotterdam reference and its firing count is a figure phase write-ups cite, so a second
-rule sharing its route value would silently change what that count means. Which rule fired is in
+against the Rotterdam reference and its firing count is a published figure, so a second rule
+sharing its route value would silently change what that count means. Which rule fired is in
 `semantic_rule_applied`."""
 
 ROUTE_SMOOTHED = "modal_filter"
@@ -84,14 +83,14 @@ ROUTES: tuple[str, ...] = (
 def family_of(building_surface_fraction: pd.Series, threshold: float) -> pd.Series:
     """`"built"` where the building surface fraction reaches `threshold`, else `"natural"`.
 
-    `building_surface_fraction` is never null - Phase 5 reports 0.0, not NaN, for a unit holding
-    no buildings, precisely because "no buildings here" is a measurement - so the gate is defined
+    `building_surface_fraction` is never null - the parameter stage reports 0.0, not NaN, for a
+    unit holding no buildings, because "no buildings here" is a measurement - so the gate is defined
     for every unit and no unit goes unclassified for want of it.
     """
     if building_surface_fraction.isna().any():
         raise ValueError(
-            "building_surface_fraction contains nulls; Phase 5 reports 0.0 for a unit with no "
-            "buildings, so a null here means the parameter table was not produced by "
+            "building_surface_fraction contains nulls; the parameter stage reports 0.0 for a unit "
+            "with no buildings, so a null here means the parameter table was not produced by "
             "lczkit.ucp.compute_parameters()."
         )
     return pd.Series(
@@ -171,14 +170,12 @@ def apply_semantic_rules(
     units where that rule fired *and survived*, so they sum to the number of relabelled units and a
     rule shadowed by a later one is visible as a count of zero rather than by inference.
 
-    **A rule that never fires must be distinguishable from one never configured** — CLAUDE.md's
-    requirement for the LCZ 10 rule, and the reason every configured rule appears in the returned
-    mapping whether or not it fired.
+    **A rule that never fires must be distinguishable from one never configured**, which is why
+    every configured rule appears in the returned mapping whether or not it fired.
 
-    Every threshold here is **uncalibrated**, which is why they all ship disabled. CLAUDE.md's
-    standing ruling is that a threshold is swept against a reference and chosen at an operating
-    point, never picked; enabling one of these before that sweep would put an invented number into
-    a published label.
+    Every threshold here is **uncalibrated**, which is why they all ship disabled. A threshold is
+    swept against a reference and chosen at an operating point, never picked; enabling one of
+    these before that would put an invented number into a published label.
     """
     # Which rule *last* fired on each unit. Counting from this rather than from the resulting
     # labels is the difference between "this rule placed 40 units" and "40 units carry LCZ 8",

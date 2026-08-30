@@ -3,8 +3,8 @@
 **The measurement this exists to answer.** Enclosures are a block, not a patch. On the Hong Kong
 fixture `momepy.enclosures` over the cleaned barrier set returns a *median unit of 0.04 ha with
 72.9% under 0.1 ha*, against WUDAPT polygons that run 2.2-52 ha across the sixteen study cities and
-a So2Sat patch of 10.24 ha. Phase 6.5 found the same on Berlin from the other direction: 78% of its
-enclosures are sub-1000 m2 slivers.
+a So2Sat patch of 10.24 ha. Berlin shows the same from the other direction: 78% of its enclosures
+are sub-1000 m2 slivers.
 
 Re-cutting the barrier set does not fix that, which was worth measuring before assuming it:
 
@@ -24,10 +24,9 @@ pedestrian classes removed — a footpath is not a boundary between two LCZ patc
 of the network in Berlin, Hong Kong and Milan. Stage 2 merges each seed into the contiguous
 neighbour it most resembles until the units reach `min_area_m2`.
 
-**This does not replace `GridUnits` and is not the default.** CLAUDE.md's Phase 11 ruling stands:
-`unit_strategy` is config, default `grid`, no auto-selection. Grid cells are what every published
-LCZ map, validation dataset and WRF workflow uses, and every figure this project has recorded is on
-them.
+**This does not replace `GridUnits` and is not the default.** The strategy is config, the default
+is `grid`, and there is no auto-selection. Grid cells are what every published LCZ map, validation
+dataset and WRF workflow uses, and every published figure here is measured on them.
 
 **A caveat that must not be lost.** The merge reads building surface fraction and mean height, and
 those are two of the seven dimensions the classifier then scores. Units defined partly by the
@@ -35,7 +34,7 @@ quantity being measured is the standard shape of a regionalisation (SKATER, AZP 
 this way), and it is still a form of circularity: a patch is more homogeneous in BSF than a cell
 partly because it was *built* to be. It cannot inflate agreement with an external reference, which
 is what the validation measures, but it does mean `bsf_by_reference_class` on patch units is a
-weaker test than the same table on a grid. Phase 13's conclusions stay on the grid.
+weaker test than the same table on a grid, so read that table on the grid.
 """
 
 from __future__ import annotations
@@ -56,7 +55,7 @@ from lczkit.units.enclosures import EnclosureUnits
 DEFAULT_MIN_AREA_M2 = 50_000.0
 """5 ha - the median WUDAPT polygon across the sixteen study cities, which is the grain the
 reference is actually drawn at. A 100 m cell is 1 ha and a So2Sat patch 10.24 ha, so this sits
-between the two objects Phase 13 and Phase 14 identified as patch-scale.
+between the two objects that are genuinely patch-scale.
 
 **A floor, not a centre**, which is why it is named for what it does. Merging stops when a unit
 *reaches* the minimum, and the merge that gets it there overshoots, so the resulting median lands

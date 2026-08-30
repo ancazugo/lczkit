@@ -1,9 +1,5 @@
 """The `lczkit` command line.
 
-CLAUDE.md's MVP scope discipline said "do not add a CLI", and the deferred list carried one. Both
-were lifted by explicit request in Phase 15; see that phase's block for what moved into the package
-to make it possible, which is most of the work — the commands themselves are thin.
-
 Everything here is a wrapper. `run` calls `lczkit.pipeline.run_pipeline`, `site build` calls
 `lczkit.viz.build_site`, `site serve` calls `lczkit.viz.serve`, `export` calls
 `lczkit.output.export_gis`. No command computes anything, and none of them is the only way to

@@ -10,8 +10,7 @@ the directory years from now needs a Python interpreter and nothing else.
 `http.server.SimpleHTTPRequestHandler` does not implement `Range` — it answers 200 with the whole
 body, every time, for every tile. A 60 MB tileset would then be re-sent for each of hundreds of tile
 reads. So the forty lines below are the difference between a site that loads and one that does not,
-and they are the case CLAUDE.md's "don't add a dependency to save fewer than ~50 lines" rule is
-written for.
+and they are cheaper than taking on a web-server dependency for them.
 
 **Why a server is needed rather than opening `index.html` directly.** The Fetch standard leaves
 `file:` URLs unhandled, so `fetch()` against one returns a network error in both Chrome and Firefox,

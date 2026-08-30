@@ -1,8 +1,7 @@
 """Square tiles with buffered working windows, for chunking work that is superlinear in extent.
 
-Phase 8 exists because `neatnet.neatify` is superlinear in the extent handed to it. Measured on
-Berlin, with everything else in `clean_vectors` held constant (see
-`docs/experiments/phase-8-scaling.md`):
+This exists because `neatnet.neatify` is superlinear in the extent handed to it. Measured on
+Berlin, with everything else in `clean_vectors` held constant:
 
     extent    streets   neatify    largest rook-connected artifact component
       1 km2       706      9.6 s       538
@@ -146,9 +145,9 @@ def subset(layer: gpd.GeoDataFrame, window: Polygon) -> gpd.GeoDataFrame:
     **The positions are sorted, and that is load-bearing.** geopandas documents `sindex.query` as
     returning results in no guaranteed order ("often sorted, but there is no guarantee"), and
     `neatnet` simplifies a network as a function of the row order it receives — pinned by
-    `test_simplification_depends_on_input_row_order`. Phase 9 gave every layer one canonical order
-    at the front door (`overture._canonical_order`, sorted by GERS id) so that two runs of a city
-    agree; taking the query result unsorted here silently undid that on the tiled path, leaving the
+    `test_simplification_depends_on_input_row_order`. Every layer arrives in one canonical order
+    (`overture._canonical_order`, sorted by GERS id) so that two runs of a city agree; taking the
+    query result unsorted here would silently undo that on the tiled path, leaving the
     order a property of the installed GEOS build rather than of the data. It also fed
     `pooled_artifact_threshold`, so a change in STRtree traversal would have moved the threshold and
     with it the tile cache key.

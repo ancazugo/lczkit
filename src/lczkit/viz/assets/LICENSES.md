@@ -1,8 +1,8 @@
 # Vendored front-end assets
 
 These files are third-party source, committed into the repository and shipped in the wheel. They are
-**vendored, not fetched**: CLAUDE.md requires the site to open with no CDN link and no network, and
-a `<script src="https://...">` would break that on the first day a host went away.
+**vendored, not fetched**: the site opens with no CDN link and no network, and a
+`<script src="https://...">` would break that on the first day a host went away.
 
 Both are permissive and compatible with lczkit's own MIT licence. Neither is a Python dependency —
 nothing in the package imports them — so neither appears in `pyproject.toml`.

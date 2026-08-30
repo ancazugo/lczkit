@@ -1,8 +1,8 @@
 """`compute_parameters()` — the four parameter blocks joined into one table per `unit_id`.
 
 Pure transform. Every input is already in memory and already keyed on the unit of exchange, so
-this phase reads no raster, opens no file and touches no network; it is the stage that turns
-Phases 1-4's outputs into the vector Phase 6 measures against the LCZ prototypes.
+this stage reads no raster, opens no file and touches no network; it turns the earlier stages'
+outputs into the vector the classifier measures against the LCZ prototypes.
 
 **Each vector layer is intersected with the units exactly once here.** Three blocks below need the
 building layer against the units and three need the land-use layer, and each used to perform its
@@ -46,9 +46,9 @@ def compute_parameters(
     """The full urban canopy parameter table, indexed by `unit_id` to match `units`.
 
     Both building layers must have been through `lczkit.heights.cascade.fill_heights()` — or, for
-    `buildings_topo`, `lczkit.heights.inherit.inherit_heights()`. `land_cover` is a Phase 4
+    `buildings_topo`, `lczkit.heights.inherit.inherit_heights()`. `land_cover` is a land-cover
     fractions table for the dataset `config.land_cover_dataset` names. All vector layers must share
-    `units`' projected CRS — Phase 1's `clean_vectors()` returns them that way, and
+    `units`' projected CRS — `clean_vectors()` returns them that way, and
     `lczkit.ucp.registry.PARAMETERS` documents every column this returns.
 
     **Which layer feeds what.** `buildings_area` supplies every area statistic: building surface
@@ -92,7 +92,7 @@ def compute_parameters(
                 building_pieces=building_pieces,
                 land_use_pieces=land_use_pieces,
             ),
-            # Phase 18. Shares the same handed-down denominator and the same pieces, so every
+            # Shares the same handed-down denominator and the same pieces, so every
             # semantic building share is on the same base as `building_surface_fraction` and as
             # `FIND/B`, measured over the same intersection.
             semantic_metrics(

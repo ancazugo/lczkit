@@ -22,7 +22,7 @@ def _default_run_id() -> str:
 
 
 class OvertureConfig(BaseModel):
-    """Configuration for `OvertureSource` (Phase 1)."""
+    """Configuration for `OvertureSource`, the Overture Maps vector source."""
 
     release: str | None = None
     """Pinned Overture release string, e.g. "2026-07-22.0". Never "latest" — `OvertureSource`
@@ -30,17 +30,17 @@ class OvertureConfig(BaseModel):
 
     source_dir_name: str = "Overture_Maps"
     """Name of the subdirectory under `input/` that `OvertureSource` caches into. Matches the
-    directory already used by other projects sharing `DATA_DIR`, not CLAUDE.md's diagram
-    spelling ("Overture")."""
+    directory already used by other projects sharing `DATA_DIR`, rather than the plain
+    "Overture"."""
 
 
 class CleaningConfig(BaseModel):
-    """Configurable thresholds for the Phase 1 building-cleaning pipeline.
+    """Configurable thresholds for the building-cleaning pipeline.
 
     None of these have a literature-derived default — Majer & Fleischmann (arXiv:2603.00132)
-    Supplementary D, the paper CLAUDE.md names as the cleaning spec, describes the
-    corresponding operations only qualitatively. They are left unset here; the cleaning
-    pipeline raises if used before being explicitly configured.
+    Supplementary D, the cleaning specification these operations follow, describes them only
+    qualitatively. They are left unset here; the cleaning pipeline raises if used before being
+    explicitly configured.
     """
 
     building_max_area_m2: float | None = None
@@ -64,8 +64,7 @@ class CleaningConfig(BaseModel):
     Also fixture-derived: 0.5 is where the median dropped footprint falls below the median building
     (230 m² on Berlin), recovering 95% of the area the old centreline rule destroyed. Both this and
     `building_road_buffer_m` were measured on two European cities and should be re-derived for a
-    city whose fabric or road-centreline generalisation differs — see
-    `docs/experiments/phase-6.6-footprint-attrition.md`.
+    city whose fabric or road-centreline generalisation differs.
     """
 
     building_merge_limit_m2: float | None = None
@@ -80,14 +79,12 @@ class CleaningConfig(BaseModel):
     street_tile_size_m: float | None = None
     """Edge length of the tiles street simplification is chunked into, in metres.
 
-    `None` runs `neatnet` over the whole extent, which is what every number recorded in this
-    repository before Phase 8 was computed with. Set it to engage the tiled path — required
-    above roughly 50 km2, where whole-extent simplification stops completing in usable time
-    (100 km2 measured at 50 minutes on one core, 256 km2 abandoned after 4h12m).
+    `None` runs `neatnet` over the whole extent. Set it to engage the tiled path, which is
+    required above roughly 50 km2, where whole-extent simplification stops completing in usable
+    time (100 km2 measured at 50 minutes on one core, 256 km2 abandoned after 4h12m).
 
     2000.0 m is the fixture-derived working value: tiles small enough to keep the largest face-
-    artifact component tractable, large enough that seam handling stays a small share of the
-    work. See `docs/experiments/phase-8-scaling.md`.
+    artifact component tractable, large enough that seam handling stays a small share of the work.
     """
 
     street_tile_buffer_m: float | None = None
@@ -116,7 +113,7 @@ class CleaningConfig(BaseModel):
 
 
 class ArealTierConfig(BaseModel):
-    """One areal raster tier of the Phase 3 height cascade (tiers 2-4).
+    """One areal raster tier of the height cascade (tiers 2-4).
 
     Areal products assign a *neighbourhood* mean to individual buildings, which is a
     categorically weaker measurement than a per-building height. Everything product-specific
@@ -161,10 +158,10 @@ class ArealTierConfig(BaseModel):
     **It stays zero for every shipped tier, including Open Buildings 2.5D**, whose sampled heights
     are 19% below 2 m against about 1% for the coarse products. A floor tuned until that stopped
     hurting would be a threshold no documentation supports, and it would be copied into other
-    pipelines and outlive its justification. It also treats the wrong thing: Phase 10 measured the
-    damage as within-unit *dispersion* (CV 0.441 against reality's 0.195), and clipping one side
-    of an over-wide distribution leaves the other side where it was. The route to rescuing a
-    fine-resolution product is shrinkage toward the unit mean, which is deferred.
+    pipelines and outlive its justification. It also treats the wrong thing: the measured damage
+    is within-unit *dispersion* (CV 0.441 against reality's 0.195), and clipping one side of an
+    over-wide distribution leaves the other side where it was. The route to rescuing a
+    fine-resolution product is shrinkage toward the unit mean, which is not implemented.
     """
 
     confidence: float | None = None
@@ -173,14 +170,13 @@ class ArealTierConfig(BaseModel):
 
 
 def _default_areal_tiers() -> list[ArealTierConfig]:
-    """CLAUDE.md's tiers 2, 3 and 4, in cascade order.
+    """Tiers 2, 3 and 4 of the cascade, in order.
 
     **The default cascade is `coarse`.**
 
-    `source_dir_name` follows CLAUDE.md's `input/` diagram. `GHSL` is deliberately not the
-    `input/GHS/` already on this system: that directory holds GHS-SMOD and GHS-UCDB for other
-    projects, and a new sibling costs nothing while writing into a shared directory risks
-    something.
+    `GHSL` is deliberately not the `input/GHS/` some systems already carry: that directory holds
+    GHS-SMOD and GHS-UCDB for other purposes, and a new sibling costs nothing while writing into
+    a shared directory risks something.
 
     The per-product raster parameters below are read from each product's own documentation —
     see `HeightProductsConfig` — not inferred from the files. `filename` stays `None`, because a
@@ -189,9 +185,9 @@ def _default_areal_tiers() -> list[ArealTierConfig]:
 
     **Open Buildings 2.5D ships `enabled=False`.** It is the finest tier, has the lowest
     per-building error of the three (MAE 5.39 m against 7.44 and 8.17) and is the only one with
-    any within-unit skill (pooled Spearman +0.289 against +0.042 and +0.001) — and Phase 10
-    measured it making the map *worse*: `coarse -> full` is −1.9 points of built-class agreement,
-    positive in only 4 of 9 cities, with Mumbai falling below its own tier-1-only baseline. `Hr`
+    any within-unit skill (pooled Spearman +0.289 against +0.042 and +0.001) — and it makes the
+    map *worse*: `coarse -> full` is −1.9 points of built-class agreement, positive in only 4 of
+    9 cities, with Mumbai falling below its own tier-1-only baseline. `Hr`
     is a geometric mean, which dispersion depresses, and this product's within-unit spread is
     0.441 against reality's 0.195. Per-building accuracy is the wrong acceptance test for a height
     product feeding an LCZ map. The tier stays implemented and one flag from use.
@@ -295,22 +291,22 @@ class HeightProductsConfig(BaseModel):
 
 
 class HeightConfig(BaseModel):
-    """Configuration for the Phase 3 building-height cascade.
+    """Configuration for the building-height cascade.
 
     Tiers run in the order they appear: Overture attributes first, then `areal_tiers` in list
     order. Adding a fifth areal product is an entry in that list, not a code change.
 
     The three `*_confidence` values have no default for the same reason `CleaningConfig`'s
     thresholds have none: no published number defines them. `height_confidence` is an ordinal
-    ranking of measurement quality, not a calibrated probability, and inventing plausible-looking
-    defaults is the failure mode CLAUDE.md warns about most sharply — nothing would crash, the
-    map would just carry a quietly wrong quality claim. Set them explicitly and they are
+    ranking of measurement quality, not a calibrated probability, and a plausible-looking invented
+    default is the worst failure mode available here — nothing would crash, and the map would
+    carry a quietly wrong quality claim. Set them explicitly and they are
     serialised into the run manifest, where the choice is visible and reproducible.
     """
 
     storey_height_m: float = 3.0
     """Metres per storey for the `num_floors` fallback. Varies regionally and is a real error
-    source; 3.0 m is the default CLAUDE.md states."""
+    source; 3.0 m is a conventional default and should be set per city where one is known."""
 
     overture_height_confidence: float | None = None
     """`height_confidence` for buildings resolved from Overture's `height` attribute — except
@@ -342,7 +338,7 @@ UnmappedPolicy = Literal["exclude", "assign", "raise"]
 
 `"raise"` is the default: an unmapped value means the configured mapping does not match the
 product actually on disk, and silently dropping or lumping those cells would produce a quietly
-wrong map — the failure mode CLAUDE.md warns about most sharply.
+wrong map.
 """
 
 
@@ -358,8 +354,8 @@ immediate `EEException`, so the kind is declared rather than probed.
 class GeeAssetConfig(BaseModel):
     """Earth Engine coordinates for one land-cover dataset.
 
-    Serialised verbatim into the run manifest, which is where CLAUDE.md requires the collection
-    ID and date range to appear.
+    Serialised verbatim into the run manifest, so the collection ID and date range a run used are
+    part of its record.
     """
 
     collection_id: str | None = None
@@ -394,8 +390,8 @@ class GeeAssetConfig(BaseModel):
 class LandCoverDatasetConfig(BaseModel):
     """One land-cover product and the mapping from its raw values to fraction classes.
 
-    Everything product-specific lives here rather than in code, per CLAUDE.md: the class-to-
-    fraction mapping is config, never hardcoded. `LocalRasterSource` and `EarthEngineSource` read
+    Everything product-specific lives here rather than in code: the class-to-fraction mapping is
+    config, never hardcoded. `LocalRasterSource` and `EarthEngineSource` read
     the same instance, which is what makes the two backends return schema-identical tables.
 
     A dataset is either *categorical* (`value_classes`) or *binned* (`bins` + `bin_classes`),
@@ -422,8 +418,9 @@ class LandCoverDatasetConfig(BaseModel):
 
     classes: list[str]
     """The full, ordered output class list. Fixes the output schema to config rather than to
-    whichever classes happen to occur in a given city — a class with no cells still gets a column
-    holding 0.0, which is what Phases 6 and 7 need. Same argument as `height_frac_*` in Phase 3."""
+    whichever classes happen to occur in a given city, so a class with no cells still gets a
+    column holding 0.0 and two cities produce the same columns. The height-tier fractions are
+    fixed to the configured cascade for the same reason."""
 
     value_classes: dict[int, str] | None = None
     """Categorical mapping from raw raster value to class name."""
@@ -548,10 +545,10 @@ _CANOPY_TREE_THRESHOLD_M = 3.0
 
 
 def _default_land_cover_datasets() -> list[LandCoverDatasetConfig]:
-    """CLAUDE.md's two MVP land-cover products, both inert until a COG is placed.
+    """The two default land-cover products, both inert until a COG is placed.
 
-    Neither directory exists on the system this was developed against, so `filename` is `None` for
-    both and `LocalRasterSource.from_settings` will say so plainly rather than failing obscurely.
+    `filename` is `None` for both, so `LocalRasterSource.from_settings` says the product is
+    missing rather than failing obscurely.
     """
     return [
         LandCoverDatasetConfig(
@@ -579,7 +576,7 @@ def _default_land_cover_datasets() -> list[LandCoverDatasetConfig]:
             classes=["tree", "non_tree"],
             # Distinct prefix: this dataset's `tree` is a second, competing estimate of the same
             # quantity WorldCover's class 10 supplies, and both must be able to sit on one units
-            # table for Phase 5 to choose between them.
+            # table for the parameter stage to choose between them.
             column_prefix="canopy_frac_",
             bins=[_CANOPY_TREE_THRESHOLD_M],
             bin_classes=["non_tree", "tree"],
@@ -614,7 +611,7 @@ def _default_land_cover_datasets() -> list[LandCoverDatasetConfig]:
 
 
 class LandCoverConfig(BaseModel):
-    """Configuration for the Phase 4 land-cover fraction sources.
+    """Configuration for the land-cover fraction sources.
 
     Datasets are an ordered list so adding a third product is a config entry, not a code change —
     the same shape as `HeightConfig.areal_tiers`.
@@ -628,8 +625,8 @@ class LandCoverConfig(BaseModel):
     `Settings.load()`."""
 
     gee_batch_size: int = 2000
-    """Units per `reduceRegions` call. CLAUDE.md's "chunk units into batches of a few thousand to
-    stay under element-count and payload limits"."""
+    """Units per `reduceRegions` call. A few thousand keeps a request under Earth Engine's
+    element-count and payload limits."""
 
     gee_max_units: int | None = None
     """Refuse an Earth Engine run covering more than this many units. `None` means no ceiling."""
@@ -744,13 +741,13 @@ def _default_semantic_groups() -> list[SemanticGroupConfig]:
 
 
 class UcpConfig(BaseModel):
-    """Configuration for the Phase 5 urban canopy parameters.
+    """Configuration for the urban canopy parameters.
 
     Two kinds of value live here. The `*_classes` lists are vocabulary — which land-cover class
     feeds which Stewart & Oke surface fraction, and which Overture attribute values count as
-    industrial — and CLAUDE.md requires those in config rather than in code. The two
-    `street_profile_*` values are momepy's own defaults, restated so they reach the run manifest
-    instead of staying implicit in a library signature.
+    industrial — and they belong in config rather than in code. The two `street_profile_*` values
+    are momepy's own defaults, restated so they reach the run manifest instead of staying implicit
+    in a library signature.
     """
 
     street_profile_distance_m: float = 10.0
@@ -775,9 +772,9 @@ class UcpConfig(BaseModel):
     measure_on: Literal["units", "enclosures"] = "units"
     """Which units the parameters are *measured* on, as distinct from classified on.
 
-    `"units"` measures on whatever `UnitsConfig.strategy` produced, which is what every stored
-    figure in this project was computed with. `"enclosures"` measures on street-bounded enclosures
-    and moves the result onto the target units, area-weighted.
+    `"units"` measures on whatever `UnitsConfig.strategy` produced, and is what every published
+    figure was computed with. `"enclosures"` measures on street-bounded enclosures and moves the
+    result onto the target units, area-weighted.
 
     **The reason is `aspect_ratio`.** A street canyon has to be measured against streets, and a
     100 m grid cell is not bounded by any — so H/W, which is 3 of the 17 applied weight units and
@@ -785,16 +782,14 @@ class UcpConfig(BaseModel):
     built grid cells against 0.9% of its enclosures. On the densest decile the enclosures also put
     82.2% of cells inside LCZ 2's published H/W band against the grid's 70.2%.
 
-    Defaults to `"units"` because **no accuracy claim is attached**: the sixteen-city sweep is
-    wired and has not been run, and the pre-registered reading is in `lczkit.ucp.measure`. Turning
-    it on makes a run incomparable to every recorded figure until that sweep says how far it moves
-    them.
+    Defaults to `"units"` because **no accuracy claim is attached**: this has not been calibrated
+    against a reference, so turning it on makes a run incomparable with one at the defaults.
     """
 
     land_cover_dataset: str = "worldcover"
     """Which `LandCoverConfig.datasets` entry supplies the surface fractions. The ETH canopy
-    dataset is a second, competing tree estimate rather than a full land-cover product, and Phase 4
-    documents why it reads high — so the WorldCover route is the default."""
+    dataset is a second, competing tree estimate rather than a full land-cover product and reads
+    high, so WorldCover is the default."""
 
     tree_classes: list[str] = Field(default_factory=lambda: ["tree"])
     """Land-cover classes counting as tree cover."""
@@ -816,10 +811,10 @@ class UcpConfig(BaseModel):
     industrial_building_classes: list[str] = Field(default_factory=lambda: ["industrial"])
     """Overture building `class` values counting as industrial.
 
-    `warehouse` is deliberately absent. CLAUDE.md's own statement of the problem this parameter
-    exists to solve is that a distribution warehouse and a refinery are geometrically identical —
-    the warehouse being the LCZ 8 case and the refinery the LCZ 10 one. Counting warehouses as
-    industrial would push exactly the units the rule is meant to keep apart towards LCZ 10.
+    `warehouse` is deliberately absent. The problem this parameter exists to solve is that a
+    distribution warehouse and a refinery are geometrically identical — the warehouse being the
+    LCZ 8 case and the refinery the LCZ 10 one. Counting warehouses as industrial would push
+    exactly the units the rule is meant to keep apart towards LCZ 10.
     """
 
     industrial_land_use_subtypes: list[str] = Field(default_factory=list)
@@ -837,7 +832,7 @@ class UcpConfig(BaseModel):
     """
 
     semantic_groups: list[SemanticGroupConfig] = Field(default_factory=_default_semantic_groups)
-    """Functional groups read out of Overture's `subtype` and `class`, added in Phase 18.
+    """Functional groups read out of Overture's `subtype` and `class`.
 
     The four `industrial_*` vocabularies above are **not** replaced by this and are not derived from
     it. They feed `industrial_fraction_of_building_area`, which is the column the calibrated LCZ 10
@@ -851,17 +846,15 @@ class UcpConfig(BaseModel):
 
 
 class SemanticRuleConfig(BaseModel):
-    """One functional assignment rule keyed on a Phase 18 semantic column.
+    """One functional assignment rule keyed on a semantic evidence column.
 
     The same mechanism as the LCZ 10 rule, generalised: a unit over `min_fraction` takes `lcz`
     whatever the distance metric said, and the displaced answer is kept as `lcz_secondary`.
 
-    **All of these ship disabled, and that is a ruling rather than caution.** CLAUDE.md requires a
-    threshold to be *calibrated* against a reference and chosen at an operating point, never picked
-    — the LCZ 10 threshold went through nineteen settings against Rotterdam and Phase 14 found the
-    threshold was not even the binding constraint there. The values below are placeholders marking
-    where a swept number goes, and enabling one before its sweep would put an invented number into
-    a published label.
+    **All of these ship disabled, and that is deliberate rather than cautious.** A threshold here
+    is *calibrated* against a reference and chosen at an operating point, never picked because it
+    looks reasonable. The values below are placeholders marking where a calibrated number goes,
+    and enabling one before that would put an invented number into a published label.
     """
 
     name: str
@@ -876,10 +869,10 @@ class SemanticRuleConfig(BaseModel):
     max_mean_building_area_m2: float | None = None
     """Optional gates on `mean_building_area_m2`.
 
-    Available to a *rule* although it is not a metric dimension — Phase 14 established that
-    `mean_building_area_m2` never reaches the distance metric, so the stated reason for keeping
-    LCZ 8 in that metric described a parameter that could not act. A rule is not the metric, and
-    "large low-rise" is a claim about building size that the semantic evidence alone cannot make.
+    Available to a *rule* although it is not a metric dimension: `mean_building_area_m2` carries
+    zero weight in every preset, so the distance metric cannot act on it. A rule is not the metric,
+    and "large low-rise" is a claim about building size that the semantic evidence alone cannot
+    make.
     """
 
     reason: str = ""
@@ -898,7 +891,7 @@ def _default_semantic_rules() -> list[SemanticRuleConfig]:
             min_mean_building_area_m2=1000.0,
             enabled=False,
             reason=(
-                "LCZ 8 fails by construction, not by tuning (Phase 14): its building-surface band "
+                "LCZ 8 fails by construction, not by tuning: its building-surface band "
                 "overlaps LCZ 3 and 6, its Hr band is identical to LCZ 3, 6 and 9, so aspect ratio "
                 "is its only separator in the metric — and aspect ratio is null exactly where "
                 "large setbacks stop streets reaching buildings, which is most of an LCZ 8 unit. "
@@ -914,9 +907,9 @@ def _default_semantic_rules() -> list[SemanticRuleConfig]:
             max_mean_building_area_m2=100.0,
             enabled=False,
             reason=(
-                "LCZ 7 reaches its published building-surface range in 8.2% of cells (Phase 13), "
-                "low on both tails across five non-European cities, and it is the class the "
-                "founding premise is most about. **This rule will mostly not fire where it "
+                "LCZ 7 reaches its published building-surface range in 8.2% of cells, low on both "
+                "tails across five non-European cities, and it is the class the height-coverage "
+                "limit bears on most. **This rule will mostly not fire where it "
                 "matters**: Overture has no slum/shanty/ger/tent value, and tagged building area "
                 "runs 13.6% outside Europe and North America against 48.6% inside — Rio at 3.1%. "
                 "That is a result to report, not a reason to omit the rule, and "
@@ -928,7 +921,7 @@ def _default_semantic_rules() -> list[SemanticRuleConfig]:
 
 
 class ClassificationConfig(BaseModel):
-    """Configuration for the Phase 6 prototype-distance classifier.
+    """Configuration for the prototype-distance classifier.
 
     Every threshold the classifier applies lives here and is serialised into the run manifest.
     Two of them - `natural_dominant_fraction` and `natural_negligible_fraction` - move the
@@ -980,7 +973,7 @@ class ClassificationConfig(BaseModel):
     identical on aspect ratio, building, impervious, pervious, tree and water, and wider on Hr (at
     most 1 m against at most 0.25 m) - so d(F) >= d(D) for every possible unit, and ties break to
     the lower code. **Adding "F" here cannot make F reachable.** Reaching it needs a land-cover
-    mapping that emits bare ground separately and a Phase 5 fraction carrying it, not a config
+    mapping that emits bare ground separately and a surface fraction carrying it, not a config
     change. The manifest records F as dominated rather than excluded, so the distinction survives
     into the run record.
     """
@@ -990,8 +983,8 @@ class ClassificationConfig(BaseModel):
     `docs/references/tables/lczkit_natural_class_ranges.md` - lczkit's own, not Tier 1."""
 
     semantic_rules: list[SemanticRuleConfig] = Field(default_factory=_default_semantic_rules)
-    """Phase 18 functional rules, all shipped disabled pending calibration. See
-    `SemanticRuleConfig`, and `lczkit.classify.rules.apply_semantic_rules` for what one does."""
+    """Functional rules read off Overture's semantic attributes, all shipped disabled pending
+    calibration. See `SemanticRuleConfig`, and `lczkit.classify.rules.apply_semantic_rules`."""
 
     natural_negligible_fraction: float = 0.10
     """Tree or water cover a natural class treats as absent. Reuses the 10% boundary Stewart &
@@ -1017,12 +1010,12 @@ class ClassificationConfig(BaseModel):
     lcz10_min_industrial_fraction: float = 0.45
     """`lcz10_industrial_column` above which a unit is assigned LCZ 10.
 
-    Deliberately set to under-trigger, per CLAUDE.md: Overture cannot distinguish heavy from light
-    industry, so a missing LCZ 10 is a visible gap while a light-industrial estate mislabelled as
-    heavy industry is an invisible error that propagates into any model consuming the map.
+    Deliberately set to under-trigger: Overture cannot distinguish heavy from light industry, so a
+    missing LCZ 10 is a visible gap while a light-industrial estate mislabelled as heavy industry
+    is an invisible error that propagates into any model consuming the map.
 
-    **Calibrated, not picked** — `scripts/lcz10_threshold_sweep.py` sweeps it against the Rotterdam
-    reference and writes the precision/recall curve into the run record. 0.45 is that sweep's
+    **Calibrated, not picked.** It was swept over nineteen settings against the Rotterdam
+    reference, and the precision/recall curve is written into the run record. 0.45 is that sweep's
     operating point, the precision maximum over `FIND/B`. Bernard's published 0.33 sits just below
     it and performs comparably (22.4% precision, 27.3% recall against 23.2% and 25.0%), so this is
     not a number in tension with the paper it comes from.
@@ -1030,8 +1023,7 @@ class ClassificationConfig(BaseModel):
     **Read the curve before trusting it.** Precision is roughly flat — 16.7% to 23.2% across the
     whole range — so this threshold governs how much of the map carries LCZ 10 and not how often
     that label is right. The rule fires plausibly, not accurately, and it is scored against
-    `lcz_v3`, a comparator carrying its own error which CLAUDE.md records as coarser than the ground
-    in this very city.
+    `lcz_v3`, a comparator carrying its own error and coarser than the ground in this very city.
     """
 
     lcz1_min_height_m: float | None = None
@@ -1047,17 +1039,15 @@ class ClassificationConfig(BaseModel):
     modal_filter: bool = False
     """Whether to replace an isolated unit's label with the modal label of its neighbours.
 
-    **Off, and that is a ruling rather than caution.** Every unit in this package is classified
-    independently of its neighbours, so a cell whose parameters wobble across a prototype boundary
-    takes a different label from the fabric it sits in — salt-and-pepper at a grain Stewart & Oke
-    never intended a class to be read at, given an LCZ patch is a neighbourhood and the So2Sat
-    patches this project validates against are 320 m across. A spatial filter is the standard
-    answer in this literature and lczkit has never had one.
+    **Off, and that is deliberate rather than cautious.** Every unit is classified independently of
+    its neighbours, so a cell whose parameters wobble across a prototype boundary takes a different
+    label from the fabric it sits in — salt-and-pepper at a grain Stewart & Oke never intended a
+    class to be read at, given an LCZ patch is a neighbourhood and a So2Sat patch is 320 m across.
+    A spatial filter is the standard answer in this literature.
 
-    It stays off because `modal_filter_min_like_neighbours` is a threshold and CLAUDE.md requires
-    a threshold to be swept against a reference and chosen at an operating point. It is also worth
-    saying plainly that **every stored figure in this project was measured without one**, so a run
-    with it on is not comparable to a recorded result until the sweep says how far it moves them.
+    It stays off because `modal_filter_min_like_neighbours` has not been calibrated against a
+    reference, and because **every published figure was measured without one**. A run with it on
+    is not comparable with a run at the defaults.
 
     See `lczkit.classify.smoothing`.
     """
@@ -1098,8 +1088,8 @@ class OutputConfig(BaseModel):
     """Configuration for what a run writes into `output/lczkit/<run_id>/`."""
 
     break_count: int = 7
-    """Number of classification breaks precomputed per continuous variable. Phase 7 renders
-    choropleths from these and must never recompute a quantile at site-build time."""
+    """Number of classification breaks precomputed per continuous variable. The map site renders
+    choropleths from these and never recomputes a quantile at site-build time."""
 
     break_method: Literal["quantile"] = "quantile"
     """How the breaks are derived. Only quantiles are implemented; the field exists so the
@@ -1149,7 +1139,7 @@ class OutputConfig(BaseModel):
 class VizConfig(BaseModel):
     """Configuration for the static map site `lczkit.viz.build_site` writes into a run.
 
-    Zoom ranges are here rather than derived because CLAUDE.md requires them to be *chosen
+    Zoom ranges are here rather than derived because they have to be *chosen
     deliberately* and recorded — a tileset is only reproducible if the zooms that made it are
     written down, and tippecanoe's cost and the site's size both scale with the range.
     """
@@ -1226,9 +1216,9 @@ class VizConfig(BaseModel):
     The height tier fractions are `height_frac_<source>` for whichever sources fired — `wsf3d`,
     `ghsl`, `unresolved`, and the two Overture tiers — so `render_columns` cannot name them without
     naming a cascade. They belong at every zoom rather than in the click-detail tileset because
-    CLAUDE.md makes them first-class *layers* and not diagnostics: a selectable layer must paint
-    while the map is zoomed out, and it must paint from tiles already in memory, since a view change
-    that refetched would break the one performance property Phase 7 is held to."""
+    they are first-class *layers* and not diagnostics: a selectable layer must paint while the map
+    is zoomed out, and it must paint from tiles already in memory, since a view change that
+    refetched would make the site slow."""
 
     detail_max_features: int = 200_000
     """Above this many units the click-detail tileset is skipped and the sidebar falls back to the
@@ -1237,11 +1227,11 @@ class VizConfig(BaseModel):
     online_basemaps: list[str] = Field(default_factory=list)
     """Remote raster grounds the site offers, by key from `lczkit.viz.basemaps.PROVIDERS`.
 
-    **Empty by default, and that default is load-bearing rather than cautious.** CLAUDE.md requires
-    a built site to open with no network and stay valid years from now, which is what makes one
-    archivable beside a paper; a remote tile source breaks all three of those at once, and outlives
-    the run only as long as the provider chooses to serve it. With this empty the emitted site
-    contains no external reference at all, and a test asserts it.
+    **Empty by default, and that default is load-bearing rather than cautious.** A built site opens
+    with no network and stays valid years from now, which is what makes one archivable beside a
+    paper; a remote tile source breaks both of those, and outlives the run only as long as the
+    provider chooses to serve it. With this empty the emitted site contains no external reference
+    at all, and a test asserts it.
 
     Name one or several and the site gains a base-map picker: each is a selectable ground under the
     units, drawn beneath everything else, hidden until chosen, with the provider's attribution shown
@@ -1368,29 +1358,21 @@ UnitStrategy = Literal["grid", "enclosure", "patch"]
 class UnitsConfig(BaseModel):
     """Which spatial units the pipeline computes on.
 
-    **This closes a ruling that sat unapplied for six phases.** Phase 11 concluded "expose
-    `unit_strategy` as config, default `grid`, no auto-selection", and nothing was exposed:
-    `pipeline.run_pipeline` constructed `GridUnits()` as a literal and never assembled barriers at
-    all, so enclosures were reachable only by importing from `scripts/`. Same shape as the four
-    rulings Phase 14 found, and the same reason nothing noticed — nothing checked the spec against
-    the code in either direction.
-
-    **No auto-selection, and in particular none by region.** Phase 11 measured enclosures leading
-    on both criteria outside Europe and N. America and losing inside it, and ruled explicitly that
-    region is not the mechanism — natural-class share and patch heterogeneity are — so a rule keyed
-    on continent is wrong at every boundary and indefensible in a paper. The trade-off is documented
-    and the choice is the user's, recorded in the manifest.
+    **There is no auto-selection, and in particular none by region.** Enclosures lead the grid on
+    both criteria outside Europe and North America and lose inside it, but region is not the
+    mechanism — natural-class share and patch heterogeneity are — so a rule keyed on continent
+    would be wrong at every boundary. The trade-off is documented, the choice is the caller's, and
+    which strategy ran is recorded in the manifest.
     """
 
     strategy: UnitStrategy = "grid"
     """`grid` (default), `enclosure`, or `patch`.
 
     - **`grid`** — 100 m cells. What every published LCZ map, validation dataset and WRF workflow
-      uses, and what every figure this project has recorded is measured on.
-    - **`enclosure`** — street-, rail- and water-bounded blocks. Measured three times against the
-      grid (Phases 9, 10, 11) and not adopted three times on the same pre-registered rule, which
-      required a lead on both overall and built-class agreement: Phase 11's fifteen cities gave
-      built +3.8 (12/15) and overall −0.2 (8/15).
+      uses, and what every published figure here is measured on.
+    - **`enclosure`** — street-, rail- and water-bounded blocks. Measured against the grid over
+      fifteen cities and not adopted: built-class agreement +3.8 (12/15) but overall −0.2 (8/15),
+      and adoption required a lead on both.
     - **`patch`** — enclosure seeds merged to LCZ-patch scale. See `lczkit.units.patches`; the
       block is a much smaller object than a patch (median 0.04 ha against WUDAPT's 2.2–52 ha), and
       this is the strategy that addresses that rather than assuming a thinner barrier set will.
@@ -1398,7 +1380,8 @@ class UnitsConfig(BaseModel):
 
     cell_size_m: float = 100.0
     """Grid cell side. 100 m is not arbitrary — it is what the validation references and the
-    downstream WRF tooling assume — so moving it makes a run incomparable to every stored figure."""
+    downstream WRF tooling assume — so moving it makes a run incomparable with a published
+    figure."""
 
     patch_min_area_m2: float = 50_000.0
     """`strategy="patch"` only. A floor, not a centre: the median lands near twice it."""
@@ -1442,7 +1425,7 @@ class WudaptConfig(BaseModel):
     """
 
     source_dir_name: str = "WUDAPT"
-    """`input/<name>/`, per CLAUDE.md's data layout."""
+    """Subdirectory under `input/` holding the WUDAPT export."""
 
     filename: str | None = None
     """The LCZ Generator export, e.g. `LCZ-Generator_training_areas_2024-10-01.gpkg`.
@@ -1465,8 +1448,8 @@ class WudaptConfig(BaseModel):
 
     Off by default, and **measured rather than assumed**. The gate is expensive — over 200 000
     polygons the three flags pass individually at 62.3% / 84.0% / 81.5% and jointly at 48.2%, so it
-    halves the reference — and Phase 16 measured what it buys, against So2Sat labels on the 30 km
-    windows: Cairo 26.3% → 26.7%, Mumbai 47.4% → 50.3%, Jakarta 70.7% → **68.8%**. Inert on two
+    halves the reference — and what it buys, measured against So2Sat labels on the 30 km windows,
+    is Cairo 26.3% → 26.7%, Mumbai 47.4% → 50.3%, Jakarta 70.7% → **68.8%**. Inert on two
     cities and harmful on the third, for half the labelled ground.
 
     `WudaptSelection.qc_pass_fraction` reports the rate whether or not the gate is on, so the cost
@@ -1476,8 +1459,8 @@ class WudaptConfig(BaseModel):
     min_oa: float | None = None
     """Minimum LCZ Generator overall accuracy for the polygon's *submission*. `None` disables.
 
-    A property of the submission, not of the polygon — see `wudapt.priority_order` — and Phase 16
-    found it does not select for what a validation reference needs. Gating at 0.7 moves agreement
+    A property of the submission, not of the polygon — see `wudapt.priority_order` — and it does
+    not select for what a validation reference needs. Gating at 0.7 moves agreement
     with So2Sat by Cairo 26.3% → **19.1%**, Mumbai 47.4% → 47.3%, Jakarta 70.7% → 69.6%: worse on
     all three, and much worse on the city that needed help most. The LCZ Generator's cross-validated
     accuracy scores a submission against *itself*, so a high `oa` means a self-consistent
@@ -1495,9 +1478,9 @@ class WudaptConfig(BaseModel):
     citation: str = "10.3390/ijgi4010199"
     """Bechtel et al. (2015), *IJGI* 4(1), 199-219 — the WUDAPT Level 0 protocol.
 
-    Recorded apart from `reference_citation` and `ground_truth_citation` for the reason Phase 6.7
-    established and Phase 13 had to re-establish: which file filled the reference role is part of
-    the measurement. **WUDAPT is additionally not independent of `lcz_v3`** — these training areas
+    Recorded apart from `reference_citation` and `ground_truth_citation` because which file filled
+    the reference role is part of the measurement. **WUDAPT is additionally not independent of
+    `lcz_v3`** — these training areas
     are the training data behind the Demuzere global map — so agreement between the two is not a
     ceiling in the sense So2Sat gives one.
     """
@@ -1518,8 +1501,8 @@ class WudaptConfig(BaseModel):
 class ValidationConfig(BaseModel):
     """Configuration for agreement against a reference LCZ map.
 
-    CLAUDE.md's target is the Demuzere global map on the 100 m grid, reported lczexplore-style:
-    per-class agreement and a confusion matrix, never a single headline number.
+    Agreement is reported in the style of the `lczexplore` package: per-class figures and a
+    confusion matrix, never a single headline number.
     """
 
     reference: LandCoverDatasetConfig = Field(default_factory=_default_reference_dataset)
@@ -1533,10 +1516,10 @@ class ValidationConfig(BaseModel):
     ground_truth_citation: str = "10.1109/MGRS.2020.2964708"
     """Zhu et al. (2020), *IEEE GRSM* 8(3), 76-89. So2Sat LCZ42, the hand-labelled reference.
 
-    Recorded apart from `reference_citation` because the two are not the same kind of thing and
-    Phase 6.7 exists because they were treated as if they were: `lcz_v3` is a model output with
-    its own error, these are human labels. Where both are available the labels are primary and
-    `lcz_v3` is a comparator whose agreement with them is the ceiling on any score against it."""
+    Recorded apart from `reference_citation` because the two are not the same kind of thing:
+    `lcz_v3` is a model output with its own error, these are human labels. Where both are
+    available the labels are primary and `lcz_v3` is a comparator whose agreement with them is the
+    ceiling on any score against it."""
 
     wudapt: WudaptConfig = Field(default_factory=WudaptConfig)
     """The WUDAPT training areas — hand labels too, but a different kind of object from So2Sat:
@@ -1549,8 +1532,8 @@ class ValidationConfig(BaseModel):
     majority computed from a corner of itself."""
 
     height_completeness_deciles: int = 10
-    """Strata for the height-completeness breakdown. CLAUDE.md asks for deciles specifically;
-    configurable so a run with few units can widen the bins rather than report noise."""
+    """Strata for the height-completeness breakdown. Deciles by default, configurable so a run
+    with few units can widen the bins rather than report noise."""
 
     @model_validator(mode="after")
     def _check(self) -> ValidationConfig:
@@ -1616,18 +1599,16 @@ class Settings(BaseModel):
     def tile_cache_dir(self) -> Path:
         """`$DATA_DIR/output/lczkit/_cache/tiles/` — memoised per-tile street simplification.
 
-        **A deliberate departure from CLAUDE.md's Phase 8 item 4, which says to cache tiles under
-        `input/`.** That instruction collides with the standing constraint two sections earlier:
-        writes to `input/` are confined to the source implementation owning that subdirectory,
-        and nothing else in the package writes there at all. A simplified tile is derived by
-        lczkit's own cleaning from data a source already fetched — it is not source data, and
-        `input/` is shared with other projects that must not have to reason about lczkit's
-        intermediates.
+        **Not under `input/`, deliberately.** Writes to `input/` are confined to the source
+        implementation owning each subdirectory, and nothing else in the package writes there at
+        all. A simplified tile is derived by lczkit's own cleaning from data a source already
+        fetched — it is not source data, and `input/` may be shared with other projects that must
+        not have to reason about lczkit's intermediates.
 
-        Resolved on the safe side of the ambiguity: the cache lives in lczkit's own output tree,
-        a sibling of the run directories rather than inside any one of them, since a tile
-        outlives the run that computed it. Cache keys carry the same discipline `OvertureSource`
-        uses — see `lczkit.cleaning.pipeline.tile_fingerprint`.
+        The cache therefore lives in lczkit's own output tree, a sibling of the run directories
+        rather than inside any one of them, since a tile outlives the run that computed it. Cache
+        keys carry the same discipline `OvertureSource` uses — see
+        `lczkit.cleaning.pipeline.tile_fingerprint`.
         """
         return self.output_dir / "lczkit" / "_cache" / "tiles"
 
@@ -1701,8 +1682,8 @@ def maptiler_key(*, dotenv_path: Path | str | None = None) -> str | None:
     survives into the tile URL, where it makes every request 403 — a broken base map whose cause is
     unreadable from the symptom.
 
-    It reads the environment, which the rest of the package must not do: CLAUDE.md's locked
-    decision is that `os.environ` is touched in this module and nowhere else.
+    It reads the environment, which the rest of the package must not do: `os.environ` is touched
+    in this module and nowhere else.
     """
     load_dotenv(dotenv_path=dotenv_path)
     raw = os.environ.get("MAPTILER_API_KEY")

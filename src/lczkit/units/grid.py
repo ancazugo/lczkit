@@ -1,8 +1,7 @@
 """`GridUnits`: a 100 m regular grid in the local UTM CRS.
 
-Mandatory per CLAUDE.md — it is the format every existing LCZ map, validation dataset, and WRF
-workflow uses, and Phase 6's validation module joins against the Demuzere global LCZ map on
-this same 100 m grid.
+The default, because it is the format every existing LCZ map, validation dataset and WRF workflow
+uses. `lczkit.validation` joins against the Demuzere global LCZ map on this same 100 m grid.
 """
 
 from __future__ import annotations

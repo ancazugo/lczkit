@@ -1,8 +1,8 @@
 """Writing a run: `units.parquet`, `units_viz.parquet` and `manifest.json`.
 
-Three files, into `output/lczkit/<run_id>/` and nowhere else. CLAUDE.md is emphatic on both
-counts - a run must never write outside its own directory, and the viz table exists so that
-Phase 7 is a pure transform of run outputs rather than a second analysis.
+Three files, into `output/lczkit/<run_id>/` and nowhere else. A run never writes outside its own
+directory, and the viz table exists so that the map site is a pure transform of run outputs rather
+than a second analysis.
 
 The split between the two tables is deliberate. `units.parquet` is the archival record: full
 precision, geometry attached, every column any stage produced. `units_viz.parquet` is what a map
@@ -101,13 +101,13 @@ def write_run(
 ) -> RunOutputs:
     """Write one run's three files into `settings.run_dir`, returning their paths.
 
-    `extras` is anything else keyed on `unit_id` that belongs in the output - the Phase 3 height
-    provenance and the Phase 4 land-cover fractions, typically. It is joined verbatim, so a
+    `extras` is anything else keyed on `unit_id` that belongs in the output - the height
+    provenance and the land-cover fractions, typically. It is joined verbatim, so a
     column appearing in two inputs is an error rather than a silent overwrite.
 
     `layers` persists the run's context geometry - the cleaned streets, water, land use and
-    buildings - under `layers/<name>.parquet`. It exists so that **Phase 7's site build is a pure
-    transform of run outputs**, which CLAUDE.md requires: without it the only way to draw a basemap
+    buildings - under `layers/<name>.parquet`. It exists so that **the site build is a pure
+    transform of run outputs**: without it the only way to draw a basemap
     or extrude buildings would be to re-read `input/` at site-build time, which would make the site
     depend on data the run does not carry and could not be rebuilt from an archived run directory.
     Names outside `CONTEXT_LAYERS` are rejected rather than written.
@@ -228,8 +228,8 @@ def classification_summary(classification: pd.DataFrame) -> dict[str, Any]:
     """What the classifier did to this city, for the manifest.
 
     The LCZ 10 firing count is the reason this exists. A rule that never fires is
-    indistinguishable, from the output alone, from one that was never configured, and CLAUDE.md's
-    concern about LCZ 10 is precisely that it can go silently unemitted — so the count belongs in
+    indistinguishable, from the output alone, from one that was never configured, and the concern
+    about LCZ 10 is precisely that it can go silently unemitted — so the count belongs in
     every run's manifest rather than in whatever investigation happens to look for it.
     """
     labels = classification["lcz_primary"]
@@ -248,7 +248,7 @@ def classification_summary(classification: pd.DataFrame) -> dict[str, Any]:
 
 
 def viz_table(attributes: pd.DataFrame, settings: Settings) -> pd.DataFrame:
-    """The rounded, integer-scaled attribute table Phase 7 renders from.
+    """The rounded, integer-scaled attribute table the map site renders from.
 
     Exposed separately from `write_run` so the transformation is testable without a filesystem,
     and so a caller can inspect exactly what a viewer will see.

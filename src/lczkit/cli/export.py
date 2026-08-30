@@ -3,10 +3,9 @@
 Takes a *run* directory, like `lczkit site build`, for the same reason: that is the level a user
 archives and the level everything else in the CLI already speaks.
 
-Runs written from Phase 19 onwards need this only if they were written with
-`output.gis_format = "none"`. It exists for the ones written before, which carry a correct
-GeoParquet and no GeoPackage — and for which re-running a ten-minute city to change how it is
-packaged would be the wrong trade.
+A current run needs this only if it was written with `output.gis_format = "none"`. It exists for
+older runs, which carry a correct GeoParquet and no GeoPackage — and for which re-running a
+ten-minute city to change how it is packaged would be the wrong trade.
 """
 
 from __future__ import annotations

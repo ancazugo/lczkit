@@ -1,12 +1,11 @@
 """Pluggable-source protocols for the lczkit pipeline.
 
-Every stage after spatial-unit generation exchanges data as a `GeoDataFrame` indexed by a
-stable string `unit_id` (CLAUDE.md's "unit of exchange" decision). These five protocols are
-the seams between the pipeline and its data sources — there is exactly one implementation per
-protocol in the MVP; the seam is the point, not the number of implementations.
+Every stage after spatial-unit generation exchanges data as a `GeoDataFrame` indexed by a stable
+string `unit_id`. These five protocols are the seams between the pipeline and its data sources.
+There is one implementation of each; the seam is the point, not the number of implementations.
 
-No implementations live here. Method signatures are inferred from the phase descriptions in
-CLAUDE.md and may be refined once each phase actually implements against them.
+No implementations live here. Each protocol states the contract once, and implementations satisfy
+it structurally rather than by subclassing.
 """
 
 from __future__ import annotations
@@ -35,9 +34,9 @@ class VectorSource(Protocol):
 
         `height` and `num_floors` are nullable *by design* — upstream vector sources conflate
         footprints from several datasets and only some of them carry height at all. A null
-        height is never an error at this layer; the Phase 3 height cascade owns it. `subtype`,
-        `class` and `sources` must survive cleaning: `class` is the only route to LCZ 10, and
-        `sources` drives Phase 3's source-availability diagnostic.
+        height is never an error at this layer; the height cascade owns it. `subtype`, `class` and
+        `sources` must survive cleaning: `class` is the only route to LCZ 10, and `sources` drives
+        the source-availability diagnostic.
         """
         ...
 
@@ -55,17 +54,17 @@ class VectorSource(Protocol):
     def rail(self, bbox: BBox) -> gpd.GeoDataFrame:
         """Return rail-network segments intersecting `bbox`, as LineStrings.
 
-        Added in Phase 2: `EnclosureUnits` needs rail as a barrier layer alongside streets and
-        waterbodies, and Phase 1 never had a reason to fetch it.
+        `EnclosureUnits` needs rail as a barrier layer alongside streets and waterbodies. Nothing
+        else in the pipeline reads it.
         """
         ...
 
     def land_use(self, bbox: BBox) -> gpd.GeoDataFrame:
         """Return land-use polygons intersecting `bbox`, retaining `subtype` and `class`.
 
-        Functional semantics only. This layer supplies the industrial share of a unit's area
-        (Phase 5's `industrial_fraction`, consumed by Phase 6's LCZ 8/10 disambiguation) and
-        nothing else. It is **not** a barrier for spatial-unit generation and **not** a
+        Functional semantics only. This layer supplies the industrial share of a unit's area —
+        `industrial_fraction`, which the LCZ 8/10 rule reads — and nothing else. It is **not** a
+        barrier for spatial-unit generation and **not** a
         land-cover source — rasters own land cover.
         """
         ...

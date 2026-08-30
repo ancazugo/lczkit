@@ -5,7 +5,7 @@ unit is a point; the distance is the gap from the point to the box, zero inside 
 dimensions have wildly different spreads - building height runs from zero to hundreds of metres
 while a fraction is confined to [0, 1] - each is standardised first, "using the mean and the
 standard deviation of all LCZ-type boundary values". That is the published operationalisation of
-what CLAUDE.md calls normalising against the LCZ-defined range, and it is what this module does.
+normalising against the LCZ-defined range, and it is what this module does.
 
 Two details are load-bearing and neither is spelled out in the paper.
 
@@ -21,8 +21,8 @@ while keeping the denominator identical across all seventeen, which is what make
 comparable at all.
 
 Only a null *unit* value shrinks the denominator, and then it shrinks it identically for every
-prototype. That is CLAUDE.md's weighted partial distance: sum over available parameters,
-renormalise by the sum of their weights, never impute and never drop the unit.
+prototype. That is the weighted partial distance: sum over available parameters, renormalise by
+the sum of their weights, never impute and never drop the unit.
 """
 
 from __future__ import annotations
@@ -123,7 +123,7 @@ class DistanceResult:
     missing_parameters: pd.Series
     """Comma-separated names of the weighted dimensions that were null, per unit; empty string
     where nothing was missing. A string rather than a list so the column survives a GeoParquet
-    round trip unchanged and reads plainly in the Phase 7 sidebar."""
+    round trip unchanged and reads plainly in the map site's sidebar."""
 
 
 class PrototypeSpace:

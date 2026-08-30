@@ -1,9 +1,9 @@
 """WUDAPT LCZ training areas, reduced to one label per spatial unit.
 
-The third reference, and the only one that reaches every city this package has been run on.
-CLAUDE.md names it "the secondary validation reference and the first if So2Sat doesn't have
-sufficient labels for a ROI"; measured over the sixteen study windows that existed when this was
-built, it carries 119-2374 polygons each, 11-18 classes, and **63-996 km2 of labelled ground against
+The third reference, and the only one that reaches every city this package has been run on. It is
+the secondary reference, and the first where So2Sat has too few labels for a region of interest.
+Measured over sixteen study windows it carries 119-2374 polygons each, 11-18 classes, and
+**63-996 km2 of labelled ground against
 So2Sat's 7.1 km2 union on Berlin** - one to two orders of magnitude more labelled area, at
 neighbourhood scale. (`lczkit.cities` now holds twenty; the four added afterwards are not in that
 range, and every figure quoted in this module is over the original sixteen.)
@@ -37,8 +37,8 @@ duplicated - the contributors' own disagreement rate is a number worth having ra
 
 **WUDAPT is not independent of `lcz_v3`.** The LCZ Generator's training areas are the training
 data behind the Demuzere global map, so an agreement figure between the two is inflated by
-construction and is *not* a ceiling in the sense Phase 6.7 established for So2Sat. Report it only
-with that stated beside it.
+construction and is *not* a ceiling in the sense So2Sat gives one. Report it only with that stated
+beside it.
 
 Returns the same three columns as `reference_lcz` and `labelled_lcz`, so `agreement()` consumes
 any of the three without knowing which it was given.
@@ -111,9 +111,9 @@ COLUMNS = ("reference_lcz", "reference_coverage", "reference_majority_fraction")
 class WudaptSelection:
     """What `prepare_wudapt` kept, what it dropped, and what the contributors disagreed about.
 
-    Every drop is counted rather than being visible only as a smaller frame. The point is the same
-    one Phase 1's cleaning report makes: a reference that quietly loses half its polygons to a
-    quality gate looks exactly like one that never had them.
+    Every drop is counted rather than being visible only as a smaller frame, for the same reason
+    the cleaning report counts what it removes: a reference that quietly loses half its polygons
+    to a quality gate looks exactly like one that never had them.
     """
 
     n_read: int
@@ -378,8 +378,8 @@ micrometre, measured on the Berlin fixture. The resolution is exact in area (`la
 duplicate + conflict` reproduces the raw sum to the full 13 595 047.0 m² on that fixture); it is
 the *predicate* that is not a statement about area. Tests assert on area against this tolerance.
 
-A module constant and not config, following CLAUDE.md's Phase 1 ruling on `eps_m`: a
-floating-point tolerance is not a domain threshold.
+A module constant and not config, for the same reason `eps_m` is one: a floating-point tolerance
+is not a domain threshold.
 """
 
 

@@ -105,8 +105,8 @@ _LAND_USE = _LayerQuery(
     theme="base",
     type_="land_use",
     columns="id, subtype, class",
-    # No filter. CLAUDE.md prescribes a level/subtype filter for water and describes none for
-    # land use, and this module does not invent one.
+    # No filter. Water needs a level/subtype filter; land use does not, and this module does not
+    # invent one.
     where="TRUE",
 )
 
@@ -190,12 +190,12 @@ class OvertureSource:
         `height` and `num_floors` are nullable and frequently null — that is expected, not an
         error. Overture's conflation is winner-takes-all at the geometry level, and `height` is
         parsed only from OSM tags, so footprints won by a machine-learning source carry no
-        height at all. The height cascade (Phase 3) owns that problem; nothing in ingestion or
-        cleaning may treat a null height as a failure.
+        height at all. The height cascade owns that problem; nothing in ingestion or cleaning may
+        treat a null height as a failure.
 
         `subtype`/`class` carry usage type (residential / commercial / industrial) and `sources`
         carries per-feature dataset provenance. Both are retained through cleaning — `class` is
-        the only route to LCZ 10, and `sources` drives Phase 3's source-availability diagnostic.
+        the only route to LCZ 10, and `sources` drives the source-availability diagnostic.
         """
         return self._read_theme(_BUILDINGS, bbox)
 
@@ -209,8 +209,8 @@ class OvertureSource:
     def rail(self, bbox: BBox) -> gpd.GeoDataFrame:
         """Rail segments intersecting `bbox`: `subtype = 'rail'`, no `class` filter.
 
-        CLAUDE.md names rail as a barrier type for Phase 2's `EnclosureUnits` but does not
-        describe any sub-filtering of it, unlike streets' `class != 'service'`.
+        Rail is a barrier type for `EnclosureUnits`, and unlike streets' `class != 'service'` it
+        takes no sub-filtering.
         """
         return self._read_theme(_RAIL, bbox)
 
@@ -218,9 +218,8 @@ class OvertureSource:
         """`(waterlines, waterbodies)` intersecting `bbox`.
 
         Excludes underground/aboveground features (Overture's `level` field, nonzero) and
-        subtypes `human_made`, `reservoir`, `spring`, `wastewater`. Note: Overture's own
-        `WaterSubtype` value is `human_made` (underscore), not the hyphenated spelling in
-        CLAUDE.md's prose.
+        subtypes `human_made`, `reservoir`, `spring`, `wastewater`. Note that Overture's own
+        `WaterSubtype` value is `human_made`, with an underscore rather than a hyphen.
         """
         gdf = self._read_theme(_WATER, bbox)
         waterlines = gdf.loc[
@@ -235,7 +234,7 @@ class OvertureSource:
         """Land-use polygons intersecting `bbox`. Columns: `id`, `subtype`, `class`.
 
         Functional semantics only — this layer exists to supply the industrial share of a unit's
-        area (Phase 5's `industrial_fraction`, consumed by Phase 6's LCZ 8/10 disambiguation).
+        area, which is `industrial_fraction` and which the LCZ 8/10 rule reads.
         It is **not** a barrier for spatial-unit generation and **not** a land-cover source;
         rasters own land cover.
 

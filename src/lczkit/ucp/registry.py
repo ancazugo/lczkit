@@ -1,10 +1,8 @@
 """What every parameter column means, in what unit, from which source.
 
-CLAUDE.md's acceptance criterion for this phase is "a parameter table keyed by `unit_id` with
-every field documented, including units and the source paper for each", and its anti-pattern list
-forbids writing a parameter to the output without a documented unit and reference. Prose in a
-docstring satisfies neither for a machine: Phase 6 serialises this into the run manifest and
-Phase 7 renders "every UCP with its unit of measurement" in the per-unit sidebar. Keeping the
+No parameter reaches the output without a documented unit and a source reference. Prose in a
+docstring cannot supply that to a machine: the run manifest serialises this registry, and the map
+site renders each parameter's unit of measurement in the per-unit sidebar. Keeping the
 documentation in a registry makes the pairing a tested invariant rather than something that drifts
 the first time a column is renamed.
 """
@@ -18,7 +16,7 @@ from lczkit.config import SemanticGroupConfig
 
 STEWART_OKE_2012 = "10.1175/BAMS-D-11-00019.1"
 """Stewart & Oke (2012), *BAMS* 93(12), 1879-1900. Defines the LCZ scheme and the property table
-Phase 6 classifies against."""
+the classifier scores against."""
 
 BERNARD_2024 = "10.5194/gmd-17-2077-2024"
 """Bernard et al. (2024), *GMD* 17, 2077-2107. Table 1 gives operational definitions for the same
@@ -101,7 +99,7 @@ PARAMETERS: tuple[ParameterSpec, ...] = (
         label="Tree cover fraction",
         unit="fraction",
         description=(
-            "Tree-covered fraction of the unit, from the Phase 4 land-cover table. Also counted "
+            "Tree-covered fraction of the unit, from the land-cover table. Also counted "
             "inside `pervious_surface_fraction`; kept separately because it separates LCZ A and "
             "B from the other pervious classes."
         ),
@@ -112,7 +110,7 @@ PARAMETERS: tuple[ParameterSpec, ...] = (
         label="Water fraction",
         unit="fraction",
         description=(
-            "Water-covered fraction of the unit, from the Phase 4 land-cover table. Also counted "
+            "Water-covered fraction of the unit, from the land-cover table. Also counted "
             "inside `pervious_surface_fraction`; kept separately because it is the only route to "
             "LCZ G."
         ),
@@ -140,7 +138,7 @@ PARAMETERS: tuple[ParameterSpec, ...] = (
         description=(
             "Stewart & Oke's Hr: the unweighted GEOMETRIC mean of building height, exp(mean(log "
             "h)), over every building with a resolved height intersecting the unit. Heights are "
-            "floored at a small positive value before the log. Buildings the Phase 3 cascade left "
+            "floored at a small positive value before the log. Buildings the height cascade left "
             "unresolved are excluded. Null for a unit holding no building with a height."
         ),
         reference=BERNARD_2024,
@@ -154,9 +152,9 @@ PARAMETERS: tuple[ParameterSpec, ...] = (
             "footprint area, so a 5 m2 shed no longer counts as much as a tower block. Hr itself "
             "stays unweighted because Bernard et al. (2024) Table 1 specifies that form and the "
             "Stewart & Oke ranges were defined for it — weighting it would change the definition "
-            "silently. Emitted so the size of the difference is measurable: Phase 10 established "
-            "that Hr's sensitivity to dispersion is what made the most accurate height product "
-            "degrade the map, and the same mechanism acts on the unweighted mean itself."
+            "silently. Emitted so the size of the difference is measurable: Hr's sensitivity to "
+            "dispersion is what made the most accurate height product degrade the map, and the "
+            "same mechanism acts on the unweighted mean itself."
         ),
         reference=COMPUTED_HERE,
     ),
@@ -247,7 +245,7 @@ PARAMETERS: tuple[ParameterSpec, ...] = (
             "dissolved industrial evidence, over all footprint. Bernard et al. (2024)'s FIND/B, so "
             "their published 0.33 threshold transfers to this column and not to the unit-area one. "
             "Null where the unit holds no buildings: a share of nothing is undefined, not zero. "
-            "Functional, not morphological — Phase 6 applies it after the prototype distance."
+            "Functional, not morphological — it is applied after the prototype distance."
         ),
         reference=BERNARD_2024,
     ),
@@ -294,8 +292,8 @@ PARAMETERS: tuple[ParameterSpec, ...] = (
         unit="category",
         description=(
             "Which sources contributed area to `industrial_fraction`: 'none', 'buildings', "
-            "'land_use' or 'both'. CLAUDE.md requires recording which evidence source fired, "
-            "because the two are very differently reliable."
+            "'land_use' or 'both'. Recorded because the two sources are very differently "
+            "reliable."
         ),
         reference=COMPUTED_HERE,
     ),
@@ -304,7 +302,7 @@ PARAMETERS: tuple[ParameterSpec, ...] = (
 PARAMETER_COLUMNS: tuple[str, ...] = tuple(parameter.name for parameter in PARAMETERS)
 """Column order of the table `compute_parameters()` returns, up to the semantic block.
 
-The Phase 18 semantic columns are **not** here, because their names depend on the configured
+The semantic columns are **not** here, because their names depend on the configured
 groups. `semantic_specs()` builds their specs from the same config the columns come from, so a
 group added in config cannot end up in the output with no documented unit or reference — which is
 the state a static list would produce silently.
@@ -344,8 +342,8 @@ def semantic_specs(groups: Iterable[SemanticGroupConfig]) -> tuple[ParameterSpec
     """`ParameterSpec` for every column the semantic layer emits for `groups`.
 
     Built from config rather than transcribed, for the reason `PARAMETER_COLUMNS` gives: a static
-    list and a configurable group set drift, and CLAUDE.md's rule is that no parameter reaches the
-    output without a documented unit and source reference.
+    list and a configurable group set drift, and no parameter may reach the output without a
+    documented unit and source reference.
     """
     specs: list[ParameterSpec] = []
     for group in groups:
@@ -403,15 +401,15 @@ def spec(name: str, groups: Iterable[SemanticGroupConfig] | None = None) -> Para
 NOT_COMPUTED: tuple[tuple[str, str], ...] = (
     (
         "sky_view_factor",
-        "Deferred by CLAUDE.md. The single most expensive component, and strongly correlated with "
-        "aspect ratio, which this phase does compute. Bernard et al. (2018), 10.3390/cli6030060, "
+        "Not computed. The single most expensive component, and strongly correlated with "
+        "aspect ratio, which is computed. Bernard et al. (2018), 10.3390/cli6030060, "
         "is the preferred route when it is picked up: vector ray-launching, no DSM required.",
     ),
     (
         "terrain_roughness_class",
-        "Deferred. CLAUDE.md asks for it via the Davenport et al. (2000) lookup, but that table "
-        "maps a roughness class to a roughness length z0, and computing z0 from morphology is on "
-        "the same document's deferred list. Bernard et al. (2024) weight z0 at 0.5 against 8 for "
+        "Not computed. The Davenport et al. (2000) lookup maps a roughness class to a roughness "
+        "length z0, and z0 itself is not computed from morphology either. Bernard et al. (2024) "
+        "weight z0 at 0.5 against 8 for "
         "building fraction and 6 for mean height, so it is the least influential parameter in "
         "their scheme — deferring it costs the classification little.",
     ),
@@ -432,7 +430,7 @@ LIMITATIONS: tuple[tuple[str, str], ...] = (
         "distinction does not survive Overture's schema normalisation — the same normalisation "
         "that removes the need for a tag-mapping table also discards the semantic detail OSM "
         "carried. A light-industrial estate and a refinery are therefore indistinguishable here, "
-        "so Phase 6's LCZ 10 threshold is set to under-trigger: a missing LCZ 10 is a visible "
+        "so the LCZ 10 threshold is set to under-trigger: a missing LCZ 10 is a visible "
         "gap, whereas a light-industrial estate mislabelled as heavy industry is an invisible "
         "error that propagates into any model consuming the map. 'warehouse' is excluded from the "
         "industrial vocabulary; it is an LCZ 8 example.",
@@ -446,7 +444,7 @@ LIMITATIONS: tuple[tuple[str, str], ...] = (
 )
 """Known limitations of specific parameters, in the parameters' own terms.
 
-CLAUDE.md requires the Overture heavy/light industry limitation to appear in the field docs *and*
-the manifest, which means it has to be data rather than a docstring. Phase 6 serialises this
-alongside `NOT_COMPUTED`.
+The Overture heavy/light industry limitation has to reach the run manifest and not only the field
+documentation, which means it has to be data rather than a docstring. It is serialised alongside
+`NOT_COMPUTED`.
 """

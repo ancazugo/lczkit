@@ -2,9 +2,9 @@
 
 Stewart & Oke (2012) Table 3 defines seventeen classes as ranges over ten properties. In the
 closest-distance approach a class is a hypercube in that space and a unit is a point, so this
-table is the entire basis of classification — CLAUDE.md calls it the most important document in
-the repo, and its anti-pattern list singles out reproducing one of these numbers from memory as
-the worst failure mode the package has.
+table is the entire basis of classification. Every number here is transcribed from
+`docs/references/tables/`, never reproduced from memory: a plausible-looking wrong threshold is
+the worst failure mode this package has.
 
 Every value here is transcribed from `docs/references/tables/stewart_oke_2012_properties.md`,
 **verbatim and in the table's own units**, including the properties this package cannot compute.
@@ -24,7 +24,7 @@ exists because LCZ 7 and LCZ 8 — *lightweight* low-rise and *large* low-rise �
 nothing in the metric that measures how big a building is, and consequently come out **swapped**:
 measured over built cells, LCZ 8 lands on 55-93 m² footprints and LCZ 7 on 7 000-13 000 m² ones, in
 every city checked. **It carries weight 0.0 in every shipped preset and therefore changes no
-label**, per CLAUDE.md's rule that a threshold is swept against a reference and never picked.
+label**, because its weight has not been calibrated against a reference.
 """
 
 from __future__ import annotations
@@ -62,7 +62,7 @@ class PropertySpec:
     """`STEWART_OKE_2012` or `LCZKIT`."""
 
     reads_building_height: bool = False
-    """Whether computing this dimension consumes the Phase 3 building height.
+    """Whether computing this dimension consumes the building height.
 
     Two do, and only one of them is obviously a height: `height_of_roughness_elements_m` is the
     geometric mean of building heights, and `aspect_ratio` is `momepy.street_profile(...,
@@ -444,7 +444,7 @@ DIMENSIONS: tuple[str, ...] = tuple(spec.column for spec in PROPERTIES if spec.c
 HEIGHT_DEPENDENT_DIMENSIONS: tuple[str, ...] = tuple(
     spec.column for spec in PROPERTIES if spec.column is not None and spec.reads_building_height
 )
-"""Dimensions whose value moves when the Phase 3 height cascade does. See
+"""Dimensions whose value moves when the height cascade does. See
 `PropertySpec.reads_building_height` — there are two, and one of them is not called a height."""
 
 
@@ -468,7 +468,7 @@ def property_of(column: str) -> PropertySpec:
 UNUSED_PROPERTIES: tuple[tuple[str, str], ...] = (
     (
         "sky_view_factor",
-        "Deferred in Phase 5 as the single most expensive component, and strongly correlated with "
+        "Not computed: the single most expensive component, and strongly correlated with "
         "aspect ratio, which is computed. Its absence is the main reason the published table "
         "cannot separate LCZ A, B, C and D: it is one of only three dimensions distinguishing "
         "them, and the other two are also building-derived. Bernard et al. (2024) weight it at 4 "
@@ -476,8 +476,8 @@ UNUSED_PROPERTIES: tuple[tuple[str, str], ...] = (
     ),
     (
         "terrain_roughness_class",
-        "Deferred in Phase 5. Davenport et al. (2000) map the class to a roughness length z0, and "
-        "deriving z0 from morphology (Macdonald, Kanda) is itself deferred, so the lookup has no "
+        "Not computed. Davenport et al. (2000) map the class to a roughness length z0, and "
+        "deriving z0 from morphology (Macdonald, Kanda) is not implemented, so the lookup has no "
         "input. Bernard et al. (2024) weight z0 at 0.5 of 21.5, the least influential dimension "
         "in their scheme.",
     ),

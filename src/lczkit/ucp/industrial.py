@@ -3,22 +3,20 @@
 It exists because LCZ 8 (large low-rise) and LCZ 10 (heavy industry) are geometrically
 near-identical: large footprint, low, sparse. Nothing in morphology or land cover separates a
 distribution warehouse from a refinery, so without a functional signal LCZ 10 is unreachable and
-the package would silently never emit it. Phase 6 applies this *after* the prototype distance, as
-an explicit rule — it is deliberately not folded into the morphological metric, where it would
-distort every other class.
+the package would silently never emit it. The classifier applies this *after* the prototype
+distance, as an explicit rule — it is deliberately not folded into the morphological metric, where
+it would distort every other class.
 
 Two evidence sources, combined by union: industrial building footprints are dissolved together
 with industrial land-use parcels before the area is measured, so a factory standing inside an
 industrial parcel counts once rather than twice. The two sources therefore reinforce each other's
 *coverage* without inflating the magnitude. Each source's own fraction ships alongside the
-combined one, together with `industrial_evidence` naming which contributed — CLAUDE.md requires
-that, and the two are very differently reliable.
+combined one, together with `industrial_evidence` naming which contributed, because the two are
+very differently reliable.
 
-**Two denominators, both emitted, each named for what it divides by.** The denominator was
-contradicted three ways across this repository at once: CLAUDE.md's resolved-discrepancy table and
-`ucp.parameters`' docstring both said building area, while this module, `ucp.registry` and the
-config field all said unit area and argued for it. A single column called `industrial_fraction`
-cannot be read correctly under that disagreement, and the disagreement is not resolvable by
+**Two denominators, both emitted, each named for what it divides by.** A single column called
+`industrial_fraction` cannot be read correctly when it is unclear whether it divides by building
+area or by unit area, and that is not resolvable by
 picking, because the two quantities answer different questions:
 
 - `industrial_fraction_of_building_area` — of what is *built* here, how much is industrial. This

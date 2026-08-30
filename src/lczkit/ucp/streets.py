@@ -1,7 +1,7 @@
 """Per-unit street canyon geometry, from `momepy.street_profile()`.
 
-CLAUDE.md names this function specifically. It measures along perpendicular ticks cast at a fixed
-spacing from every street segment, so its output is per *segment*; getting to per *unit* is a
+`momepy.street_profile()` measures along perpendicular ticks cast at a fixed spacing from every
+street segment, so its output is per *segment*; getting to per *unit* is a
 length-weighted mean over the parts of each segment that fall inside the unit.
 
 That weighting is what makes the two unit strategies behave sensibly with one implementation. For
@@ -37,7 +37,7 @@ def street_metrics(
 ) -> pd.DataFrame:
     """Per-unit `aspect_ratio`, `street_openness` and `street_width_m`, indexed by `unit_id`.
 
-    `buildings` must carry `height`. Buildings the Phase 3 cascade left unresolved keep a null
+    `buildings` must carry `height`. Buildings the height cascade left unresolved keep a null
     height; momepy skips them when averaging tick heights rather than propagating the null, so a
     partially resolved cascade degrades the aspect ratio's *coverage* rather than corrupting its
     value.

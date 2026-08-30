@@ -1,7 +1,7 @@
-"""The tiers of the Phase 3 height cascade.
+"""The tiers of the height cascade.
 
-Two `HeightSource` implementations cover CLAUDE.md's four tiers: `OvertureAttributeTier` is
-tier 1, and `ArealRasterTier` is tiers 2, 3 and 4 — Google Open Buildings 2.5D, WSF-3D and
+Two `HeightSource` implementations cover all four tiers: `OvertureAttributeTier` is tier 1, and
+`ArealRasterTier` is tiers 2, 3 and 4 — Google Open Buildings 2.5D, WSF-3D and
 GHS-BUILT-H differ only in which file they read and how its values scale, which is why they are
 three configured instances of one class rather than three classes. Adding a fifth areal product
 is an entry in `HeightConfig.areal_tiers`, not a new implementation.
@@ -43,9 +43,8 @@ def numeric_column(buildings: gpd.GeoDataFrame, name: str) -> pd.Series:
 
     Overture's `height` is float and `num_floors` a nullable integer, and either can be missing
     entirely from a non-Overture layer. Every read of both goes through here so that "column
-    absent" and "column present but null" behave identically — neither is an error at this
-    layer, and a tier that crashed on the first would be the pretence of completeness CLAUDE.md
-    warns against.
+    absent" and "column present but null" behave identically. Neither is an error at this layer:
+    a missing height is what the rest of the cascade exists to answer.
     """
     if name not in buildings.columns:
         return pd.Series(np.nan, index=buildings.index, dtype="float64")

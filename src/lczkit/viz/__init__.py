@@ -1,4 +1,4 @@
-"""Phase 7: a self-contained, archivable map site built from one run's outputs.
+"""A self-contained, archivable map site built from one run's outputs.
 
 `build_site(run_dir)` writes `<run_dir>/site/` — an HTML page, a vendored MapLibre front end,
 PMTiles tilesets and a copy of the run manifest. It opens with a Python interpreter and nothing

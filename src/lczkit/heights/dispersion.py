@@ -4,10 +4,10 @@
 did to the shape of the height distribution inside a unit, and that is the quantity `Hr` is
 sensitive to: it is a geometric mean, so it is depressed by spread and rises as spread collapses.
 
-Phase 10 established the sensitivity from one side. Google Open Buildings 2.5D had the lowest
+The sensitivity was established from one side. Google Open Buildings 2.5D had the lowest
 per-building error of any tier and the only within-unit skill, and it **degraded** the map, because
-its within-unit spread was 0.441 against reality's 0.195 — over half of it noise. That produced the
-standing ruling that a height tier is accepted on within-unit dispersion and not on MAE.
+its within-unit spread was 0.441 against reality's 0.195 — over half of it noise. A height tier is
+therefore accepted on within-unit dispersion and not on mean absolute error.
 
 This module measures the other side, which nothing has: the tiers that *were* adopted compress
 dispersion rather than inflating it. Measured on the runs on disk, over units with buildings:
@@ -20,10 +20,10 @@ dispersion rather than inflating it. Measured on the runs on disk, over units wi
 | GHS-BUILT-H | Bogota | 0.36 m | **0.112** | **23.6%** |
 
 A 90 m or 100 m product hands one height to every building it covers, so what survives inside a
-unit is variation *between raster cells* rather than between buildings. Same mechanism as Phase 10,
-opposite sign, and it biases `Hr` upward exactly where the cascade is doing the most work.
+unit is variation *between raster cells* rather than between buildings. Same mechanism, opposite
+sign, and it biases `Hr` upward exactly where the cascade is doing the most work.
 
-Reported per run because it is the target the deferred shrinkage work aims at: shrinking a
+Reported per run because it is the target any future shrinkage work aims at: shrinking a
 fine-resolution product toward the unit mean is only worth doing against a measured statement of
 how much dispersion the incumbent has already lost.
 """
@@ -51,7 +51,7 @@ class TierDispersion(BaseModel):
 
     median_cv: float | None
     """Median of `h_std / h_mean_area_weighted`. The scale-free form, and the one comparable
-    against Phase 10's 0.441-against-0.195 figures."""
+    against the 0.441-against-0.195 figures above."""
 
     constant_fraction: float
     """Share of those units whose buildings all carry the same height to within a centimetre.
@@ -83,8 +83,8 @@ def dispersion_report(
 ) -> DispersionReport:
     """Within-unit height dispersion per tier, from a finished parameter table.
 
-    `parameters` is what `lczkit.ucp.compute_parameters()` returns joined to the Phase 3 per-unit
-    height fractions — the table a run assembles anyway — so this reads columns rather than
+    `parameters` is what `lczkit.ucp.compute_parameters()` returns joined to the per-unit height
+    fractions — the table a run assembles anyway — so this reads columns rather than
     recomputing anything, and it moves no measurement.
 
     A unit is attributed to whichever tier supplied the largest share of its building area, which

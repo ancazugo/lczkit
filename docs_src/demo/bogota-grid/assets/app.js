@@ -3,8 +3,8 @@
  *
  * Everything this file draws was decided by the run and written into `style.json` and
  * `manifest.json`: the LCZ colours, the choropleth class boundaries, the parameter units, the
- * legend text. Nothing here computes a quantile, a break or a parameter, which is the constraint
- * the whole Phase 7 design is built around.
+ * legend text. Nothing here computes a quantile, a break or a parameter — the site is a pure
+ * transform of what the run wrote.
  *
  * Switching a layer calls `setPaintProperty` on one already-loaded fill layer. It never swaps a
  * source, never calls `setStyle`, and therefore never refetches a tile — the tiles for the current

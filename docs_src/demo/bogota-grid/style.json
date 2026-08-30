@@ -741,7 +741,7 @@
           "label": "Tree cover fraction",
           "group": "Urban canopy parameters",
           "unit": "fraction",
-          "description": "Tree-covered fraction of the unit, from the Phase 4 land-cover table. Also counted inside `pervious_surface_fraction`; kept separately because it separates LCZ A and B from the other pervious classes.",
+          "description": "Tree-covered fraction of the unit, from the land-cover table. Also counted inside `pervious_surface_fraction`; kept separately because it separates LCZ A and B from the other pervious classes.",
           "kind": "continuous",
           "method": "quantile",
           "paint": [
@@ -787,7 +787,7 @@
           "label": "Water fraction",
           "group": "Urban canopy parameters",
           "unit": "fraction",
-          "description": "Water-covered fraction of the unit, from the Phase 4 land-cover table. Also counted inside `pervious_surface_fraction`; kept separately because it is the only route to LCZ G.",
+          "description": "Water-covered fraction of the unit, from the land-cover table. Also counted inside `pervious_surface_fraction`; kept separately because it is the only route to LCZ G.",
           "kind": "continuous",
           "method": "quantile",
           "paint": [
@@ -827,7 +827,7 @@
           "label": "Height of roughness elements",
           "group": "Urban canopy parameters",
           "unit": "m",
-          "description": "Stewart & Oke's Hr: the unweighted GEOMETRIC mean of building height, exp(mean(log h)), over every building with a resolved height intersecting the unit. Heights are floored at a small positive value before the log. Buildings the Phase 3 cascade left unresolved are excluded. Null for a unit holding no building with a height.",
+          "description": "Stewart & Oke's Hr: the unweighted GEOMETRIC mean of building height, exp(mean(log h)), over every building with a resolved height intersecting the unit. Heights are floored at a small positive value before the log. Buildings the height cascade left unresolved are excluded. Null for a unit holding no building with a height.",
           "kind": "continuous",
           "method": "quantile",
           "paint": [
@@ -1131,7 +1131,7 @@
           "label": "Industrial share of building area",
           "group": "Urban canopy parameters",
           "unit": "fraction",
-          "description": "Share of the unit's BUILDING area that is industrial \u2014 footprint falling inside the dissolved industrial evidence, over all footprint. Bernard et al. (2024)'s FIND/B, so their published 0.33 threshold transfers to this column and not to the unit-area one. Null where the unit holds no buildings: a share of nothing is undefined, not zero. Functional, not morphological \u2014 Phase 6 applies it after the prototype distance.",
+          "description": "Share of the unit's BUILDING area that is industrial \u2014 footprint falling inside the dissolved industrial evidence, over all footprint. Bernard et al. (2024)'s FIND/B, so their published 0.33 threshold transfers to this column and not to the unit-area one. Null where the unit holds no buildings: a share of nothing is undefined, not zero. Functional, not morphological \u2014 it is applied after the prototype distance.",
           "kind": "continuous",
           "method": "quantile",
           "paint": [

@@ -1,9 +1,9 @@
 """The run manifest: everything needed to read a run's output and to reproduce it.
 
-CLAUDE.md treats reproducibility as a feature of the package rather than an afterthought, and
-names what has to be in here: the full serialised config, the pinned Overture release, the Earth
+Reproducibility is a feature of this package rather than an afterthought, so the manifest carries
+the full serialised config, the pinned Overture release, the Earth
 Engine collection IDs and date ranges, the resolved package versions, a run timestamp, and the
-cleaning report. Earlier phases added to that list - the height source-availability diagnostic,
+cleaning report. Later work added to that list - the height source-availability diagnostic,
 the parameter registry with its units and references, the two deferred Stewart & Oke properties,
 and the Overture heavy/light industry limitation, each required to be *data* rather than prose.
 
@@ -56,9 +56,8 @@ TRACKED_PACKAGES: tuple[str, ...] = (
     "pydantic",
     "earthengine-api",
 )
-"""Packages whose version changes could change a run's numbers. CLAUDE.md names momepy, neatnet
-and geopandas specifically; the rest are here because every one of them performs a geometric or
-zonal computation whose result this package reports as a measurement."""
+"""Packages whose version changes could change a run's numbers. Every one of them performs a
+geometric or zonal computation whose result this package reports as a measurement."""
 
 
 def package_versions() -> dict[str, str]:
@@ -85,7 +84,7 @@ class RunManifest(BaseModel):
     """ISO 8601, UTC, second resolution."""
 
     config: dict[str, Any]
-    """`Settings` serialised verbatim, per CLAUDE.md."""
+    """`Settings` serialised verbatim."""
 
     versions: dict[str, str]
 
@@ -96,10 +95,10 @@ class RunManifest(BaseModel):
     """Per land-cover dataset, the collection ID, asset type, band, date range and scale."""
 
     parameters: list[dict[str, str]] = Field(default_factory=list)
-    """The Phase 5 registry: every emitted column with its unit, description and source."""
+    """The parameter registry: every emitted column with its unit, description and source."""
 
     not_computed: dict[str, str] = Field(default_factory=dict)
-    """Stewart & Oke properties Phase 5 does not compute, and why."""
+    """Stewart & Oke properties this package does not compute, and why."""
 
     limitations: dict[str, str] = Field(default_factory=dict)
     """Known limitations of specific parameters, in the parameters' own terms."""
@@ -122,8 +121,8 @@ class RunManifest(BaseModel):
     route produced, and how many times the LCZ 10 rule fired.
 
     The firing count is here because a rule that never fires is indistinguishable, from the output
-    alone, from one that was never configured — and CLAUDE.md's whole concern about LCZ 10 is that
-    it can go silently unemitted. A run over an industrial port reporting zero firings is a
+    alone, from one that was never configured — and the whole concern about LCZ 10 is that it can
+    go silently unemitted. A run over an industrial port reporting zero firings is a
     finding about the rule, and it should not take a separate investigation to notice it.
     """
 
@@ -131,7 +130,8 @@ class RunManifest(BaseModel):
     legend_citation: str = DEMUZERE_2022
 
     breaks: list[VariableBreaks] = Field(default_factory=list)
-    """Precomputed classification breaks. Phase 7 reads these and never recomputes a quantile."""
+    """Precomputed classification breaks. The map site reads these and never recomputes a
+    quantile."""
 
     extent: ExtentRecord | None = None
     """The ground this run covered, and the locator that chose it.
@@ -163,7 +163,7 @@ class RunManifest(BaseModel):
 
     `height_fill` and `height_completeness` say where a height came from. Neither says whether the
     substitute resolves anything inside a unit, and `Hr` is a geometric mean, so it is depressed by
-    spread and rises as spread collapses. Phase 10 rejected Open Buildings 2.5D for having too much
+    spread and rises as spread collapses. Open Buildings 2.5D was rejected for having too much
     within-unit spread (0.441 against reality's 0.195); the tiers that shipped have too little —
     measured at a median CV of 0.192 for WSF-3D in Nairobi and 0.112 for GHS-BUILT-H in Bogota,
     against 0.266 for real Overture heights in Berlin, with 23.6% of the GHSL units carrying a
@@ -171,7 +171,7 @@ class RunManifest(BaseModel):
 
     height_source_availability: SourceAvailability | None = None
     tag_availability: TagAvailability | None = None
-    """Overture attribute availability by upstream dataset — the Phase 18 counterpart of
+    """Overture attribute availability by upstream dataset — the counterpart of
     `height_source_availability`, and the same finding on a second attribute: building tags are
     48.6% of building area is tagged across Europe and North America against 13.6% elsewhere.
 
@@ -204,8 +204,8 @@ class RunManifest(BaseModel):
     crs: str | None = None
     """The CRS every geometry in this run is written in, as an authority code — `"EPSG:32618"`.
 
-    **It is derived, not configured.** CLAUDE.md's locked decision is that internal computation
-    happens in whatever projected CRS `estimate_utm_crs()` returns for the extent, so the answer
+    **It is derived, not configured.** Internal computation happens in whatever projected CRS
+    `estimate_utm_crs()` returns for the extent, so the answer
     depends on the bbox and appears nowhere in `config`. Until this field existed a run directory
     could not say what CRS it was in without a GeoParquet reader — which is precisely the tool a
     reader who cannot open GeoParquet does not have.

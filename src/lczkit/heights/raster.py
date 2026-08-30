@@ -1,12 +1,12 @@
-"""A minimal local zonal read for the Phase 3 height cascade.
+"""A minimal local zonal read for the height cascade.
 
-CLAUDE.md defers the `RasterSource` protocol and its Earth Engine backend to Phase 4, but tiers
-2-4 need raster values now. This module is that stopgap, deliberately kept to one function so
-Phase 4 can put a `RasterSource` call in its place by touching one line per tier.
+Tiers 2-4 need raster values, and the `RasterSource` protocol is about land-cover *fractions* per
+unit rather than a mean per footprint. This module is deliberately kept to one function, so a tier
+could be repointed at a `RasterSource` by changing one line.
 
-It is *not* a general zonal-statistics implementation and should not grow into one — Phase 4
-brings `exactextract` for that. What it does is read one window of one band and reduce it to a
-mean per footprint, which is all tiers 2-4 ask for.
+It is *not* a general zonal-statistics implementation and should not grow into one —
+`lczkit.landcover` brings `exactextract` for that. What it does is read one window of one band and
+reduce it to a mean per footprint, which is all tiers 2-4 ask for.
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ def zonal_mean(
 
     `geoms` is reprojected to the raster's CRS internally; it must have a CRS set, and so must
     the raster. Overlapping geometries are resolved last-writer-wins by `rasterio.features`;
-    Phase 1's planar enforcement means building footprints do not overlap, so this does not
+    planar enforcement in cleaning means building footprints do not overlap, so this does not
     arise for the cascade's own use.
     """
     n = len(geoms)

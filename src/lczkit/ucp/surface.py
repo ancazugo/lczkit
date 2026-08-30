@@ -1,12 +1,13 @@
-"""Stewart & Oke's surface fractions, reassembled from the Phase 4 land-cover table.
+"""Stewart & Oke's surface fractions, reassembled from the land-cover table.
 
-Phase 4 emits disjoint classes summing to 1.0, because that is what the `RasterSource` protocol
+`RasterSource` emits disjoint classes summing to 1.0, because that is what the protocol
 requires. Stewart & Oke (2012) do not partition the surface the same way, and two of the
 differences change which LCZ classes are reachable at all:
 
 - **Tree cover and water are pervious.** Their table puts LCZ A (dense trees) and LCZ G (water)
-  both at 90%+ pervious surface fraction. Phase 4 carves `tree` out of `pervious` and reports
-  `water` separately, so both have to be folded back in here or neither class can ever be matched.
+  both at 90%+ pervious surface fraction. The land-cover table carves `tree` out of `pervious` and
+  reports `water` separately, so both have to be folded back in here or neither class can ever be
+  matched.
   Both stay available as their own columns as well — they are what separates LCZ A and B from the
   other pervious classes, and LCZ G from everything.
 - **Buildings are inside the impervious class, and must come out.** A raster's built-up class is
@@ -57,7 +58,7 @@ def surface_fractions(
 ) -> pd.DataFrame:
     """Stewart & Oke surface fractions, indexed to match `building_surface_fraction`.
 
-    `land_cover` is a Phase 4 fractions table for `dataset` — column names are `dataset`'s own
+    `land_cover` is a land-cover fractions table for `dataset` — column names are `dataset`'s own
     `column_prefix` plus a class name. Units the raster did not cover are null there and stay null
     here; a null land-cover fraction is not zero cover.
     """

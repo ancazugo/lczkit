@@ -1,8 +1,8 @@
 """The MapLibre style, built in Python from a run manifest.
 
-**Why the style is generated here and not in JavaScript.** CLAUDE.md's binding constraint on Phase 7
-is that the site never recomputes a parameter or a quantile — it renders what the run already
-decided. Building the style in Python makes that constraint *testable*: a test can assert that every
+**Why the style is generated here and not in JavaScript.** The site never recomputes a parameter or
+a quantile — it renders what the run already decided. Building the style in Python makes that
+constraint *testable*: a test can assert that every
 LCZ colour equals `classify.labels.legend()` and that every choropleth's class boundaries are the
 manifest's own `breaks`, with nothing derived at draw time. The same assertions written against
 `app.js` would be assertions about a string.
@@ -63,7 +63,7 @@ BUILDINGS_SOURCE = "buildings"
 
 UNITS_FILL_LAYER = "units-fill"
 """The single layer every view paints. One layer rather than one per variable so that switching a
-view is a paint change over tiles already in memory, which is what CLAUDE.md asks for."""
+view is a paint change over tiles already in memory rather than a refetch."""
 
 HEIGHT_COMPLETENESS_COLUMN = "height_completeness"
 UNIQUENESS_COLUMN = "uniqueness"
@@ -115,8 +115,8 @@ HEIGHT_SOURCE_LABELS: dict[str, str] = {
 REGISTRY_LABELS: dict[str, str] = {spec.name: spec.label for spec in PARAMETERS}
 """`ParameterSpec.label` for every parameter this version of the package knows about.
 
-Consulted when a run's own manifest carries no label, which every run written before Phase 15 does
-— including the three published ones. Without it, rebuilding an archived site with a newer lczkit
+Consulted when a run's own manifest carries no label, which older runs do — including the three
+published ones. Without it, rebuilding an archived site with a newer lczkit
 would keep showing the labels the rebuild was meant to fix.
 """
 
@@ -163,9 +163,9 @@ def selector_rank(column: str) -> tuple[int, int]:
     **The order is chosen here, not inherited.** `build_views` used to emit views in whatever order
     the manifest's `breaks` arrived in, which is `writer.py`'s `continuous` — every numeric column
     in DataFrame order. That is incidental, and it put height provenance *last*, below ten urban
-    canopy parameters, in the one place where CLAUDE.md names a position: `height_completeness` and
+    canopy parameters. `height_completeness` and
     `height_tier_fractions` are first-class layers and sit second in the selector, above the UCP
-    choropleths. They are the visible form of the project's central result — Cairo at 0.4% tier-1
+    choropleths. They are the visible form of what this package reports — Cairo at 0.4% tier-1
     coverage against Berlin at 68.9% is the comparison the site exists to make legible.
 
     Ties keep the manifest's order, so a parameter added later lands among the UCPs without needing
@@ -567,7 +567,7 @@ def build_style(
 def _building_colour_expressions() -> dict[str, Any]:
     """Paint expressions for the two ways a reader can colour the extrusions.
 
-    Colouring by `height_source` is the one CLAUDE.md names, and it is the point of the layer: a
+    Colouring by `height_source` is the point of the layer: a
     block of towers is a different claim when its heights came from OSM tags than when they came
     from a 100 m raster mean, and only this view shows the difference building by building.
     """

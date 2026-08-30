@@ -14,9 +14,9 @@ to itself and fully dissimilar to everything else. Relaxing those off-diagonal z
 similarities buys partial credit for a near-miss. So `OA_w` reduces to `OA` exactly when the matrix
 is the identity, which is the first thing `test_validation_similarity.py` asserts.
 
-**The weights live in `docs/references/tables/lcz_class_similarity.md`, not here.** CLAUDE.md's
-sharpest rule is that a Tier 1 number is read from a committed table rather than reproduced from
-memory, and this matrix has 289 cells, of which a wrong one would be invisible. The table is parsed
+**The weights live in `docs/references/tables/lcz_class_similarity.md`, not here.** A published
+number is read from a committed transcription rather than reproduced from memory, and this matrix
+has 289 cells, of which a wrong one would be invisible. The table is parsed
 at import and the parsed values are the constants; there is no second copy to drift.
 
 That file holds **two** matrices with identical headers — the similarity one and its complement.

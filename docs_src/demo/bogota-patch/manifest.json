@@ -331,7 +331,7 @@
           "enabled": false,
           "min_mean_building_area_m2": 1000.0,
           "max_mean_building_area_m2": null,
-          "reason": "LCZ 8 fails by construction, not by tuning (Phase 14): its building-surface band overlaps LCZ 3 and 6, its Hr band is identical to LCZ 3, 6 and 9, so aspect ratio is its only separator in the metric — and aspect ratio is null exactly where large setbacks stop streets reaching buildings, which is most of an LCZ 8 unit. Measured 0.0% agreement over 224 Rotterdam cells. A functional route is the only evidence available that does not depend on a parameter the class nullifies."
+          "reason": "LCZ 8 fails by construction, not by tuning: its building-surface band overlaps LCZ 3 and 6, its Hr band is identical to LCZ 3, 6 and 9, so aspect ratio is its only separator in the metric — and aspect ratio is null exactly where large setbacks stop streets reaching buildings, which is most of an LCZ 8 unit. Measured 0.0% agreement over 224 Rotterdam cells. A functional route is the only evidence available that does not depend on a parameter the class nullifies."
         },
         {
           "name": "lightweight",
@@ -341,7 +341,7 @@
           "enabled": false,
           "min_mean_building_area_m2": null,
           "max_mean_building_area_m2": 100.0,
-          "reason": "LCZ 7 reaches its published building-surface range in 8.2% of cells (Phase 13), low on both tails across five non-European cities, and it is the class the founding premise is most about. **This rule will mostly not fire where it matters**: Overture has no slum/shanty/ger/tent value, and tagged building area runs 13.6% outside Europe and North America against 48.6% inside — Rio at 3.1%. That is a result to report, not a reason to omit the rule, and `building_tag_coverage` is what makes the non-firing legible rather than invisible."
+          "reason": "LCZ 7 reaches its published building-surface range in 8.2% of cells, low on both tails across five non-European cities, and it is the class the height-coverage limit bears on most. **This rule will mostly not fire where it matters**: Overture has no slum/shanty/ger/tent value, and tagged building area runs 13.6% outside Europe and North America against 48.6% inside — Rio at 3.1%. That is a result to report, not a reason to omit the rule, and `building_tag_coverage` is what makes the non-firing legible rather than invisible."
         }
       ],
       "natural_negligible_fraction": 0.1,
@@ -534,28 +534,28 @@
       "name": "tree_fraction",
       "label": "Tree cover fraction",
       "unit": "fraction",
-      "description": "Tree-covered fraction of the unit, from the Phase 4 land-cover table. Also counted inside `pervious_surface_fraction`; kept separately because it separates LCZ A and B from the other pervious classes.",
+      "description": "Tree-covered fraction of the unit, from the land-cover table. Also counted inside `pervious_surface_fraction`; kept separately because it separates LCZ A and B from the other pervious classes.",
       "reference": "10.5194/gmd-17-2077-2024"
     },
     {
       "name": "water_fraction",
       "label": "Water fraction",
       "unit": "fraction",
-      "description": "Water-covered fraction of the unit, from the Phase 4 land-cover table. Also counted inside `pervious_surface_fraction`; kept separately because it is the only route to LCZ G.",
+      "description": "Water-covered fraction of the unit, from the land-cover table. Also counted inside `pervious_surface_fraction`; kept separately because it is the only route to LCZ G.",
       "reference": "10.5194/gmd-17-2077-2024"
     },
     {
       "name": "height_of_roughness_elements_m",
       "label": "Height of roughness elements",
       "unit": "m",
-      "description": "Stewart & Oke's Hr: the unweighted GEOMETRIC mean of building height, exp(mean(log h)), over every building with a resolved height intersecting the unit. Heights are floored at a small positive value before the log. Buildings the Phase 3 cascade left unresolved are excluded. Null for a unit holding no building with a height.",
+      "description": "Stewart & Oke's Hr: the unweighted GEOMETRIC mean of building height, exp(mean(log h)), over every building with a resolved height intersecting the unit. Heights are floored at a small positive value before the log. Buildings the height cascade left unresolved are excluded. Null for a unit holding no building with a height.",
       "reference": "10.5194/gmd-17-2077-2024"
     },
     {
       "name": "h_geometric_area_weighted",
       "label": "Height, geometric mean, area-weighted",
       "unit": "m",
-      "description": "SECONDARY, not for classification. The same geometric mean as Hr, but weighted by footprint area, so a 5 m2 shed no longer counts as much as a tower block. Hr itself stays unweighted because Bernard et al. (2024) Table 1 specifies that form and the Stewart & Oke ranges were defined for it — weighting it would change the definition silently. Emitted so the size of the difference is measurable: Phase 10 established that Hr's sensitivity to dispersion is what made the most accurate height product degrade the map, and the same mechanism acts on the unweighted mean itself.",
+      "description": "SECONDARY, not for classification. The same geometric mean as Hr, but weighted by footprint area, so a 5 m2 shed no longer counts as much as a tower block. Hr itself stays unweighted because Bernard et al. (2024) Table 1 specifies that form and the Stewart & Oke ranges were defined for it — weighting it would change the definition silently. Emitted so the size of the difference is measurable: Hr's sensitivity to dispersion is what made the most accurate height product degrade the map, and the same mechanism acts on the unweighted mean itself.",
       "reference": "computed here"
     },
     {
@@ -611,7 +611,7 @@
       "name": "industrial_fraction_of_building_area",
       "label": "Industrial share of building area",
       "unit": "fraction",
-      "description": "Share of the unit's BUILDING area that is industrial — footprint falling inside the dissolved industrial evidence, over all footprint. Bernard et al. (2024)'s FIND/B, so their published 0.33 threshold transfers to this column and not to the unit-area one. Null where the unit holds no buildings: a share of nothing is undefined, not zero. Functional, not morphological — Phase 6 applies it after the prototype distance.",
+      "description": "Share of the unit's BUILDING area that is industrial — footprint falling inside the dissolved industrial evidence, over all footprint. Bernard et al. (2024)'s FIND/B, so their published 0.33 threshold transfers to this column and not to the unit-area one. Null where the unit holds no buildings: a share of nothing is undefined, not zero. Functional, not morphological — it is applied after the prototype distance.",
       "reference": "10.5194/gmd-17-2077-2024"
     },
     {
@@ -646,7 +646,7 @@
       "name": "industrial_evidence",
       "label": "Industrial evidence source",
       "unit": "category",
-      "description": "Which sources contributed area to `industrial_fraction`: 'none', 'buildings', 'land_use' or 'both'. CLAUDE.md requires recording which evidence source fired, because the two are very differently reliable.",
+      "description": "Which sources contributed area to `industrial_fraction`: 'none', 'buildings', 'land_use' or 'both'. Recorded because the two sources are very differently reliable.",
       "reference": "computed here"
     },
     {
@@ -735,16 +735,16 @@
     }
   ],
   "not_computed": {
-    "sky_view_factor": "Deferred by CLAUDE.md. The single most expensive component, and strongly correlated with aspect ratio, which this phase does compute. Bernard et al. (2018), 10.3390/cli6030060, is the preferred route when it is picked up: vector ray-launching, no DSM required.",
-    "terrain_roughness_class": "Deferred. CLAUDE.md asks for it via the Davenport et al. (2000) lookup, but that table maps a roughness class to a roughness length z0, and computing z0 from morphology is on the same document's deferred list. Bernard et al. (2024) weight z0 at 0.5 against 8 for building fraction and 6 for mean height, so it is the least influential parameter in their scheme — deferring it costs the classification little."
+    "sky_view_factor": "Not computed. The single most expensive component, and strongly correlated with aspect ratio, which is computed. Bernard et al. (2018), 10.3390/cli6030060, is the preferred route when it is picked up: vector ray-launching, no DSM required.",
+    "terrain_roughness_class": "Not computed. The Davenport et al. (2000) lookup maps a roughness class to a roughness length z0, and z0 itself is not computed from morphology either. Bernard et al. (2024) weight z0 at 0.5 against 8 for building fraction and 6 for mean height, so it is the least influential parameter in their scheme — deferring it costs the classification little."
   },
   "limitations": {
-    "industrial_fraction": "Overture exposes a single 'industrial' value with no heavy/light split. GeoClimate keys LCZ 10 on OSM's HEAVY INDUSTRY against light industry and commercial, and that distinction does not survive Overture's schema normalisation — the same normalisation that removes the need for a tag-mapping table also discards the semantic detail OSM carried. A light-industrial estate and a refinery are therefore indistinguishable here, so Phase 6's LCZ 10 threshold is set to under-trigger: a missing LCZ 10 is a visible gap, whereas a light-industrial estate mislabelled as heavy industry is an invisible error that propagates into any model consuming the map. 'warehouse' is excluded from the industrial vocabulary; it is an LCZ 8 example.",
+    "industrial_fraction": "Overture exposes a single 'industrial' value with no heavy/light split. GeoClimate keys LCZ 10 on OSM's HEAVY INDUSTRY against light industry and commercial, and that distinction does not survive Overture's schema normalisation — the same normalisation that removes the need for a tag-mapping table also discards the semantic detail OSM carried. A light-industrial estate and a refinery are therefore indistinguishable here, so the LCZ 10 threshold is set to under-trigger: a missing LCZ 10 is a visible gap, whereas a light-industrial estate mislabelled as heavy industry is an invisible error that propagates into any model consuming the map. 'warehouse' is excluded from the industrial vocabulary; it is an LCZ 8 example.",
     "h_mean_area_weighted, h_std": "Secondary columns. They are not Stewart & Oke's height of roughness elements and must not be used for classification — Hr is the geometric mean, and the LCZ property ranges were defined for it. These exist for the deferred roughness work (Macdonald, Kanda)."
   },
   "unused_lcz_properties": {
-    "sky_view_factor": "Deferred in Phase 5 as the single most expensive component, and strongly correlated with aspect ratio, which is computed. Its absence is the main reason the published table cannot separate LCZ A, B, C and D: it is one of only three dimensions distinguishing them, and the other two are also building-derived. Bernard et al. (2024) weight it at 4 of 21.5, second only to building surface fraction.",
-    "terrain_roughness_class": "Deferred in Phase 5. Davenport et al. (2000) map the class to a roughness length z0, and deriving z0 from morphology (Macdonald, Kanda) is itself deferred, so the lookup has no input. Bernard et al. (2024) weight z0 at 0.5 of 21.5, the least influential dimension in their scheme.",
+    "sky_view_factor": "Not computed: the single most expensive component, and strongly correlated with aspect ratio, which is computed. Its absence is the main reason the published table cannot separate LCZ A, B, C and D: it is one of only three dimensions distinguishing them, and the other two are also building-derived. Bernard et al. (2024) weight it at 4 of 21.5, second only to building surface fraction.",
+    "terrain_roughness_class": "Not computed. Davenport et al. (2000) map the class to a roughness length z0, and deriving z0 from morphology (Macdonald, Kanda) is not implemented, so the lookup has no input. Bernard et al. (2024) weight z0 at 0.5 of 21.5, the least influential dimension in their scheme.",
     "surface_admittance": "A thermal property of the materials, not a morphological one. Nothing in the open vector or raster data this package ingests measures it, and no proxy for it is proposed. Stewart & Oke publish it as a descriptive attribute of each class rather than as a classification input, and Bernard et al. (2024) assign it no weight.",
     "surface_albedo": "As for surface admittance: a radiative property of the materials. Deriving it would need a multispectral product and a narrowband-to-broadband conversion, which is a different package.",
     "anthropogenic_heat_output": "An energy-use quantity, not a surface one. Estimating it needs population, traffic and building-energy data none of which this package ingests. Note that it is the only property in the published table that would separate LCZ 10 from LCZ 8 directly - 300+ W m-2 against at most 50 - which is why the LCZ 10 rule has to reach for a functional attribute instead."
@@ -753,12 +753,12 @@
     {
       "property": "sky_view_factor",
       "weight": 4.0,
-      "reason": "deferred in Phase 5"
+      "reason": "not computed"
     },
     {
       "property": "effective_terrain_roughness_length",
       "weight": 0.5,
-      "reason": "deferred in Phase 5"
+      "reason": "not computed"
     }
   ],
   "classification": {
@@ -1607,7 +1607,7 @@
         "column": "sem_large_lowrise_buildings_of_building_area",
         "min_fraction": 0.5,
         "enabled": false,
-        "reason": "LCZ 8 fails by construction, not by tuning (Phase 14): its building-surface band overlaps LCZ 3 and 6, its Hr band is identical to LCZ 3, 6 and 9, so aspect ratio is its only separator in the metric — and aspect ratio is null exactly where large setbacks stop streets reaching buildings, which is most of an LCZ 8 unit. Measured 0.0% agreement over 224 Rotterdam cells. A functional route is the only evidence available that does not depend on a parameter the class nullifies.",
+        "reason": "LCZ 8 fails by construction, not by tuning: its building-surface band overlaps LCZ 3 and 6, its Hr band is identical to LCZ 3, 6 and 9, so aspect ratio is its only separator in the metric — and aspect ratio is null exactly where large setbacks stop streets reaching buildings, which is most of an LCZ 8 unit. Measured 0.0% agreement over 224 Rotterdam cells. A functional route is the only evidence available that does not depend on a parameter the class nullifies.",
         "units_assigned": 0
       },
       {
@@ -1616,7 +1616,7 @@
         "column": "sem_lightweight_buildings_of_building_area",
         "min_fraction": 0.5,
         "enabled": false,
-        "reason": "LCZ 7 reaches its published building-surface range in 8.2% of cells (Phase 13), low on both tails across five non-European cities, and it is the class the founding premise is most about. **This rule will mostly not fire where it matters**: Overture has no slum/shanty/ger/tent value, and tagged building area runs 13.6% outside Europe and North America against 48.6% inside — Rio at 3.1%. That is a result to report, not a reason to omit the rule, and `building_tag_coverage` is what makes the non-firing legible rather than invisible.",
+        "reason": "LCZ 7 reaches its published building-surface range in 8.2% of cells, low on both tails across five non-European cities, and it is the class the height-coverage limit bears on most. **This rule will mostly not fire where it matters**: Overture has no slum/shanty/ger/tent value, and tagged building area runs 13.6% outside Europe and North America against 48.6% inside — Rio at 3.1%. That is a result to report, not a reason to omit the rule, and `building_tag_coverage` is what makes the non-firing legible rather than invisible.",
         "units_assigned": 0
       }
     ],
@@ -2558,7 +2558,7 @@
         "area_in_m2": 11040023.426890457,
         "area_out_m2": 11040023.377078779,
         "detail": {
-          "eps_m": 1e-6,
+          "eps_m": 1e-06,
           "eps_final_m": 0.001,
           "n_passes": 5,
           "n_residual_pairs": 62,

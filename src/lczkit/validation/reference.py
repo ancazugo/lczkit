@@ -1,6 +1,6 @@
 """The reference LCZ map, reduced to one label per spatial unit.
 
-CLAUDE.md's validation target is the Demuzere global LCZ map, compared on the 100 m grid. The
+The comparator map is the Demuzere global LCZ map, compared on the 100 m grid. The
 reduction that needs is areal class fractions per unit followed by the majority - which is
 exactly what `LocalRasterSource` already does for land cover, down to the CRS handling, the
 covering window, the exact cell weighting and the nodata policy. So the reference map is described
@@ -12,7 +12,7 @@ fractions still say how much of each unit the reference map reaches. Without tha
 half outside the map would report a confident majority computed from a corner of itself, and the
 agreement statistics would quietly include it.
 
-**"The 100 m grid" is CLAUDE.md's phrase for the target, not a description of the reference.**
+**"The 100 m grid" describes lczkit's units, not the reference.**
 `lcz_v3.tif` is distributed in EPSG:4326 at 0.000898315 degrees, which is ~100 m north-south and
 100 m east-west only at the equator: at Berlin's latitude the cells are **60.9 m** wide, at
 Rotterdam 61.7 m, at Hong Kong 92.5 m. The lczkit unit is a 100 m square in a projected CRS, so the

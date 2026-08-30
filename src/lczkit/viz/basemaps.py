@@ -1,9 +1,8 @@
 """Optional online raster base layers, and the attribution each one obliges the site to carry.
 
-**Read this before enabling one.** CLAUDE.md's anti-pattern list requires the site to open "with no
-network and no software the user must install, and remain valid years from now", and that is not a
-preference — it is what makes a built site archivable beside a paper. Everything here breaks it, so
-nothing here is on by default.
+**Read this before enabling one.** A built site opens with no network and no software the reader
+must install, and stays valid years from now. That is not a preference — it is what makes a site
+archivable beside a paper. Everything here breaks it, so nothing here is on by default.
 
 `VizConfig.online_basemaps` is empty unless a caller asks, and with it empty the emitted site
 contains no external reference at all — a test asserts exactly that, and a second test asserts that
@@ -79,9 +78,9 @@ class BasemapProvider:
     key_name: str = ""
     """The environment variable holding this provider's key, named in the error when it is absent.
 
-    Documentation only — nothing in this module reads the environment. CLAUDE.md's locked decision
-    puts every environment read in the config layer, so `lczkit.config.maptiler_key()` is what
-    actually resolves it."""
+    Documentation only — nothing in this module reads the environment. Every environment read
+    happens in the config layer, so `lczkit.config.maptiler_key()` is what actually resolves
+    it."""
 
 
 OPENSTREETMAP = BasemapProvider(
@@ -243,8 +242,9 @@ joins this set by being keyless, and a keyed one cannot join it by being forgott
 
 **This is a command-line default, not the library's.** `VizConfig.online_basemaps` is still empty by
 default, so `build_site()` and a rebuild of an archived manifest reach no network unless told to —
-that is the property the no-external-reference test pins, and it is unchanged. See the Phase 21
-block in CLAUDE.md for why the two defaults differ and what was given up.
+that is the property the no-external-reference test pins, and it is unchanged. A site built by the
+command line names these tile hosts in its `style.json`; a site built through the library names
+none. Pass `--basemap none` for an archival build.
 """
 
 

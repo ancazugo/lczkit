@@ -1,9 +1,8 @@
-"""Placing the areal height products that the Phase 3 cascade's tiers 2-4 read.
+"""Placing the areal height products that the cascade's tiers 2-4 read.
 
-CLAUDE.md's Phase 3 has the *user* place each product as a COG under `input/GOB25D/`,
-`input/WSF3D/` or `input/GHSL/`. That was written when tiers 2-4 were a specification; Phase 10
-runs them over nine cities and three products, and placing twenty-seven windows by hand is not
-an instruction anyone can follow. These fetchers do the placing, and they own those three
+A caller may place each product as a COG under `input/GOB25D/`, `input/WSF3D/` or `input/GHSL/`
+by hand. Across several cities and three products that is a lot of windows, so these fetchers do
+the placing instead, and they own those three
 directories the way `OvertureSource` owns `input/Overture_Maps/` — which is the rule the
 departure is made under rather than against.
 
@@ -370,9 +369,9 @@ class OpenBuildings25dSource:
     def path_for(self, bbox: BBox) -> Path:
         """Where this window's export lives, keyed on tier, year and bbox.
 
-        The cache key is the filename, per CLAUDE.md's "a cache hit is just a file that is
-        already there". The year is in it because the collection is annual and two years over
-        one city are different rasters, not the same one refetched.
+        The cache key is the filename: a cache hit is just a file that is already there. The year
+        is in it because the collection is annual, and two years over one city are different
+        rasters rather than the same one refetched.
         """
         return self.directory / f"{self.config.tier_name}_{self.config.year}_{bbox_key(bbox)}.tif"
 

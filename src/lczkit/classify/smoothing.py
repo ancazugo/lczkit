@@ -4,17 +4,15 @@ Every unit is classified independently of its neighbours. Nothing in the pipelin
 at what surrounds a cell, so a 100 m cell whose parameters wobble across a prototype boundary takes
 a different label from the fabric it sits in, and the result is salt-and-pepper at a grain Stewart
 & Oke never intended a class to be read at. An LCZ patch is a neighbourhood — the published
-guidance is a few hundred metres across, and the So2Sat patches this project validates against are
-320 m — so a single isolated 1 ha cell is not a claim the scheme can carry.
+guidance is a few hundred metres across, and a So2Sat reference patch is 320 m — so a single
+isolated 1 ha cell is not a claim the scheme can carry.
 
-The LCZ literature's answer is a spatial filter and it is standard: the LCZ Generator applies one
-before publishing a map. lczkit omitted it, which is why the omission is worth naming rather than
-quietly fixing — every stored figure in this project was measured without one.
+The LCZ literature's answer is a spatial filter, and it is standard: the LCZ Generator applies one
+before publishing a map.
 
-**It ships disabled, and that is a ruling rather than caution.** `min_like_neighbours` is a
-threshold, CLAUDE.md requires a threshold to be swept against a reference and chosen at an
-operating point, and this one has not been swept. Turning it on before that would move every label
-in a run on the strength of a number nobody measured.
+**It ships disabled, and that is deliberate rather than cautious.** `min_like_neighbours` has not
+been calibrated against a reference, and every published figure here was measured without a filter.
+Turning it on moves labels in a run on the strength of a number nobody has measured.
 
 **A functionally assigned label is never overwritten.** The industrial rule and the semantic rules
 place a unit on evidence about what is there, not on morphology that might have wobbled, so an

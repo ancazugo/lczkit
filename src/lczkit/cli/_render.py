@@ -45,8 +45,8 @@ GUPPD's 5 558 regions are above it; the median is 80 km².
 def fail(message: str, code: int = EXIT_CONFIG) -> NoReturn:
     """Print `message` and exit, with no traceback.
 
-    CLAUDE.md asks config problems to fail loudly and early. A stack trace is loud but not clear:
-    the message these raise already names the fix, so the trace only buries it.
+    Configuration problems fail loudly and early. A stack trace is loud but not clear: the message
+    these raise already names the fix, so the trace only buries it.
     """
     console.print(f"[bold red]error[/bold red] {message}")
     raise typer.Exit(code)

@@ -1,6 +1,6 @@
 """Carry resolved heights from one building layer onto another.
 
-Phase 1 produces two building layers from one source. The height cascade runs **once**, on
+Cleaning produces two building layers from one source. The height cascade runs **once**, on
 `buildings_area` — that is the complete population, and so the honest denominator for
 `height_completeness` and for the source-availability diagnostic. `buildings_topo` still needs
 heights, because `momepy.street_profile` measures a canyon's height-to-width ratio against the
@@ -57,7 +57,7 @@ def inherit_heights(target: gpd.GeoDataFrame, source: gpd.GeoDataFrame) -> gpd.G
 
     # `idxmax` then `.loc`, rather than a groupby aggregation: `first`/`last` skip nulls per
     # column, so a target whose largest overlap is an unresolved building would silently inherit
-    # a smaller neighbour's height instead of staying null. That is imputation, which Phase 3
+    # a smaller neighbour's height instead of staying null. That is imputation, which the cascade
     # refuses — an unresolved height is information about the data, not a gap to be filled.
     pieces["_overlap"] = pieces.geometry.area
     winners = pieces.loc[pieces.groupby("_target")["_overlap"].idxmax()].set_index("_target")

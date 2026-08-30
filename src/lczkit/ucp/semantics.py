@@ -15,7 +15,7 @@ with the configuration rather than with the city. The layers are intersected onc
 **The two coverage columns are the point, not a diagnostic.** Measured over the sixteen study
 cities the registry held at the time - the four added afterwards have no Overture extract on disk
 and are **not** in this figure - **48.6% of building area carries an attribute across Europe and
-North America against 13.6% elsewhere** — the same collapse Phase 9 measured for tier-1 height, on
+North America against 13.6% elsewhere** — the same collapse tier-1 height coverage shows, on
 a second and independent attribute. Rio is at 3.1%, so a `lightweight` fraction of 0.0 there is not
 evidence that there is no informal settlement; it is 97% of building area carrying no tag. Without
 `building_tag_coverage` beside it the two states are indistinguishable, exactly as "90% real
@@ -28,8 +28,8 @@ columns with their denominators in their names rather than fused into one number
 different availability, different meanings and different failure modes, and a single blended
 fraction would hide all three.
 
-**Scope: built types only.** CLAUDE.md's locked decision is that land use supplies functional
-semantics and never land cover — rasters own that. `park`, `forest`, `grass` and `farmland` are all
+**Scope: built types only.** Land use supplies functional semantics and never land cover — rasters
+own that. `park`, `forest`, `grass` and `farmland` are all
 present in the vocabulary and all deliberately unmapped, so nothing here can reach LCZ A-G.
 
 The vocabulary is transcribed from `docs/references/tables/overture_lcz_semantic_mapping.md`, which
@@ -53,9 +53,9 @@ BUILDING_SUFFIX = "_buildings_of_building_area"
 PARCEL_SUFFIX = "_parcels_of_unit_area"
 """Both a numerator and a denominator in every column name.
 
-`industrial_fraction` was contradicted three ways inside this repository at once because its name
-said neither, and CLAUDE.md's ruling from that is a standing anti-pattern. These columns are not
-comparable to each other and must not look as though they are: one divides tagged building area by
+A column whose name states neither cannot be read correctly, as `industrial_fraction` showed.
+These columns are not comparable to each other and must not look as though they are: one divides
+tagged building area by
 *all* building area, the other divides dissolved parcel area by *unit* area.
 """
 

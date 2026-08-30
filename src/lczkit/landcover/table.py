@@ -1,7 +1,7 @@
 """The fractions table both land-cover backends return, and the entry checks both make.
 
-CLAUDE.md's acceptance criterion for this phase is that `LocalRasterSource` and
-`EarthEngineSource` return schema-identical tables. Routing both through `fractions_table` makes
+`LocalRasterSource` and `EarthEngineSource` must return schema-identical tables. Routing both
+through `fractions_table` makes
 that true by construction rather than by inspection: the backends differ only in how they produce
 per-unit *cell counts*, and everything after that — column order, absent classes, normalisation,
 the empty-unit convention — happens once, here.

@@ -9,8 +9,7 @@ function callers outside this module need.
 tessellation and lost footprint area costs nothing. lczkit feeds the same layer to building surface
 fraction, which carries roughly 47% of the classification metric, so cleaning for topology silently
 destroyed the numerator — measured at 23.5% of Berlin's footprint area, worth 9.1 points of
-agreement (Phase 6.5, `docs/experiments/phase-6.6-footprint-attrition.md`). The answer is not
-weaker cleaning; it is two products with different contracts:
+agreement. The answer is not weaker cleaning; it is two products with different contracts:
 
 - **`buildings_area`** — shared prefix plus overlap *trimming* only. Feeds building surface
   fraction, `Hr`, building count, mean building area and `industrial_fraction`. Feature-preserving,
@@ -61,7 +60,7 @@ def _area(buildings: gpd.GeoDataFrame) -> float:
 def union_area(buildings: gpd.GeoDataFrame) -> float:
     """Ground actually covered by `buildings`, counting overlapping footprints once.
 
-    The denominator Phase 1's retention criterion is stated against, and the quantity building
+    The denominator the cleaning retention criterion is stated against, and the quantity building
     surface fraction is trying to measure — BSF sums overlay pieces, so a self-overlapping layer
     inflates it. See `FootprintCoverage` for why the sum cannot serve.
 
@@ -69,8 +68,7 @@ def union_area(buildings: gpd.GeoDataFrame) -> float:
     `shapely.union_all` over every footprint was measured at five Berlin extents before being
     rejected: exponent 1.26 -> 1.80 in feature count, reaching **711 s for 892k footprints at
     891 km2** — roughly doubling a metropolitan `clean_vectors` run, which is 9.8 minutes in total.
-    CLAUDE.md's rule that a whole-extent operation gets its exponent measured at three or more
-    extents is what caught it.
+    Measuring the scaling exponent at several extents is what caught it.
 
     Footprints are very nearly disjoint — Berlin's raw set overlaps itself by 0.19% of summed area
     at metropolitan extent — so almost every footprint is its own component and the global union is
@@ -258,8 +256,8 @@ def absorb_small_buildings(
 
     `geoplanar.merge_touching` deletes any polygon in `index` that shares no boundary segment with
     a neighbour, and offers no way to turn that off. Deletion is wrong here: a free-standing garage
-    is small, not spurious, and CLAUDE.md's rule is that this operation dissolves rather than
-    deletes. So the small set is partitioned on the same predicate `merge_touching` uses internally,
+    is small, not spurious, and this operation must dissolve rather than delete. So the small set
+    is partitioned on the same predicate `merge_touching` uses internally,
     only the touching part is passed to it, and the isolates are concatenated back untouched.
 
     Measured on the Berlin fixture: 1186 footprints under 20 m², of which 1043 are isolated. The
@@ -417,8 +415,8 @@ def enforce_planarity(
     # Last resort: drop the smaller footprint of whatever still overlaps. `buildings_topo` is the
     # destructive layer and the one that must be planar for `momepy.enclosures()`; `buildings_area`
     # carries every area statistic and is untouched by this. Recorded, never silent — an
-    # unexplained gap in the topology layer is exactly what CLAUDE.md's cleaning report exists to
-    # make visible, and it is preferable to ending a run over a whole city on one bad pair.
+    # unexplained gap in the topology layer is exactly what the cleaning report exists to make
+    # visible, and it is preferable to ending a run over a whole city on one bad pair.
     unresolvable = sorted(
         {
             second if geometries[first].area >= geometries[second].area else first
@@ -494,9 +492,9 @@ def clean_buildings(
     area, step = trim_overlaps(base)
     steps.append(step)
 
-    # Measured on `base`, i.e. after the validity fixes and before the fork, which is where
-    # CLAUDE.md states the criterion ("retains >=99% of the union of input footprint area after
-    # validity fixes"). Taking it on the raw input instead would fold make_valid's repairs into
+    # Measured on `base`, i.e. after the validity fixes and before the fork, which is how the
+    # criterion is stated: at least 99% of the union of input footprint area is retained after
+    # validity fixes. Taking it on the raw input instead would fold make_valid's repairs into
     # the denominator and make the criterion depend on how broken the source geometry was.
     coverage = FootprintCoverage(
         raw_summed_area_m2=_area(base),

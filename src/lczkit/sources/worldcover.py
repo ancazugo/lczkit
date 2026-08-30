@@ -1,18 +1,18 @@
 """Placing the ESA WorldCover window a run's land cover is reduced over.
 
-Phase 4 has `LocalRasterSource` read a COG the user placed. That is still true for a run whose
-`LandCoverDatasetConfig.filename` is set; this module is the other half, for a run that names a
-bbox and expects the land cover to follow — the same departure `sources.height_products` makes for
-tiers 2-4, under the same rule rather than against it.
+`LocalRasterSource` reads a COG the caller placed, which is what happens for a run whose
+`LandCoverDatasetConfig.filename` is set. This module is the other half, for a run that names a
+bbox and expects the land cover to follow — the same split `sources.height_products` makes for
+tiers 2-4.
 
 **Why this is a module and not four lines at a call site.** WorldCover ships on a 3-degree grid.
 A 30 km window usually lands inside one tile and sometimes spans two or four, and the failure when
 it spans two is not an error: `clip_raster` windows with `from_bounds` and `read(window=...)`
 returns a *smaller array*, while `LocalRasterSource.fractions` turns uncovered units into
 all-`NaN`. Two individually-correct behaviours compose into a map missing a quarter of its land
-cover with nothing saying so. The publish driver carried a single hardcoded tile — Berlin's
-`N51E012` — until Phase 7 published a second city, and land cover is the sole classifier for
-LCZ A-G. `clip_worldcover` therefore reopens what it wrote and raises, naming the short side.
+cover with nothing saying so — and land cover is the sole classifier for LCZ A-G, so a window
+that spans two WorldCover tiles and reads only one loses a whole edge of the map.
+`clip_worldcover` therefore reopens what it wrote and raises, naming the short side.
 
 **Where it writes.** Into the run directory, never into `input/`. A clip keyed to one run's bbox
 is not a source cache, and `input/` is shared with other projects.

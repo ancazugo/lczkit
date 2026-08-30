@@ -1,8 +1,7 @@
 """Spatial-unit generation: `EnclosureUnits`, `GridUnits`, and `aggregate()` between them.
 
-Also home to `check_units()`, the entry contract every stage keyed on `unit_id` enforces. It
-started in `lczkit.landcover.table` when Phase 4 was the only caller; Phase 5 made it the third,
-and it belongs with the definition of the unit of exchange rather than with any one consumer.
+Also home to `check_units()`, the entry contract every stage keyed on `unit_id` enforces. It lives
+with the definition of the unit of exchange rather than with any one consumer.
 """
 
 from __future__ import annotations

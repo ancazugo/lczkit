@@ -1,19 +1,16 @@
 """`EnclosureUnits`: `momepy.enclosures()`-based spatial units, the GeoClimate RSU analogue.
 
-CLAUDE.md names streets, rail, waterbodies, and large vegetation patches as the barrier set —
-that list is exhaustive, not illustrative.
+The barrier set is streets, rail, waterbodies and large vegetation patches, and that list is
+exhaustive rather than illustrative.
 
-Phase 1 only ever fetched streets and waterbodies; rail was added to `VectorSource` in Phase 2
-(see `lczkit.sources.overture.OvertureSource.rail`) specifically for this. Large vegetation
-patches have no source at all yet — that is Phase 4's land-cover raster work — so
-`assemble_barriers` accepts `vegetation` as an optional layer and omits it from the barrier set
-until a `RasterSource`-derived vegetation-patch layer exists to pass in.
+Large vegetation patches have no vector source, so `assemble_barriers` accepts `vegetation` as an
+optional layer and omits it until a raster-derived vegetation-patch layer exists to pass in.
 
 The one plausible-looking wrong answer: `VectorSource.land_use()` returns polygons that include
-parks and green space, and it is tempting to reach for them as the missing vegetation barrier.
-Do not. CLAUDE.md restricts land use to functional semantics (Phase 5's `industrial_fraction`)
-and states explicitly that it is neither a barrier here nor a land-cover source in Phase 4 —
-rasters own land cover, and the vegetation barrier must come from them.
+parks and green space, and it is tempting to reach for them as the missing vegetation barrier. Do
+not. Land use carries functional semantics only — it feeds `industrial_fraction` — and it is
+neither a barrier here nor a land-cover source. Rasters own land cover, and the vegetation barrier
+must come from them.
 """
 
 from __future__ import annotations
@@ -40,8 +37,8 @@ def assemble_barriers(
 
     `rail` and `vegetation` are optional — pass `None` (the default) when a layer isn't
     available; enclosures form from whatever barriers are given. All non-empty inputs must
-    already share one CRS (typically the CRS Phase 1's `clean_vectors()` reprojected into);
-    this function does not itself reproject anything.
+    already share one CRS (typically the one `clean_vectors()` reprojected into); this function
+    does not itself reproject anything.
 
     These four layers are the whole eligible barrier set. In particular, do not pass
     `CleanedVectors.land_use` as `vegetation` — see this module's docstring.

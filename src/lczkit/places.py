@@ -36,8 +36,7 @@ from lczkit.config import Settings
 from lczkit.protocols import BBox
 
 GUPPD_SOURCE_DIR_NAME = "NASA"
-"""Subdirectory under `input/`, following CLAUDE.md's layout diagram, which files GUPPD under the
-agency rather than under its own name."""
+"""Subdirectory under `input/`. GUPPD is filed under the agency rather than under its own name."""
 
 GUPPD_BOUNDS = Path("GUPPD") / "guppd_bounds.csv"
 """The post-processed bounds table within `input/NASA/`, keyed on `SMOD_ID`.

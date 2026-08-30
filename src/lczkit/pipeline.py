@@ -1,20 +1,15 @@
 """The whole chain, from a bbox to a run directory and optionally a map site.
 
-**Why this is in the package and not in a script.** Until Phase 15 the only end-to-end pipeline in
-the repository was `run_and_publish` in `scripts/berlin_metropolitan_run.py`: not importable (no
-`__init__.py`, reached by `sys.path` insertion), not covered by `mypy src` in CI, and dependent on
-constants and a raster fetcher living in two *other* scripts. Three partial re-implementations of
-the same chain existed alongside it. A command line cannot import any of that, and neither can a
-user. The stages are unchanged — this is the same sequence, in a place things can reach.
+`run_pipeline` is the only place the stages are wired together. The command line calls it rather
+than restating any of it, so there is one definition of what a run does.
 
 **What is deliberately absent.** Validation. `write_run` takes a `validation=` report and the
-manifest has a slot for it, but the chain has never populated them: agreement is measured by the
-sweep scripts, against references that are not always on disk. Wiring it in here would make every
-run depend on `input/So2Sat-LCZ42/` and `input/Demuzere_2022_complete/`. It stays where it is.
+manifest has a slot for it, but the chain never populates them: agreement is measured separately,
+against reference datasets that are not always on disk. Wiring it in here would make every run
+depend on those datasets being present. Call `lczkit.validation` yourself when you have them.
 
 `StageObserver` is how a caller watches a long run without this module choosing a rendering. The
-CLI passes a `rich` one; `scripts/berlin_metropolitan_run.Timer` already satisfies the protocol
-structurally and keeps printing exactly what it printed before.
+command line passes one backed by `rich`; any object with the same two methods will do.
 """
 
 from __future__ import annotations
@@ -199,8 +194,8 @@ def run_pipeline(
     with timed("heights"):
         # Places the products the configured cascade needs, and returns the config with each
         # tier's file resolved. Without this step `build_cascade` finds every areal tier's
-        # `filename` unset and silently runs tier 1 alone — which is what every run before
-        # Phase 11 did, and why the default cascade needs a step that actually fetches.
+        # `filename` unset and silently runs tier 1 alone, so the default cascade needs a step
+        # that actually fetches.
         heights, placed = resolve_areal_tiers(settings, bbox)
         tiers = build_cascade(heights, settings.source_dir)
         buildings_area, height_fill = fill_heights(cleaned.buildings_area, tiers)
@@ -209,16 +204,14 @@ def run_pipeline(
         tags = tag_availability(cleaned.buildings_area, cleaned.land_use)
 
     with timed("units"):
-        # Was a literal `GridUnits()` until Phase 17, which is why Phase 11's `unit_strategy`
-        # ruling had no effect for six phases: the chain not only defaulted to the grid, it could
-        # not reach anything else, because it never assembled barriers either.
+        # The strategy is config, so the chain has to assemble barriers for the two that need
+        # them rather than defaulting to the grid and being unable to reach anything else.
         strategy = build_strategy(settings.units, buildings=buildings_area)
         barriers = None
         measure_on_enclosures = settings.ucp.measure_on == "enclosures"
         if settings.units.strategy != "grid" or measure_on_enclosures:
             # `clean_vectors` does not carry rail — it is a barrier layer, not something the
-            # cleaning pipeline has a rule for — so it comes straight off the source, exactly as
-            # `scripts/unit_scale_experiment.build_arms` has fetched it since Phase 2.
+            # cleaning pipeline has a rule for — so it comes straight off the source.
             streets = (
                 filter_street_barriers(cleaned.streets)
                 if settings.units.drop_pedestrian_barriers

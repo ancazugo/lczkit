@@ -1,9 +1,8 @@
 """Per-unit height provenance: `height_completeness` and the full tier distribution.
 
-These are primary deliverables, not diagnostics. CLAUDE.md's argument is that "90% surveyed
-heights" and "90% coarse raster fallback" produce the same LCZ label with very different
-trustworthiness, so the output has to carry the whole distribution across tiers rather than a
-single completeness number.
+These are primary deliverables, not diagnostics. "90% surveyed heights" and "90% coarse raster
+fallback" produce the same LCZ label with very different trustworthiness, so the output carries
+the whole distribution across tiers rather than a single completeness number.
 """
 
 from __future__ import annotations
@@ -20,9 +19,9 @@ from lczkit.heights.tiers import OVERTURE_HEIGHT, OVERTURE_NUM_FLOORS
 TIER1_SOURCES = (OVERTURE_HEIGHT, OVERTURE_NUM_FLOORS)
 """The `height_source` tags that count towards `height_completeness`.
 
-Both of CLAUDE.md's tier-1 routes, per its literal definition of the tier. The two are reported
-as separate fractions as well, so a stricter reading — completeness as surveyed heights only —
-stays computable from the same table without this module choosing it for everyone.
+Both tier-1 routes: a surveyed height, and a storey count multiplied by a storey height. The two
+are reported as separate fractions as well, so a stricter reading — completeness as surveyed
+heights only — stays computable from the same table without this module choosing it for everyone.
 """
 
 FRACTION_PREFIX = "height_frac_"
@@ -43,7 +42,7 @@ def height_metrics(
 
     Weighting is by the area of each footprint *inside* the unit, so a building straddling two
     grid cells contributes to both in proportion. For `EnclosureUnits` this is equivalent to
-    assigning each building to one unit, since Phase 1's cross-layer topology already removes
+    assigning each building to one unit, since cross-layer topology cleaning already removes
     buildings that intersect the streets forming enclosure boundaries.
 
     Units containing no building area are all-null, not zero: "no buildings here" and "0% tier-1

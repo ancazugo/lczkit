@@ -1,12 +1,11 @@
-"""The So2Sat cities every validation sweep since Phase 9 has run, and how their windows are found.
+"""The So2Sat study cities, and how each one's window is found.
 
 A run needs an extent. `--bbox` is the general answer and needs nothing on disk; this module is the
-convenience that lets a caller say `--city berlin` and get *the same 30 km window* the recorded
-agreement figures were measured over. That is the point of it — a published site is a view of the
-package's results, so it must not be a view of a different extent.
+convenience that lets a caller say `--city berlin` and get *the same 30 km window* the published
+agreement figures were measured over, so a run stays comparable with them.
 
-Lifted out of `scripts/multi_city_validation.py` in Phase 15. It reads `input/So2Sat-LCZ42/`, so it
-is the one part of the CLI's locator that needs `DATA_DIR` populated; `--bbox` does not.
+It reads `input/So2Sat-LCZ42/`, so it is the one locator that needs `DATA_DIR` populated. `--bbox`
+does not, and `lczkit.places` covers every other city.
 """
 
 from __future__ import annotations
@@ -51,44 +50,29 @@ class City:
     """
 
 
-#: Chosen by measuring labelled-patch density inside a 30 km window across all 51 cities on disk,
-#: not by picking recognisable names. São Paulo is required by CLAUDE.md; Jakarta, Islamabad and
-#: Mumbai are the viable South/Southeast Asian options, the obvious candidates having failed the
-#: 500-patch / 4-class screen `scripts/multi_city_validation.py` applies. Europe is over-represented
-#: because that is where So2Sat's dense coverage is, and the per-region breakdown in the report says
-#: so rather than averaging it away.
+#: Chosen by measuring labelled-patch density inside a 30 km window across all 51 So2Sat cities,
+#: not by picking recognisable names. Every one passes a 500-patch / 4-class screen and carries
+#: both reference label sets. Europe is over-represented because that is where So2Sat's dense
+#: coverage is, and the per-region breakdown in a report says so rather than averaging it away.
 #:
-#: **Sixteen until Phase 18, then twenty, then twenty-eight — and every recorded figure predates
-#: the last twelve.** Anything comparing a new sweep against a stored one must **intersect the city
-#: sets first**: pooling twenty-eight against sixteen reports the difference between two populations
-#: as a deviation, which CLAUDE.md records as a mistake this project has already made once.
+#: The cities are spread deliberately across the range of how well the two reference label sets
+#: agree with each other, rather than picked from its top — Nanjing 83.2% down to Guangzhou 58.7%,
+#: with Tehran at 40.6% and New York at 50.8%. Keeping the cities of a region that agree and
+#: dropping the ones that do not is how a regional split gets manufactured instead of tested.
 #:
-#: Both enlargements fixed the same defect — a regional group of **n = 1**, which cannot separate a
-#: regional effect from one city — and the first of them showed the defect was real rather than
-#: theoretical:
-#:
-#: - **North America was Vancouver alone**, in a "Europe + N. America" grouping the argument leans
-#:   on three separate times. Los Angeles, New York, Washington D.C. and Santiago were added, and
-#:   the grouping **reorganised**: North America landed with "everywhere else" and the line became
-#:   Europe against everything. See the Phase 16 addendum.
-#: - **East Asia was Hong Kong alone**, Oceania and West Asia were empty. Beijing, Guangzhou,
-#:   Nanjing, Tokyo and Wuhan take East Asia to six; Istanbul and Tehran open West Asia; Sydney
-#:   opens Oceania.
-#:
-#: Every one passes the same 500-patch / 4-class screen and carries both references. They are spread
-#: deliberately across the label-reproducibility range rather than picked from its top — Nanjing
-#: 83.2% down to Guangzhou 58.7%, with Tehran at 40.6%, New York at 50.8% — because keeping the
-#: cities of a region that agree and dropping the ones that do not is how a regional split gets
-#: manufactured instead of tested.
+#: Every region carries more than one city, because a region represented by a single city cannot
+#: separate a regional effect from that city.
 #:
 #: Moscow, Madrid, Amsterdam, Munich, Zurich and Lisbon also qualify and are deliberately **not**
-#: here: Europe is already over-represented at six, and adding six more would weaken the very
-#: comparison the enlargement exists to test. Moscow additionally scores 99.6% on an overlap of only
-#: 225 cells — its two references drew different parts of the city — and a near-perfect figure on a
-#: thin, non-random intersection is the kind that gets quoted and then retracted.
+#: here: Europe is already at six. Moscow additionally scores 99.6% on an overlap of only 225
+#: cells, because its two references drew different parts of the city, and a near-perfect figure
+#: on a thin, non-random intersection is not one to quote.
 #:
 #: Istanbul and Tehran are labelled `West Asia` rather than folded into Europe. Istanbul genuinely
 #: straddles, and putting it in Europe would inflate the group whose distinctiveness is under test.
+#:
+#: Adding a city changes the population every published figure is measured over, so a new sweep
+#: compared against a stored one must intersect the two city sets first.
 CITIES = (
     City("berlin", "Berlin", "Europe", "DEU"),
     City("london", "London", "Europe", "GBR"),
@@ -170,7 +154,7 @@ def patches_path(target: City, settings: Settings) -> Path:
 
 
 def so2sat_window(target: City, settings: Settings, side_km: float = WINDOW_KM) -> BBox:
-    """`target`'s densest labelled window — the extent every sweep since Phase 9 has used.
+    """`target`'s densest labelled window — the extent the published figures were measured over.
 
     Raises `FileNotFoundError` naming the path when So2Sat is not on disk, because the alternative
     is a `pyogrio` error several frames down that does not say which city or which directory.

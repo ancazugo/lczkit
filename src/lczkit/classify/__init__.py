@@ -1,8 +1,8 @@
-"""Phase 6 classification - the 17-way distance vector and the labels drawn from it.
+"""Classification - the 17-way distance vector and the labels drawn from it.
 
 `PrototypeClassifier` is the only thing most callers need. The distance vector is the primary
-output and the label is a convenience over it, per CLAUDE.md: no core API here returns a bare LCZ
-integer without the distances that produced it.
+output and the label is a convenience over it: no core API here returns a bare LCZ integer without
+the distances that produced it.
 """
 
 from lczkit.classify.classifier import (

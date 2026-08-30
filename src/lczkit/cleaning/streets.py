@@ -7,8 +7,8 @@ current need.
 
 Two entry points, same result shape:
 
-- `simplify_streets` runs `neatify` over the whole extent. Correct at any size, and the only
-  thing that was available before Phase 8, but superlinear — see `lczkit.cleaning.tiles`.
+- `simplify_streets` runs `neatify` over the whole extent. Correct at any size, but superlinear —
+  see `lczkit.cleaning.tiles`.
 - `simplify_streets_tiled` splits the extent, simplifies each tile independently over a
   buffered window, and stitches the cores back together.
 
@@ -151,10 +151,10 @@ def _single_threaded_children() -> Iterator[None]:
     thread counts when the library initialises — which is before any initializer callable of
     ours could run. Setting these anywhere later sets them too late to have an effect.
 
-    This is the one place in the package that writes `os.environ`. CLAUDE.md's rule is that no
-    module *reads* the environment outside the config model, because `DATA_DIR` must resolve
-    once; this reads nothing and configures a child process, and restoring on exit keeps it from
-    leaking into the rest of the run.
+    This is the one place in the package that writes `os.environ`. No module *reads* the
+    environment outside the config model, because `DATA_DIR` must resolve once; this reads nothing
+    and configures a child process, and restoring on exit keeps it from leaking into the rest of
+    the run.
     """
     previous = {name: os.environ.get(name) for name in THREAD_LIMIT_VARS}
     os.environ.update(dict.fromkeys(THREAD_LIMIT_VARS, "1"))
@@ -216,8 +216,8 @@ def simplify_streets(
 ) -> tuple[gpd.GeoDataFrame, CleaningStep]:
     """Simplify `streets` with `neatnet.neatify`, using `buildings` as the exclusion mask.
 
-    Required, not optional, per CLAUDE.md: unsimplified dual carriageways and roundabouts
-    destroy enclosure generation downstream (Phase 2).
+    Required, not optional: unsimplified dual carriageways and roundabouts destroy enclosure
+    generation downstream.
     """
     assert_projected_crs(streets, "streets")
     assert_projected_crs(buildings, "buildings")
@@ -443,8 +443,9 @@ def pooled_artifact_threshold(
 
     **This is an approximation with a measured error, not an identity.** Faces spanning a window
     boundary are absent from the pool (see `_tile_face_index`), so the pooled distribution is
-    missing its largest faces. `dropped_area_fraction` is that error; the equivalence measurement
-    against the whole-network threshold is in `docs/experiments/phase-8-scaling.md`.
+    missing its largest faces. `dropped_area_fraction` is that error. Measured against the
+    whole-network threshold over six extents, the two estimators converge — the pooled value
+    settles at 8.1876 against 8.1918, and the deviation shrinks as the extent grows.
     """
     assert_projected_crs(streets, "streets")
     jobs = [(tile, subset(streets, tile.window)) for tile in tiles]
@@ -572,14 +573,10 @@ def _stitch(parts: list[gpd.GeoDataFrame], crs: CRS | None) -> gpd.GeoDataFrame:
     wherever the two tiles agreed about the geometry.
 
     **This runs over the whole stitched network, and that was checked rather than assumed.**
-    Phase 8 spent a while believing this step was the second quadratic bookend around the tiling,
-    on the strength of a fifteen-hour run that was sitting somewhere after the tiles were written.
     Measured directly on Berlin's 209 553 stitched features it takes **17.4 s**. A per-seam
     restriction was built, measured, and thrown away: it was *slower* (21.6 s), it left
     `momepy.street_profile`'s aspect ratio about twice as far from the whole-extent answer, and at
-    metropolitan scale it did not even reproduce the same linework. The fifteen hours were
-    `resolve_buildings_on_streets`, several steps later — see
-    `docs/experiments/phase-8-scaling.md`.
+    metropolitan scale it did not reproduce the same linework.
     """
     populated = [part for part in parts if len(part)]
     if not populated:
@@ -705,7 +702,7 @@ def seam_disagreement(
 ) -> dict[str, float]:
     """Length of linework present in one simplification and not the other, in kilometres.
 
-    The correctness instrument for the tiled path, and the thing Phase 8's tests assert on.
+    The correctness instrument for the tiled path, and what its tests assert on.
     Both inputs are reduced to a single geometry and compared with a `tolerance_m` buffer, so a
     street counts as agreeing when it follows the same line, not when its vertices are equal —
     neatnet re-nodes and re-merges, so vertex equality is too strong a test.

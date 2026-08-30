@@ -78,8 +78,7 @@ def resolve_buildings_on_streets(
     features being dropped fall below the size of a typical building: it drops 54 footprints and
     recovers 95% of the lost area. Narrower buffers compress the distribution until nothing is
     droppable (p95 = 0.46 at 2 m); wider ones swallow the blocks (p90 = 0.98 at 8 m). Both values
-    are configuration, and both were derived from two European fixtures — see
-    `docs/experiments/phase-6.6-footprint-attrition.md`.
+    are configuration, and both were derived from two European fixtures.
 
     Note what the rule does *not* do. Berlin's fixture is 6105 OpenStreetMap footprints against 88
     Microsoft ML, so the high-overlap tail is overwhelmingly OSM kiosks, shelters and garages. This
@@ -232,7 +231,7 @@ def apply_cross_layer_topology(
     """Run cross-layer topology cleanup on `buildings_topo`.
 
     `streets` and `waterbodies` pass through unchanged — only the topological building layer and
-    `waterlines` are filtered, per CLAUDE.md's Phase 1 spec.
+    `waterlines` are filtered.
     """
     cleaned, street_step = resolve_buildings_on_streets(
         buildings_topo, streets, buffer_m=road_buffer_m, overlap_limit=road_overlap_limit

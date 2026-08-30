@@ -1,7 +1,7 @@
 """`EarthEngineSource`: the same land-cover fractions, computed server-side.
 
-Identical interface and identical output schema to `LocalRasterSource`, which is CLAUDE.md's
-acceptance criterion for this phase. The two agree because they reduce the *same*
+Identical interface and identical output schema to `LocalRasterSource`. The two agree because
+they reduce the *same*
 `LandCoverDatasetConfig`: the class mapping is applied here as a server-side `remap()` or
 threshold chain built from `ClassIndex`, not written out a second time.
 
@@ -33,8 +33,8 @@ from lczkit.landcover.table import fractions_table
 from lczkit.units import check_units
 
 REDUCER = "frequencyHistogram"
-"""The only reducer this backend uses. Named explicitly because it is part of the cache key —
-CLAUDE.md keys the Earth Engine cache on `(unit geometries, collection ID, date range, reducer)`.
+"""The only reducer this backend uses. Named explicitly because it is part of the cache key, which
+is `(unit geometries, collection ID, date range, reducer)`.
 """
 
 _UNMAPPED_SENTINEL = -2
@@ -84,8 +84,8 @@ def place_by_row(payload: dict[str, Any]) -> list[tuple[int, dict[str, Any] | No
 def batched(items: Sequence[int], size: int) -> Iterator[Sequence[int]]:
     """Split `items` into consecutive chunks of at most `size`, preserving order.
 
-    CLAUDE.md: "Chunk units into batches of a few thousand to stay under element-count and payload
-    limits." Order is preserved so a batch's results align positionally with its inputs.
+    A few thousand units per request keeps it under Earth Engine's element-count and payload
+    limits. Order is preserved so a batch's results align positionally with its inputs.
     """
     if size < 1:
         raise ValueError(f"batch size must be at least 1, got {size}")
@@ -96,8 +96,8 @@ def batched(items: Sequence[int], size: int) -> Iterator[Sequence[int]]:
 def cache_key(units: gpd.GeoDataFrame, config: LandCoverDatasetConfig) -> str:
     """Stable hash of everything that changes the answer.
 
-    CLAUDE.md's key is `(unit geometries, collection ID, date range, reducer)`. The class mapping
-    is folded in as well: without it, editing `value_classes` would return a stale table computed
+    The key is `(unit geometries, collection ID, date range, reducer)`. The class mapping is
+    folded in as well: without it, editing `value_classes` would return a stale table computed
     under the previous mapping, and nothing would look wrong.
 
     Geometries are hashed in `unit_id` order, so the same units in a different row order hit the
