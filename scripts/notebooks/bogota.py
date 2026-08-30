@@ -73,7 +73,7 @@ pd.set_option("display.width", 110)
 plt.rcParams.update({"figure.dpi": 120, "font.size": 9, "axes.grid": True, "grid.alpha": 0.3})
 
 # %% [markdown]
-# ## The extent, and why Bogotá is not a registry city
+# ## The extent, and why Bogotá cannot be validated here
 #
 # `lczkit run --city bogota` works. It resolves against the **Global Urban Polygons and Points
 # Dataset (GUPPD)**, a gazetteer of 5 558 urban regions from NASA's Socioeconomic Data and
@@ -81,7 +81,7 @@ plt.rcParams.update({"figure.dpi": 120, "font.size": 9, "axes.grid": True, "grid
 # identified by `SMOD_ID 30_3370`. That identifier is used rather than the name because 149 of the
 # 5 558 names are shared by more than one region.
 #
-# What Bogotá is *not* is one of the 28 cities in `lczkit.cities`, and that registry exists for a
+# What Bogotá is *not* is one of the 28 cities in `lczkit.cities`, which is a different list for a
 # different purpose: every city in it is there because **So2Sat LCZ42** — a set of hand-drawn LCZ
 # labels produced for a machine-learning benchmark, covering 51 cities in 320 m patches — covers it
 # densely enough to validate against. The screen is 500 labelled patches across at least 4 classes.
@@ -158,8 +158,8 @@ print(f"grid run -> {grid_dir}  ({grid_result.seconds / 60:.1f} min)")
 # `No threshold found` above is expected at this size and is not an error. Street simplification
 # runs tile by tile, and a tile whose street network is too sparse cannot supply the distribution
 # the simplification threshold is read from. The threshold is **pooled across tiles** rather than
-# taken from any one of them — the change that took a whole-city run from roughly 8.6 hours to
-# about 70 seconds — so tiles that abstain cost nothing as long as some do not. A window small
+# taken from any one of them, which is what makes a whole-city run finish in minutes rather than
+# hours, so tiles that abstain cost nothing as long as some do not. A window small
 # enough that *every* tile abstains would fall back to a default, and that is a reason not to
 # shrink this one further.
 
@@ -470,9 +470,8 @@ pd.DataFrame({"grid": grid_score, "patch": patch_score})
 # with an external reference, but it does make any within-run parameter statistic weaker on patches
 # than on cells.
 #
-# Where to go next: the [API reference](../../api/) for every public symbol, the
-# [glossary](../../glossary/) for any term used here, and the repository for the phase write-ups
-# that record what was predicted, what was measured, and which hypotheses were refuted.
+# Where to go next: the [API reference](../../api/) for every public symbol, and the
+# [glossary](../../glossary/) for any term used here.
 #
 # <!-- Those links are built-site URLs, not `../api/index.md`: nbconvert renders this cell to HTML
 #      before mkdocs sees it, so a `.md` target is never rewritten and would ship as a 404. -->

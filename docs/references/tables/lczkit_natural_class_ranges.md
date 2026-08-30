@@ -26,7 +26,7 @@ table instead.
 
 ## The ranges
 
-`tree_fraction` and `water_fraction` are the Phase 5 columns of the same names. Blank means
+`tree_fraction` and `water_fraction` are the parameter columns of the same names. Blank means
 unbounded on that side.
 
 | LCZ | Class name | tree (min) | tree (max) | water (min) | water (max) |
@@ -64,5 +64,5 @@ default land-cover mapping separates them: ESA WorldCover distinguishes shrublan
 
 Rather than let three tied prototypes be resolved by index order, the default reachable natural
 set is **{A, B, D, E, G}**, with C and F recorded in the run manifest as unreachable and why. The
-route to reaching them is a land-cover mapping that emits shrub and bare as their own classes and
-a Phase 5 change to carry those fractions through — deferred, not attempted here.
+route to reaching them is a land-cover mapping that emits shrub and bare as their own classes, plus
+a parameter carrying those fractions through — not attempted here.

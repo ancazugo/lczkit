@@ -19,8 +19,9 @@ accuracy*, *built-class agreement* and the two *confusion axes*.
     as `lczkit`'s error. Where hand-drawn polygons exist — So2Sat LCZ42, a labelled benchmark set
     over 51 cities, and WUDAPT, the community-contributed World Urban Database and Access Portal
     Tools — **those are the reference** and `lcz_v3` is a secondary comparator.
-    `reference_file` is recorded on every report, because "the reference" naming a role instead
-    of a file is how both of this project's reference mix-ups stayed invisible.
+    `reference_file` is recorded on every report: "the reference" names a role, and the three
+    that can fill it disagree by up to 18 points, so a figure that does not say which file produced
+    it cannot be read.
 
 Three things any per-city figure needs stated beside it:
 

@@ -88,9 +88,9 @@ scored on.
 
 Every unit is classified independently of its neighbours, so an isolated cell can carry a label the
 fabric around it does not — salt-and-pepper at a grain Stewart & Oke never intended a class to be
-read at. A spatial filter is the standard answer in this literature and lczkit has never had one.
-**It ships disabled**, because its threshold has not been swept and every stored figure in this
-project was measured without it.
+read at. A spatial filter is the standard answer in this literature. **It ships disabled**, because
+its threshold has not been calibrated against a reference; switching it on changes labels and makes
+a run incomparable with one at the defaults.
 
 ::: lczkit.classify.smoothing
 

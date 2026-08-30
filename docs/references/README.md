@@ -81,7 +81,7 @@ Present ahead of need, so the context exists when SVF and roughness come off the
 
 | File | Citation | DOI / ID | Access | Phase | What to read |
 |---|---|---|---|---|---|
-| `majer_2026_lcz_morphometrics.pdf` | Majer & Fleischmann, arXiv | `arXiv:2603.00132` | **OA** | 1 | **Supplementary D is effectively the Phase 1 cleaning spec** — geometry validity, overlap handling, small-building absorption, cross-layer topology. Supplementary A is a morphometrics menu. The negative result on morphometrics-only prediction is the reason this package prioritises height quality over parameter count. |
+| `majer_2026_lcz_morphometrics.pdf` | Majer & Fleischmann, arXiv | `arXiv:2603.00132` | **OA** | 1 | **Supplementary D is effectively the cleaning specification** — geometry validity, overlap handling, small-building absorption, cross-layer topology. Supplementary A is a morphometrics menu. The negative result on morphometrics-only prediction is the reason this package prioritises height quality over parameter count. |
 | `fleischmann_2019_momepy.pdf` | Fleischmann (2019), *JOSS* 4(43), 1807 | `10.21105/joss.01807` | **OA** | 2, 5 | momepy overview. |
 | `fleischmann_2026_neatnet.pdf` | Fleischmann et al. (2026), *CEUS* 123, 102354 | `10.1016/j.compenvurbsys.2025.102354` | **OA** | 1 | Parameter-free street network simplification. Why dual carriageways and roundabouts must be collapsed before enclosure generation. |
 | `arribasbel_2022_tessellation.pdf` | Arribas-Bel & Fleischmann (2022), *Habitat International* 128, 102641 | `10.1016/j.habitatint.2022.102641` | **OA** | 2 | Enclosed tessellation and barrier logic. |
@@ -90,7 +90,7 @@ Present ahead of need, so the context exists when SVF and roughness come off the
 | `demuzere_2021_lcz_generator.pdf` | Demuzere, Kittner & Bechtel (2021), *Front. Environ. Sci.* 9, 637455 | `10.3389/fenvs.2021.637455` | **OA** | — | LCZ Generator; the imagery-based baseline. |
 | `fonte_2019_osm_lcz.pdf` | Fonte et al. (2019), *Urban Climate* 28, 100456 | `10.1016/j.uclim.2019.100456` | paywalled | — | Using OSM to enhance LCZ maps. |
 | `huang_2023_lcz_review.pdf` | Huang et al. (2023), *RSE* 292, 113573 | `10.1016/j.rse.2023.113573` | paywalled | — | Broad LCZ mapping review. |
-| `gousseff_lczexplore.pdf` | Gousseff et al., lczexplore | `10.5281/zenodo.7646866` | **OA** | 6 | The agreement-metric reporting format Phase 6 mirrors. |
+| `gousseff_lczexplore.pdf` | Gousseff et al., lczexplore | `10.5281/zenodo.7646866` | **OA** | 6 | The agreement-metric reporting format `lczkit.validation` mirrors. |
 | `zhu_2020_so2sat_lcz42.pdf` | Zhu et al. (2020), *IEEE GRSM* 8(3), 76–89 | `10.1109/MGRS.2020.2964708` | paywalled | 6.7 | **The primary validation reference**, not a deferred training set. How the labels were drawn and by whom, and the patch sampling geometry — 320 m patches on a 100 m stride, which is why `lczkit.validation.labelled` anchors a label on the patch centre rather than overlaying it areally. Covers 52 cities; Berlin is one, Rotterdam is not. |
 
 ## Tier 4 — dataset documentation (`datasets/`)

@@ -15,9 +15,9 @@ implementation from the published papers**, with a pluggable data layer — Over
 data, Google Earth Engine, a SpatioTemporal Asset Catalog or local files for land-cover rasters,
 and a tiered cascade of global products for building heights. Nothing here is trained.
 
-The design bet is that **building height completeness, and the honest reporting of it, is the
-binding constraint** on this kind of LCZ classification outside Europe. Every run records which
-source answered for each building, and what share of a unit's building area that covers.
+**Building height completeness is the limit on this kind of classification, and reporting it is
+part of the output.** Every run records which source answered for each building, and what share of
+a unit's building area that source covers.
 
 New to the vocabulary? The **[glossary](glossary.md)** defines every term and abbreviation used
 here — spatial unit, prototype distance, height cascade, ceiling, and the rest.
@@ -73,23 +73,12 @@ the resolved package versions and the cleaning report.
 ## What this documentation covers
 
 The [demonstration](demo/bogota.ipynb) runs the whole pipeline over a window of Bogotá, twice —
-once on the 100 m grid and once on organic patch units — and embeds the map site each run
-produced. Bogotá is there because it is close to the worst case for the constraint this package
-exists to report: **0.50%** of its building heights come from Overture, and a 90 m satellite radar
-mosaic answers for the rest.
+once on the 100 m grid and once on organic patch units — and embeds the map site each run produced.
+Bogotá shows the limit this package exists to report: **0.50%** of its building heights come from
+Overture, and a 90 m satellite radar mosaic answers for the rest.
 
 The [API reference](api/index.md) is generated from the source and documents every public class and
 function.
-
-Two things live in the repository rather than here, deliberately:
-
-- **[`docs/status.md`](https://github.com/ancazugo/lczkit/blob/master/docs/status.md)** — the
-  measured record, phase by phase: per-city agreement, the ceilings that bound it, and what each
-  figure does and does not license you to conclude.
-- **The phase write-ups** in `docs/experiments/`, which are the experimental record: what was
-  predicted, what was measured, and which hypotheses were refuted.
-
-Both are on [GitHub](https://github.com/ancazugo/lczkit).
 
 ## Known omissions
 
@@ -107,17 +96,18 @@ estate and a refinery are indistinguishable to the rule that assigns class 10, h
 is a limit of Overture's normalised schema and is recorded in every run's manifest.
 
 **Classes 7 and 8 come out inverted on building size.** Class 8 is *large* low-rise and class 7 is
-*lightweight* low-rise — the informal-settlement class — and neither one's published parameter
-ranges mention building size, so nothing in the classification separates them on it. Measured
-across four cities the units labelled 8 hold the *smaller* buildings, by a factor of 17 to 100.
-`mean_building_area_m2` is computed and carries zero weight pending a calibration sweep.
+*lightweight* low-rise, the informal-settlement class. Neither one's published parameter ranges
+mention building size, so nothing in the classification separates them on it — and across the four
+cities checked, the units labelled 8 hold the *smaller* buildings, by a factor of 17 to 100. Treat
+both labels with suspicion. `mean_building_area_m2` is computed and carries zero weight until its
+weight has been calibrated.
 
 **Two options ship switched off**, because their thresholds have not been calibrated against a
 reference and this package does not pick thresholds. `ucp.measure_on = "enclosures"` measures
 street-canyon geometry on street-bounded blocks, where a canyon can actually be measured, and
 transfers it to the units being classified. `classification.modal_filter` replaces an isolated
 unit's label with the one its neighbours carry, which is standard practice in this literature.
-Every figure this project has recorded was measured with both off.
+Both change labels, so a run with either one on is not comparable with a run at the defaults.
 
 ## Licence and citation
 

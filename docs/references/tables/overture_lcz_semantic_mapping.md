@@ -67,16 +67,16 @@ Design notes, each of which is a decision that could have gone the other way:
   where **94.8% of building area carries no tag at all**.
 - **`roof` and `carport` are in `lightweight`.** An open-sided roofed structure is lightweight
   construction by Stewart & Oke's description of LCZ 7, and `roof` is 6 872 rows — more than `hut`.
-- **`warehouse` is in `large_lowrise` and not in `heavy_industry`.** This is the ruling CLAUDE.md
-  already records for `UcpConfig.industrial_building_classes`, restated here so the two vocabularies
-  cannot drift: Stewart & Oke give a warehouse as an LCZ 8 example.
+- **`warehouse` is in `large_lowrise` and not in `heavy_industry`.** The same decision
+  `UcpConfig.industrial_building_classes` makes, restated here so the two vocabularies cannot
+  drift: Stewart & Oke give a warehouse as an LCZ 8 example.
 - **`retail` and `supermarket` appear in two groups.** Groups are not a partition and are not
   claimed to be — a big-box store is genuinely evidence for both LCZ 8 and commercial function.
   Anything treating the fractions as summing to one is misreading them.
 - **`brownfield`, `construction`, `quarry` and `landfill` are in no group.** They are surface
   states, not building function, and the raster owns land cover.
-- **Nothing here maps to LCZ A–G.** CLAUDE.md's locked decision is that land use is functional-only
-  and rasters own land cover. `park`, `forest`, `grass` and `farmland` are all present in the
+- **Nothing here maps to LCZ A–G.** Land use is functional-only and rasters own land cover.
+  `park`, `forest`, `grass` and `farmland` are all present in the
   vocabulary and are all deliberately unused.
 
 ---

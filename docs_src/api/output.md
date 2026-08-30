@@ -20,14 +20,13 @@ A run directory is written to `output/lczkit/<run_id>/` and contains:
     Every run's GeoParquet is valid 1.0.0 and carries the extent's coordinate reference system with
     an EPSG authority code. But the Parquet driver in GDAL — the format layer under most geographic
     software — is an **optional build component**, so a copy of QGIS built without it opens a
-    correct file as a plain table and reports "this layer has no CRS", naming the producer for a
-    gap in the reader. GeoPackage is SQLite and is in GDAL's core.
-    A correct file is not a readable file, and correctness is not what the recipient measures.
+    correct file as a plain table and reports "this layer has no CRS". GeoPackage is SQLite and is
+    in GDAL's core, so it opens everywhere.
 
 The manifest also carries `crs` and `crs_wkt`. The CRS is *derived* from the extent via
-`estimate_utm_crs()`, so it is in no config and no argument — which left a run directory unable to
-state its own CRS except through the one format the complaining reader could not open. Anything
-computed at runtime that a consumer must know is a manifest field.
+`estimate_utm_crs()`, so it appears in no config and no argument — without these two fields a run
+directory could state its own CRS only through the file format the reader who needs telling cannot
+open.
 
 ::: lczkit.output.writer
 
@@ -48,8 +47,8 @@ outputs. The site build must never recompute a parameter or a quantile.
 
 ## Extent
 
-What ground a run covered, and how that ground was chosen. Derived rather than configured — the
-extent is an argument to `run_pipeline`, so it reaches no `Settings` field — which is why it needs
-a manifest slot of its own, exactly as the run CRS does.
+What ground a run covered, and how that ground was chosen. Derived rather than configured: the
+extent is an argument to `run_pipeline` and reaches no `Settings` field, so it needs a manifest slot
+of its own, as the run CRS does.
 
 ::: lczkit.output.extent

@@ -27,8 +27,8 @@ point.
     - **`classification.modal_filter`** replaces an isolated unit's label with the one most of its
       neighbours carry — a minimum mapping unit, standard in this literature. Default off.
 
-    Every figure this project has recorded was measured with both off, so switching either on makes
-    a run incomparable with a published number until the corresponding sweep has been run.
+    Switching either on changes labels, so a run with one enabled is not comparable with a run at
+    the defaults until that threshold has been calibrated.
 
 ::: lczkit.config
 
@@ -59,7 +59,6 @@ The 28 study cities the validation sweeps run over — those with enough hand-dr
 labels to validate against — with the window resolution used to pick a comparable extent in each.
 Reached by `lczkit run --city ... --so2sat-window`, which is a flag rather than a fallback: this
 window and the GUPPD region of the same city are different ground, and only this one makes a run
-comparable with a recorded agreement figure. A test asserts the sweep imports this registry rather
-than defining its own.
+comparable with a published agreement figure.
 
 ::: lczkit.cities

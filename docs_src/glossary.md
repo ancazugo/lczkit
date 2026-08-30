@@ -225,7 +225,7 @@ Three independent LCZ maps or label sets ship with loaders. They are research in
     converts an LCZ map into input for it. This is the main downstream use for an LCZ map — and
     `lczkit` does not yet write the raster W2W expects.
 
-## How this project describes its own work
+## Terms this documentation uses
 
 **Height cascade, and tiers**
 :   Building heights are filled from a series of sources in order, each tried only where the last
@@ -245,9 +245,5 @@ Three independent LCZ maps or label sets ship with loaders. They are research in
 
 **Sweep**
 :   Trying a threshold at many values against a reference and choosing an operating point from the
-    result, rather than picking a plausible number. Anything in this package whose threshold has
-    not been swept ships **disabled**, which is why several options default to off.
-
-**Arm**
-:   One configuration in a controlled comparison — the experiments run the same city through two or
-    three arms differing in one setting.
+    result, rather than picking a plausible number. Any threshold in `lczkit` that has not been set
+    this way ships **disabled**, which is why several options default to off.

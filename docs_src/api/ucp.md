@@ -59,9 +59,8 @@ and the paper it comes from.
 because anthropogenic heat output — the only published Stewart & Oke property separating them
 directly, at 300+ against ≤50 W m⁻² — is not something this package can measure.
 
-**A quantity's denominator belongs in its name.** Both `industrial_fraction_of_building_area`
-(Bernard's `FIND/B`, which the LCZ 10 rule reads) and `industrial_fraction_of_unit_area` are
-emitted as separately named columns.
+Both `industrial_fraction_of_building_area` (Bernard's `FIND/B`, which the LCZ 10 rule reads) and
+`industrial_fraction_of_unit_area` are emitted, each named for what it divides by.
 
 ## Overture attributes
 
@@ -89,7 +88,8 @@ LCZ 8 from LCZ 3 and 6, is null on **10.8%** of one Istanbul extent's built grid
 **0.9%** of its enclosures. The two unit systems are complementary rather than rival: an enclosure
 is a block and not an LCZ patch, and it is still the better thing to measure a canyon on.
 
-`UcpConfig.measure_on` defaults to `"units"`. **No accuracy claim is attached** — the sixteen-city
-sweep is wired and has not been run, and the pre-registered reading is in the module below.
+`UcpConfig.measure_on` defaults to `"units"`. **No accuracy claim is attached**: the threshold has
+not been calibrated against a reference, so switching it on makes a run incomparable with one at the
+defaults.
 
 ::: lczkit.ucp.measure

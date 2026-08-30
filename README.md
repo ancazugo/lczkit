@@ -27,6 +27,44 @@ Unfamiliar terms are defined in the **[glossary](docs_src/glossary.md)**.
 
 ---
 
+## Install
+
+```sh
+pip install lczkit
+pip install "lczkit[viz]"       # adds tippecanoe, which builds the map site
+```
+
+The map site is the only optional part. Without `tippecanoe` a run still writes everything else —
+the site is the last stage — and says so, naming `lczkit site build <run_dir>` to finish it later.
+
+`lczkit` reads every path from one environment variable. Copy `.env.example` to `.env` and set
+`DATA_DIR` to a directory holding `input/` and `output/`:
+
+```
+DATA_DIR/
+├── input/     # source data, one subdirectory per provider
+└── output/    # lczkit writes only to output/lczkit/<run_id>/
+```
+
+`DATA_DIR` is resolved once, in `lczkit.config.Settings`, and read from the environment nowhere
+else. A missing or unreachable `DATA_DIR` fails at config load rather than three stages in.
+`lczkit` never modifies or deletes an existing file under `input/`.
+
+<details>
+<summary>Working on a shared cluster</summary>
+
+The development environment lives outside the repository and already exists. Activate it rather
+than creating one, and add dependencies with `uv add --active <package>` only — never `uv sync`,
+`uv venv`, `pip install` or `conda install`. Point the tool caches away from a home-directory
+quota, in your shell profile rather than in this repository:
+
+```sh
+export UV_CACHE_DIR=/path/to/scratch/.cache/uv
+export XDG_CACHE_HOME=/path/to/scratch/.cache
+```
+
+</details>
+
 ## Quick start
 
 ```sh
@@ -51,10 +89,10 @@ Three ways to name an extent, and they mean different ground:
 | `--city NAME --so2sat-window` | the densest 30 km window of that city's So2Sat labels | the So2Sat archive |
 
 The third is the specialist one. So2Sat LCZ42 is a set of hand-drawn LCZ labels over 51 cities;
-this flag reproduces the extent every recorded agreement figure in this project was measured over,
-works for 28 of them, and **has to be asked for** — a run that fell back to it silently would look
-comparable with a published number while covering different ground. The run manifest records which
-locator was used, along with the bounding box and its area.
+this flag reproduces the extent the published agreement figures were measured over, works for 28 of
+them, and **has to be asked for** — a run that fell back to it silently would look comparable with a
+published number while covering different ground. The run manifest records which locator was used,
+along with the bounding box and its area.
 
 Useful flags: `--extent-km N` trims any extent to a concentric square, which is the first thing to
 do with a new city; `--dry-run` resolves the whole configuration and writes nothing, including the
@@ -115,12 +153,12 @@ emits.
   functionally, at a threshold calibrated against a reference rather than picked, and the manifest
   records how often the rule fired.
 - **Classes 7 and 8 come out inverted on building size.** Class 8 is *large* low-rise — warehouses
-  and malls — and class 7 is *lightweight* low-rise, the informal-settlement class. Measured across
-  four cities, the units labelled 8 hold buildings of 55–93 m² and those labelled 7 hold buildings
-  of 7 000–13 000 m². Neither class's published parameter ranges mention building size, so nothing
-  in the classification pulls either back. `mean_building_area_m2` is present as a parameter and
-  carries **zero weight** pending a calibration sweep; until then, treat those two labels with
-  suspicion.
+  and malls — and class 7 is *lightweight* low-rise, the informal-settlement class. Across the four
+  cities checked, the units labelled 8 hold buildings of 55–93 m² and those labelled 7 hold
+  buildings of 7 000–13 000 m². Neither class's published parameter ranges mention building size, so
+  nothing in the classification pulls either back. `mean_building_area_m2` is present as a parameter
+  and carries **zero weight** until its weight has been calibrated. Until then, treat those two
+  labels with suspicion.
 - **A 100 m cell is not an LCZ patch.** Stewart & Oke's parameter ranges describe a patch of
   hundreds of metres, and on a grid the within-class spread is wider than the published ranges can
   hold — one class of ten reaches its published building-surface-fraction range.
@@ -135,14 +173,14 @@ emits.
 Two options exist and are **off by default**, because their thresholds have not been calibrated:
 `ucp.measure_on = "enclosures"` measures street-canyon geometry on street-bounded blocks and
 transfers it to the units being classified, and `classification.modal_filter` replaces an isolated
-unit's label with the one its neighbours carry. Every recorded figure in this project was measured
-with both off.
+unit's label with the one its neighbours carry. Both change labels, so a run with either one on is
+not comparable with a run at the defaults.
 
 ## On validating the output
 
-The repository ships loaders for three LCZ references — So2Sat LCZ42, WUDAPT, and the Demuzere
-global map — and they are **research instruments, not a quality gate you should run over your own
-city.** Two reasons, both measured here:
+The package ships loaders for three LCZ references — So2Sat LCZ42, WUDAPT, and the Demuzere global
+map. They are **research instruments, not a quality gate to run over your own city**, for two
+reasons:
 
 - They do not cover most cities. So2Sat has 51. WUDAPT — the World Urban Database and Access
   Portal Tools, a community effort whose training areas are polygons drawn by contributors
@@ -155,37 +193,8 @@ city.** Two reasons, both measured here:
 Nothing in `lczkit run` touches any of them, and no threshold in the package is fitted to them.
 Judge a run the way you would judge any map: look at it, read `height_completeness` and
 `building_tag_coverage` beside the labels, and check the manifest for what the run could not
-measure. If you do have labels for your city, `lczkit.validation` will score against them and
-report per-class agreement and a confusion matrix rather than a single number — see
-[`docs/status.md`](docs/status.md) for what that machinery is for and what it has found.
-
-## Setup
-
-This project runs on a shared high-performance computing system. The Python environment lives
-outside the repository and already exists — do not create a new one:
-
-```sh
-source /maps/acz25/envs/lczkit-env/bin/activate
-uv add --active <package>       # the only way dependencies get added
-```
-
-Never run `uv sync`, `uv venv`, `pip install`, or `conda install` against this environment.
-
-Point uv's and pip's caches away from the home directory quota (add to your shell profile, not
-to this repo):
-
-```sh
-export UV_CACHE_DIR=/maps/acz25/.cache/uv
-export XDG_CACHE_HOME=/maps/acz25/.cache
-```
-
-Copy `.env.example` to `.env` and set `DATA_DIR` to the shared data directory (see CLAUDE.md's
-"Environment and paths" section for the expected `input/`/`output/` layout). `lczkit` only ever
-reads from `input/` via source-specific subdirectories and writes under `output/lczkit/<run_id>/`.
-
-The map site needs `tippecanoe`, the tile-building tool, installed by the `viz` extra. Without it a
-run still writes everything else — the site is the last stage — and says so, naming
-`lczkit site build <run_dir>` to finish it later.
+measure. If you do have labels for your city, `lczkit.validation` will score against them and report
+per-class agreement and a confusion matrix rather than a single number.
 
 ## Library use
 
@@ -220,12 +229,12 @@ pytest
 Tests do not require `DATA_DIR` to be set and never touch the network — fixtures live under
 `tests/fixtures/`.
 
-**The primary fixture is a 3 km window over Kowloon, Hong Kong**, not Berlin. Berlin's labelled
-cells hold two classes and both are mid-rise, so the height confusion axis — the pattern of errors
-that distinguishes low-rise from mid-rise from high-rise — has no pair to confuse on and cannot be
+**The primary fixture is a 3 km window over Kowloon, Hong Kong.** Berlin's labelled cells hold two
+classes and both are mid-rise, so the height confusion axis — the pattern of errors that
+distinguishes low-rise from mid-rise from high-rise — has no pair to confuse on and cannot be
 measured there at all. Hong Kong's window carries classes 1, 2, 3, 4 and 5. Berlin and Rotterdam
-stay: the project's earliest figures are against Berlin, and Rotterdam is the industrial fixture
-for the class 10 rule. See [`tests/fixtures/README.md`](tests/fixtures/README.md).
+are kept as secondary fixtures; Rotterdam is the industrial one, for the class 10 rule. See
+[`tests/fixtures/README.md`](tests/fixtures/README.md).
 
 Network-dependent tests are marked `@pytest.mark.network` and skipped by default:
 
@@ -239,15 +248,13 @@ fail when the project is unset, so a checkout without Earth Engine access can st
 
 ## More
 
+- **[Documentation](https://ancazugo.github.io/lczkit/)** — the API reference, the glossary and a
+  worked example. Build it locally with `mkdocs serve`.
 - **[`docs_src/glossary.md`](docs_src/glossary.md)** — every term and abbreviation, defined.
-- **[`docs/status.md`](docs/status.md)** — what has been built, phase by phase, with the
-  measurement behind each decision. This was the bulk of this README.
-- **[`CLAUDE.md`](CLAUDE.md)** — the specification, the locked architectural decisions, and the
-  table of resolved discrepancies. The authority for anything the two disagree about.
-- **`docs/experiments/`** — the write-up behind each measured claim.
 - **`docs/references/tables/`** — hand-checked transcriptions of the published parameter tables.
   A checkout without them cannot reproduce a classification.
-- **API reference** — `mkdocs serve`, or the published site.
+- **[`tests/fixtures/README.md`](tests/fixtures/README.md)** — what each test fixture is and where
+  it came from.
 
 ## Licence
 

@@ -1259,7 +1259,7 @@ and an **"About this map"** block reading the cascade, weights and release out o
 has named WUDAPT the secondary reference since Phase 0; until now `grep -rni wudapt` returned prose
 only — no loader, no config, zero `.py` hits. `src/lczkit/validation/wudapt.py` exports the same
 three-column contract as `reference_lcz` and `labelled_lcz`, so `agreement()` takes any of the three.
-Full write-up in `docs/experiments/phase-16-wudapt-reference.md`.
+Full write-up in `notes/experiments/phase-16-wudapt-reference.md`.
 
 **The question nobody had asked: do the labels reproduce?** Every ceiling this project has quoted
 compares a *model* to labels. Two independent human label sets, same ground, sixteen cities, 100 m
@@ -1394,7 +1394,7 @@ the other three as measured over sixteen, not as confirmed.
 ### Phase 17 — organic patch units — CONCLUDED
 
 **Built on explicit request.** `GridUnits` is untouched and remains the default. Full write-up in
-`docs/experiments/phase-17-patch-units.md`.
+`notes/experiments/phase-17-patch-units.md`.
 
 **The measurement that set the design: an enclosure is a block, an LCZ patch is a neighbourhood.**
 
@@ -1455,7 +1455,7 @@ fix — which is what the sweep would test.
 semantic attribute — `industrial_fraction`, a literal `isin(["industrial"])`. Overture ingests
 `subtype`/`class` on every building and parcel and cleaning is test-pinned to retain them, so the
 vocabulary had been there and unread since Phase 1. Full write-up in
-`docs/experiments/phase-18-semantic-evidence.md`.
+`notes/experiments/phase-18-semantic-evidence.md`.
 
 **Overture-native, not OSM.** `osm-rasterizer` and `osmnx` are neither installed nor declared and
 both need live Overpass — unpinned and unreproducible against a design that fixes a release string
@@ -2120,8 +2120,8 @@ the last stage, `site_skipped` records why there is none, and the CLI names the 
 #### The README, and what it was hiding
 
 750 lines, of which `## Status` was 650 — a phase-by-phase research log as the front door of a
-package whose purpose is to make a map. Moved **verbatim** to `docs/status.md` (asserted verbatim,
-with only the `docs/experiments/` links rebased for the file's new depth), and the README rewritten
+package whose purpose is to make a map. Moved **verbatim** to `notes/status.md` (asserted verbatim,
+with only the `notes/experiments/` links rebased for the file's new depth), and the README rewritten
 as: what it is, the three locators and what each covers, what a run writes, what it will *not* tell
 you, **and a section saying not to use the bundled labels as a quality gate over your own city** —
 they reach 51 cities at most and two expert label sets agree at a median 79.7%, so an agreement
@@ -2345,6 +2345,52 @@ ingest and the stated WRF path does not close. Deferred by scope, not by judgeme
 **Also worth the paper's attention: "faster than GeoClimate" is claimed and has never been
 measured.** There is no head-to-head anywhere in the repository.
 
+---
+
+### Phase 26 — documentation, not a build log — CONCLUDED
+
+**Built on explicit request: remove the traces of this plan from the documentation, and keep the
+language simple.** Not a diagnostic phase. It opened no question and **moved no measurement** — the
+one edit that touches numbers rewrites description strings and is applied from the live registry
+rather than by hand.
+
+**The size of the leak, measured before anything was changed.** The published API reference is
+generated from source docstrings with `show_docstring_attributes: true`, so all 367 attribute
+docstrings publish — 119 from `config.py` alone. Inside docstrings there were **178 "Phase N"
+references and 115 "CLAUDE.md" references across 76 files**. A reader of the API reference met
+*"Configuration for the Phase 3 building-height cascade"* and *"CLAUDE.md requires a threshold to
+be swept"*, both pointing at a file they cannot see.
+
+**And it reached runtime output, which is the part nobody had looked at.** `ucp/registry.py`
+parameter descriptions, `classify/prototypes.py` notes, `classify/rules.py` reasons, `config.py`
+disabled-rule reasons and `presets.py` descriptions are **serialised into every run's
+`manifest.json` and rendered in the map site's sidebar**. Nineteen such strings said "Phase 5",
+"Phase 14" or "CLAUDE.md". The two committed demo sites carried them too, and were corrected by
+re-deriving the affected fields from the live constants rather than by hand — 21 strings per site,
+with `ensure_ascii` matched to each writer so nothing else in the files moved.
+
+**The research record moved out of `docs/`.** `docs/status.md` → `notes/status.md` and
+`docs/experiments/` → `notes/experiments/`, by `git mv`, with a `notes/README.md` saying it is the
+development record and that nothing user-facing links to it. **`docs/references/` did not move** —
+its transcribed tables are parsed directly by five test modules. Contents unchanged; only the
+prose around the tables lost its phase numbering, and the parsers were re-run to confirm it.
+
+**The editing rule, applied uniformly: remove the framing, keep the fact.** A default justified by
+a measurement keeps its measurement — "Open Buildings 2.5D is disabled: lowest per-building error
+of the three and it still makes the map worse, because `Hr` is a geometric mean and its within-unit
+spread is 0.441 against reality's 0.195" is documentation. "Phase 10 measured…" is not.
+
+**What was left alone, deliberately.** `scripts/` and `tests/` keep their phase vocabulary: they
+are the research drivers and their own test names, not documentation, and rewriting them would
+churn the record for no reader. This file keeps everything but its paths.
+
+**One thing the README was hiding: it had no `pip install` anywhere.** The `## Setup` section
+documented one specific cluster — an environment path, `uv add --active` only, and a pointer to
+this file's "Environment and paths" section — so an outside reader had no install instruction at
+all. It is now `## Install`, above `## Quick start`, with the shared-cluster rules in a collapsed
+contributor note. `docs_src/index.md` had the `pip install` all along, which is how it went
+unnoticed.
+
 ### STOP RULE — applies after Phase 13
 
 **No further diagnostic phases.** Thirteen phases in, the finding rate remains high but the returns
@@ -2397,9 +2443,15 @@ Remaining work, in order:
     inverted on building size in every city measured** — "large low-rise" landing on 55-93 m²
     footprints and "lightweight low-rise" on 7 000-13 000 m² sheds — and that `mean_building_area_m2`
     has been computed since Phase 5 and never reached the metric.
-14. **The paper.**
-15. **Cleanup** — release. **The docs half landed as Phase 20, the notebook half as Phase 22 and
-    the README split as Phase 23**; what is left here is the release itself.
+14. ~~**Phase 26 — documentation, not a build log.**~~ **Concluded**, on explicit request. Not
+    measurement: the phase vocabulary and every reference to this file were removed from the
+    README, the published site, every source docstring and the strings that reach a run's
+    manifest and the map site's sidebar. It found that the README carried no `pip install` at
+    all, and that 19 description strings naming phases were being serialised into every run.
+15. **The paper.**
+16. **Cleanup** — release. **The docs half landed as Phase 20, the notebook half as Phase 22, the
+    README split as Phase 23 and the de-narrativising pass as Phase 26**; what is left here is the
+    release itself.
 
 **`OA_w` was blocked and is now closed.** Bechtel, Demuzere & Stewart (2020) supplied both the
 class-similarity matrix and the definition; the matrix is transcribed in
@@ -2505,7 +2557,7 @@ full site on their own, which is why they stay off by default.
 
 **The phase shipped in `6ebaca2` during Phase 8 and was not recorded**, so this spec called it "the
 only outstanding deliverable" for fourteen commits and the three rulings above lived only in
-`docs/experiments/phase-7-map-site.md`. Completing it fixed two gaps and published three cities.
+`notes/experiments/phase-7-map-site.md`. Completing it fixed two gaps and published three cities.
 
 **Selector order was inherited, not chosen.** `build_views` emitted views in the manifest's `breaks`
 order — every numeric column in DataFrame order — putting `height_completeness` twelfth of thirteen

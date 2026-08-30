@@ -1,10 +1,10 @@
 # Test fixtures
 
-**`overture_hongkong/` is the primary fixture** from Phase 11. `overture/` (Berlin) remains, and
-every figure recorded before Phase 11 is against it, but it is no longer the one a new diagnostic
-should be run on — see below for why.
+**`overture_hongkong/` is the primary fixture.** `overture/` (Berlin) remains as a secondary one,
+and many of this project's earlier figures are against it, but it is no longer the one a new
+diagnostic should be run on — see below for why.
 
-## `overture_hongkong/` — the primary fixture, added in Phase 11
+## `overture_hongkong/` — the primary fixture
 
 A real ~3x3 km Overture extract over Kowloon, Hong Kong, release `2026-07-22.0`, built by
 `scripts/build_overture_fixture.py`. Same six layers as `overture/`: 5448 buildings, 5252 streets,
@@ -12,10 +12,9 @@ A real ~3x3 km Overture extract over Kowloon, Hong Kong, release `2026-07-22.0`,
 
 **It exists because the Berlin fixture cannot test the height confusion axis.** Berlin's labelled
 cells hold LCZ 2 and LCZ 5 — two classes, and both mid-rise — so 1↔2↔3 and 4↔5↔6 have no pair to
-confuse on and the axis is untestable there by construction. Phase 6.7 ranked the axes from that
-fixture anyway and put compactness first; the ranking stood for three phases until Phase 9 reversed
-it across fifteen cities, where height dominates roughly three to one. A fixture that cannot measure
-something is not neutral about it.
+confuse on and the axis is untestable there by construction. Ranking the two axes from that fixture
+put compactness first, and a fifteen-city measurement later reversed it. A fixture that cannot
+measure something is not neutral about it.
 
 This window's labels hold **LCZ 1, 2, 3, 4 and 5** — compact high, mid and low-rise beside open
 high and mid-rise — so both axes have pairs: height 1↔2↔3 and 4↔5, compactness 1↔4 and 2↔5.
@@ -24,7 +23,7 @@ high and mid-rise — so both axes have pairs: height 1↔2↔3 and 4↔5, compa
 Chosen by search, not by eye: every ~3–4 km window in Hong Kong was scored against the So2Sat
 patches for classes carrying at least ten patches, under a footprint budget that keeps the
 committed tree near Berlin's size. **Hong Kong's thirteen classes are a property of the 30 km
-validation window** used in Phases 9–11; no 3 km window anywhere in the city holds more than six.
+validation window**, not of this one; no 3 km window anywhere in the city holds more than six.
 
 Two differences from `overture/`, both recorded in `TARGETS` in the build script:
 
@@ -39,7 +38,7 @@ Two differences from `overture/`, both recorded in `TARGETS` in the build script
   podium-and-tower stacks and conflated duplicates — and building surface fraction sums overlay
   pieces, so leaving that in would inflate the numerator.
 
-  This fixture is why Phase 12 restated the criterion against the **union** of raw footprints: a
+  This fixture is why the retention criterion is stated against the **union** of raw footprints: a
   city whose sources overlap themselves by more than 1% cannot meet a ≥99%-of-sum bar without
   keeping double-counted area, so the sum-based criterion and "trim overlaps but do not merge" were
   jointly unsatisfiable here. `raw_self_overlap_fraction` is now reported in its own right — it is a
@@ -51,9 +50,8 @@ reason Rotterdam does not have one.
 
 ## `overture/`
 
-The Phase 0 fixture, and the primary one until Phase 11 replaced it with Kowloon above. Retained:
-every figure in this project between Phases 1 and 10 was measured against it, and dozens of tests
-assert its counts.
+The original fixture, and the primary one until Kowloon replaced it above. Retained: many of this
+project's earlier figures were measured against it, and dozens of tests assert its counts.
 
 A real ~3x3 km Overture extract for central Berlin (Mitte — spans the Spree river, Museum
 Island, and Alexanderplatz), release `2026-07-22.0`, built by `scripts/build_overture_fixture.py`.
@@ -61,28 +59,28 @@ Six raw, uncleaned, EPSG:4326 GeoParquet layers: `buildings.parquet`, `streets.p
 `rail.parquet`, `waterlines.parquet`, `waterbodies.parquet`, `land_use.parquet`.
 Re-run that script to refresh the fixture (e.g. against a newer release).
 
-- `rail.parquet` was added in Phase 2 for `EnclosureUnits`' barrier set (201 features in the
-  full extent, 8 within `SMALL_BBOX`).
+- `rail.parquet` is `EnclosureUnits`' barrier set (201 features in the full extent, 8 within
+  `SMALL_BBOX`).
 - `buildings.parquet` carries `subtype` and `class` (usage type) alongside `height`,
   `num_floors` and `sources`. Only 1595 of 6195 footprints have a `height` and 3886 a
   `num_floors` — sparse heights are a real property of the data, and the fixture is the place
-  that keeps the Phase 3 cascade honest about it.
-- `land_use.parquet` (1559 polygons) supplies functional semantics for Phase 5's
+  that keeps the height cascade honest about it.
+- `land_use.parquet` (1559 polygons) supplies the functional semantics behind
   `industrial_fraction`. **Its geometries are clipped to the fixture bbox**, unlike every other
   layer: two region-scale `protected` boundaries merely grazed the bbox and carried 355k of the
   layer's 393k vertices, taking the committed tree past 8 MB on their own. `OvertureSource`
-  itself does not clip — this is a property of the fixture, per CLAUDE.md's instruction to clip
-  an oversized fixture rather than move it out of the repo.
+  itself does not clip — this is a property of the fixture, and an oversized fixture is clipped
+  further rather than moved out of the repository.
 
-This bbox has **not** been cross-checked against official DFC2017 tile boundaries — it was
-chosen as a real, feature-dense Berlin extract sufficient for Phase 1's cleaning-pipeline
-tests. Phase 6 validates against the Demuzere global LCZ map (see `lcz/` below) rather than
-against DFC2017 ground truth, so tile alignment has not become load-bearing.
+This bbox has **not** been cross-checked against official DFC2017 tile boundaries — it was chosen
+as a real, feature-dense Berlin extract sufficient for the cleaning-pipeline tests. Validation runs
+against the Demuzere global LCZ map (see `lcz/` below) rather than against DFC2017 ground truth, so
+tile alignment has not become load-bearing.
 
 ## `overture_industry/`
 
 A real ~2.7x2.2 km Overture extract over Rotterdam's Waalhaven, same release and same six layers,
-built by `scripts/build_industry_fixture.py`. Added in Phase 6.
+built by `scripts/build_industry_fixture.py`.
 
 It exists because **the Berlin fixture cannot validate the LCZ 8 / LCZ 10 rule.** Mitte holds 36
 industrial buildings of 6195 and 2 industrial land-use parcels of 1559 — enough to exercise the
@@ -117,14 +115,13 @@ Four real 10 m global products clipped to the fixture bboxes, built by
   difference it makes. Note that Lang et al. define that mask *from ESA WorldCover*, so these two
   fixtures are not independent measurements of the same ground.
 - `worldcover_rotterdam.tif` — ESA WorldCover v200 (2021), nodata 0, 480x240, over the industry
-  fixture. No canopy counterpart: the ETH product is a second, competing tree estimate that Phase 4
-  documents as reading high, and tree cover is beside the point for the LCZ 8/10 rule.
+  fixture. No canopy counterpart: the ETH product is a second, competing tree estimate that reads
+  high, and tree cover is beside the point for the LCZ 8/10 rule.
 - `worldcover_hongkong.tif` — ESA WorldCover v200 (2021), nodata 0, 343x330, over the primary
   fixture. No canopy counterpart either: that window's labels carry no natural class at all.
 
-Unlike the Phase 3 height rasters — synthesised in-test, because no tier 2-4 product exists
-anywhere to clip — these are committed, because a real product does exist and the clip is small.
-That is what CLAUDE.md's test strategy asks for.
+Unlike the height rasters — synthesised in-test, because no tier 2-4 product exists anywhere to
+clip — these are committed, because a real product does exist and the clip is small.
 
 ## `lcz/`
 
@@ -150,7 +147,7 @@ is created, modified or deleted.
 **The clipped copy is version 3 of the map**, while the Tier 1 citation below describes an earlier
 version. A run manifest records the file and the citation separately rather than conflating them.
 
-### `so2sat_hongkong.parquet` — the primary ground truth, added in Phase 11
+### `so2sat_hongkong.parquet` — the primary ground truth
 
 169 hand-labelled So2Sat LCZ42 (v4) patches intersecting the Hong Kong fixture bbox, EPSG:4326,
 18 KB, built the same way and with the same columns as the Berlin file below.
@@ -167,17 +164,17 @@ inflated, because with only LCZ 2 and 5 in the reference the compactness pair 2-
 available to confuse while every height pair can contribute only the one member the reference
 holds. Five classes put both axes on equal footing.
 
-### `so2sat_berlin.parquet` — the ground truth, added in Phase 6.7
+### `so2sat_berlin.parquet` — the Berlin ground truth
 
 473 hand-labelled So2Sat LCZ42 (v4) patches intersecting the Berlin fixture bbox, EPSG:4326, 34 KB,
 built by `scripts/build_so2sat_fixture.py` from the copy under `input/So2Sat-LCZ42/`. Columns
 `patch_id`, `dataset`, `LCZ_class`.
 
 **This is the validation reference for Berlin**; `lcz_reference_berlin.tif` is a secondary
-comparator. Phase 6.7 exists because validation had been treating the latter as ground truth — it
-is a model output with its own error, and measured against these labels it is right **53.2%** of
-the time on this extent. That figure is a small-sample artefact of 432 cells: at Berlin's full
-metropolitan window the same comparison is **75.2% over 9 627 cells** (Phase 9).
+comparator and not ground truth. It is a model output with its own error, and measured against
+these labels it is right **53.2%** of the time on this extent. That figure is a small-sample
+artefact of 432 cells: at Berlin's full metropolitan window the same comparison is **75.2% over
+9 627 cells**.
 
 Three properties that the reduction in `lczkit.validation.labelled` depends on:
 
@@ -193,15 +190,15 @@ Three properties that the reduction in `lczkit.validation.labelled` depends on:
 
 The labels here cover 438 of the fixture's 964 cells and hold only **LCZ 2 (332) and LCZ 5 (106)**,
 where `lcz_v3` claims six classes over the same ground. That narrowness is why
-`scripts/berlin_wide_validation.py` exists — it is not committed and not run in CI — and, in the
-end, why Phase 11 replaced this fixture as the primary one. Two classes at one height cannot
-confuse on the height axis, so a diagnostic run here could only ever find compactness.
+`scripts/berlin_wide_validation.py` exists, and in the end why Kowloon replaced this fixture as the
+primary one. Two classes at one height cannot confuse on the height axis, so a diagnostic run here
+could only ever find compactness.
 
 Rotterdam has no counterpart: So2Sat covers 52 cities and Rotterdam is not one of them (Amsterdam,
 60 km away, is the nearest). The industry fixture stays on `lcz_v3` and every figure derived from
 it carries that limitation.
 
-### `wudapt_hongkong.parquet` / `wudapt_berlin.parquet` — the third reference, added in Phase 16
+### `wudapt_hongkong.parquet` / `wudapt_berlin.parquet` — the third reference
 
 WUDAPT LCZ Generator training areas intersecting each fixture bbox, EPSG:4326, built by
 `scripts/build_wudapt_fixture.py` from the dated export under `input/WUDAPT/`. Hong Kong: 77

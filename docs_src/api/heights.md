@@ -54,10 +54,10 @@ coarse raster fallback" produce the same label with very different trustworthine
 
 Coverage is only half of what a substituted height does. `Hr` is a geometric mean, so it is
 depressed by spread and rises as spread collapses — and the tiers that shipped **compress**
-within-unit spread rather than inflating it, which is the opposite of the failure Open Buildings
-was rejected for. Median coefficient of variation, measured on the runs on disk: 0.266 for real
-Overture heights in Berlin, 0.192 for WSF-3D in Nairobi, and 0.112 for GHS-BUILT-H in Bogotá, with
-23.6% of the GHSL units carrying a single height throughout.
+within-unit spread rather than inflating it, which is the opposite of the failure Open Buildings was
+rejected for. Median coefficient of variation across whole-city runs: 0.266 for real Overture
+heights in Berlin, 0.192 for WSF-3D in Nairobi, and 0.112 for GHS-BUILT-H in Bogotá, where 23.6% of
+units carry a single height throughout. Each run reports its own figures in the manifest.
 
 ::: lczkit.heights.dispersion
 

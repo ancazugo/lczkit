@@ -8,9 +8,8 @@ metric that measures building size — and the result is that they come out swap
 
 ## The measurement this exists to answer
 
-`mean_building_area_m2` has been computed since Phase 5 and has never been a metric dimension.
-Phase 14 recorded the omission from the metric's structure. Phase 25 measured what it costs, over
-built cells (BSF > 0.05) of four runs on disk:
+`mean_building_area_m2` is computed by the parameter stage and has never been a metric dimension.
+This is what that costs, measured over built cells (BSF > 0.05) of four whole-city runs:
 
 | city | LCZ 7 median footprint | LCZ 8 median footprint | ratio 8/7 |
 |---|---:|---:|---:|
@@ -23,9 +22,10 @@ built cells (BSF > 0.05) of four runs on disk:
 informal-settlement class, small single-storey structures.** The map is assigning "large low-rise"
 to cells of 55–93 m² buildings and "lightweight low-rise" to cells of 7 000–13 000 m² sheds, in
 every city measured. **This needs no external reference to call wrong; it is internally
-contradictory.** It also predicts, without reference to any run, Phase 6.7's LCZ 8 at 0.0% (n=224)
-and Phase 13's LCZ 7 at 8.2% in range — the latter attributed at the time to Overture coverage of
-informal settlements, which is at most half of it.
+contradictory.** It also predicts, without reference to any run, LCZ 8 scoring 0.0% agreement over
+224 Rotterdam cells, and LCZ 7 reaching its published building-surface range in only 8.2% of cells
+— the latter easily mistaken for an Overture coverage limit on informal settlements, which is at
+most half of it.
 
 ## Why the metric cannot separate them
 
@@ -48,7 +48,7 @@ decile where the fabric it describes has alleys a metre or two wide.
 
 ## The ranges
 
-`mean_building_area_m2` is the Phase 5 column of the same name: the mean footprint area of whole
+`mean_building_area_m2` is the parameter column of the same name: the mean footprint area of whole
 buildings whose representative point falls in the unit. Blank means unbounded on that side.
 
 | LCZ | Class name | mean building area m² (min) | mean building area m² (max) |
@@ -78,8 +78,8 @@ them, rather than treating them as fixed.
   some cities and absent from others.
 
 **Neither number is calibrated, and the percentiles above are a sanity check on order of magnitude,
-not a fit.** CLAUDE.md's standing ruling is that a threshold is swept against a reference and chosen
-at an operating point, never picked — which is why this dimension carries weight 0.0 in every
-shipped preset and changes no label until a sweep says what it should carry. Fitting the bounds to
-the distributions above would encode one sample's fabric as a definition, which is what Phase 13
-refused to do for the Stewart & Oke ranges and refuses here for lczkit's own.
+not a fit.** A threshold is swept against a reference and chosen at an operating point, never
+picked — which is why this dimension carries weight 0.0 in every shipped preset and changes no
+label until a sweep says what it should carry. Fitting the bounds to the distributions above would
+encode one sample's fabric as a definition, which is the same reason the Stewart & Oke ranges are
+transcribed rather than recalibrated.

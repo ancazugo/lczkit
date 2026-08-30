@@ -19,9 +19,9 @@ in the package:
   implausibly-large-footprint removal and genuine duplicate removal.
 
 The split exists because building surface fraction carries roughly half the classification
-metric. A single layer cleaned for topology measured 23.5% of Berlin's footprint area away
-before BSF was computed — worth 9.1 points of agreement, and invisible for four phases because
-the cleaning report tracked feature counts and not area.
+metric. Cleaning a single layer for topology measured 23.5% of Berlin's footprint area away before
+BSF was computed, which was worth 9.1 points of agreement. The cleaning report therefore records
+total footprint **area** in and out of every operation, not just feature counts.
 
 ::: lczkit.cleaning.pipeline
 
@@ -35,9 +35,8 @@ the cleaning report tracked feature counts and not area.
 
 ## Tiling
 
-Street simplification is superlinear, which was existential at metropolitan scale and invisible
-for seven phases because the test fixture is 9 km². This is how a whole extent is cut into
-tiles, simplified in parallel and stitched back.
+Street simplification is superlinear in the size of the network, so a whole city does not finish
+in usable time. This is how an extent is cut into tiles, simplified in parallel and stitched back.
 
 ::: lczkit.cleaning.tiles
 
