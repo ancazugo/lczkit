@@ -20,7 +20,7 @@ Steps covered, and why each is a suspect:
 
 Street simplification is deliberately **not** measured here — it is tiled, so it has no
 whole-extent form left. Its stitch does still run over the whole network, and is measured in
-`docs/experiments/phase-8-scaling.md` §4.3 at 1.8 s, 5.1 s and 17.4 s over ~30k, ~60k and ~210k
+`notes/experiments/phase-8-scaling.md` §4.3 at 1.8 s, 5.1 s and 17.4 s over ~30k, ~60k and ~210k
 features: an exponent of about 1.16, and 17 seconds over the whole of Berlin.
 
 **Where it writes.** `output/lczkit/<run_id>/`. Nothing under `input/` is modified.

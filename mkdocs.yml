@@ -5,11 +5,10 @@ repo_url: https://github.com/ancazugo/lczkit
 repo_name: ancazugo/lczkit
 edit_uri: edit/master/docs_src/
 
-# NOT `docs`. That directory is the project's internal record — phase write-ups and the
-# transcribed reference tables — and it also holds 205 MB of gitignored PDFs and datasets. A
-# `docs_dir` pointing there would copy every one of them into `site/` on a local build, and
-# `mkdocs gh-deploy` would publish them. A docs_dir that cannot contain a PDF is a stronger
-# guarantee than an `exclude_docs` rule that has to stay correct.
+# NOT `docs`. That directory holds the transcribed reference tables and 205 MB of gitignored
+# reference PDFs. A `docs_dir` pointing there would copy every one of them into `site/` on a local
+# build, and `mkdocs gh-deploy` would publish them. A docs_dir that cannot contain a PDF is a
+# stronger guarantee than an `exclude_docs` rule that has to stay correct.
 docs_dir: docs_src
 
 # Every warning is an error: a broken cross-reference in an API page is exactly the kind of rot

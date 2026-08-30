@@ -336,7 +336,7 @@ def test_the_sweep_and_the_package_share_one_city_registry() -> None:
 
 
 def test_the_cities_added_after_the_recorded_sweeps_are_marked_as_such() -> None:
-    """Every stored figure in `docs/experiments/` is over the original sixteen. Twelve cities came
+    """Every stored figure in `notes/experiments/` is over the original sixteen. Twelve cities came
     later, so any comparison against a stored record has to intersect the city sets first —
     CLAUDE.md records pooling two populations as a mistake this project has already made, and
     reported 6.6% of deviation that was 0.0% once restricted.

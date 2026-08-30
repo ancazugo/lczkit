@@ -493,7 +493,7 @@ def test_an_empty_tile_contributes_nothing_rather_than_failing() -> None:
 # --------------------------------------------------------------------------------------------
 # Phase 8's three scaling fixes. Each replaces a whole-network step with a local one, so each
 # test below is an equivalence test in miniature; the extent-scale versions are in
-# `docs/experiments/phase-8-scaling.md`.
+# `notes/experiments/phase-8-scaling.md`.
 # --------------------------------------------------------------------------------------------
 
 
