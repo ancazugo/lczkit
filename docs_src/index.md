@@ -70,6 +70,29 @@ file as a table with no location. Alongside those: a display-ready attribute tab
 site, and a JSON manifest carrying the full serialised configuration, the pinned Overture release,
 the resolved package versions and the cleaning report.
 
+## Where the data comes from
+
+Nothing has to be staged by hand. A run downloads the Overture extract, the ESA WorldCover tiles
+its extent spans and the two building-height products, and caches each under `input/<provider>/` —
+a cache hit is just a file that is already there, so the second city in a region is faster than the
+first.
+
+Land cover has two interchangeable backends, chosen by
+[`LandCoverConfig.source`][lczkit.config.LandCoverConfig] or `--land-cover-source`:
+[`LocalRasterSource`][lczkit.landcover.local.LocalRasterSource] mosaics the WorldCover tiles and
+reduces them here, and [`EarthEngineSource`][lczkit.landcover.earthengine.EarthEngineSource]
+reduces the same product inside Google Earth Engine and brings back a table. They return
+schema-identical tables and differ by about a percent on a unit's boundary cells, because one
+weights each cell by the fraction the unit covers and the other counts whole pixels by centre. The
+local one is the default: it needs nothing but HTTP, where Earth Engine needs credentials, a
+billable project and a quota. Whichever answered is recorded in the manifest.
+
+The **height** products have no such choice, on availability rather than policy. GHS-BUILT-H is in
+the Earth Engine catalogue and is byte-identical to the tiles a run already fetches, so a second
+route to it would only add a credential requirement; WSF-3D — the tier that answers for most
+building area outside Europe — is not in the catalogue at all. See
+[`lczkit.sources.height_products`][lczkit.sources.height_products] for the measurement.
+
 ## What this documentation covers
 
 The [demonstration](demo/bogota.ipynb) runs the whole pipeline over a window of Bogotá, twice —

@@ -208,6 +208,41 @@ def test_a_unit_earth_engine_returned_nothing_for_is_null() -> None:
     assert fractions_table(counts, _config(), index).loc["unit_0"].isna().all()
 
 
+def test_the_asset_check_is_reachable_without_constructing_a_source() -> None:
+    """The precondition has to be askable before anything is spent.
+
+    Land cover is the fourth pipeline stage of nine and the two before it are the long ones, so a
+    run that discovers an unset `GEE_PROJECT_NAME` there has already paid for a whole city's
+    cleaning to be told about a one-line fix. `run_pipeline` and `lczkit run` both ask this
+    question up front, and they ask *this* function rather than restating what it knows.
+    """
+    from lczkit.landcover.earthengine import check_asset
+
+    complete = _config(gee={"collection_id": "A/B", "band": "Map", "scale_m": 10.0})
+
+    with pytest.raises(ValueError, match="GEE_PROJECT_NAME"):
+        check_asset(complete, None)
+    with pytest.raises(ValueError, match="collection_id"):
+        check_asset(_config(), "some-project")
+
+    # A complete pair answers by returning, and reaches no network doing it.
+    assert (
+        check_asset(
+            _config(
+                gee={
+                    "collection_id": "A/B",
+                    "band": "Map",
+                    "scale_m": 10.0,
+                    "start_date": "2021-01-01",
+                    "end_date": "2022-01-01",
+                }
+            ),
+            "some-project",
+        )
+        is None
+    )
+
+
 def test_an_unset_project_raises_before_any_earth_engine_call(tmp_path: object) -> None:
     """Checked ahead of `ee.Initialize` so the message names `.env`, not a Google auth failure."""
     from lczkit.landcover.earthengine import EarthEngineSource

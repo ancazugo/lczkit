@@ -32,10 +32,11 @@ from lczkit.heights.completeness import height_metrics
 from lczkit.heights.diagnostic import source_availability
 from lczkit.heights.inherit import inherit_heights
 from lczkit.heights.tiers import build_cascade
+from lczkit.landcover.earthengine import EarthEngineSource, check_asset
 from lczkit.landcover.local import LocalRasterSource
 from lczkit.output import RunOutputs, write_run
 from lczkit.output.extent import ExtentRecord
-from lczkit.protocols import BBox, SpatialUnitStrategy
+from lczkit.protocols import BBox, RasterSource, SpatialUnitStrategy
 from lczkit.sources.height_products import resolve_areal_tiers
 from lczkit.sources.overture import OvertureSource
 from lczkit.sources.worldcover import clip_worldcover
@@ -105,6 +106,31 @@ def build_strategy(
         min_area_m2=config.patch_min_area_m2,
         max_area_m2=config.patch_max_area_m2,
         buildings=buildings if config.patch_merge_on_morphology else None,
+    )
+
+
+def land_cover_source(settings: Settings, bbox: BBox) -> RasterSource:
+    """The configured land-cover backend, with its window placed if it needs one.
+
+    `LandCoverConfig.source` chooses between the two `RasterSource` implementations. They return
+    schema-identical tables, so everything downstream joins on `unit_id` either way and nothing
+    else in the chain has to know which one answered.
+
+    The local backend mosaics whichever ESA WorldCover tiles the extent spans into the run
+    directory, never into `input/`: a clip keyed to one run's bbox is not source data. The Earth
+    Engine backend writes nothing here at all — it caches its own reduction under `input/GEE/`,
+    keyed on the units, the asset, the date range, the reducer and the class mapping together.
+    """
+    dataset = settings.land_cover.dataset(settings.ucp.land_cover_dataset)
+    if settings.land_cover.source == "gee":
+        return EarthEngineSource.from_settings(settings, dataset.name)
+    # `clip_worldcover` resolves the tiles the bbox actually spans and mosaics them. A single
+    # hardcoded tile is correct for one city and a 0x0 window — `RasterioIOError` — for the next
+    # one, or worse, a quarter of the map silently missing.
+    return LocalRasterSource(
+        dataset,
+        clip_worldcover(bbox, settings.run_dir / "worldcover.tif"),
+        max_raster_cells=settings.land_cover.max_raster_cells,
     )
 
 
@@ -182,6 +208,16 @@ def run_pipeline(
             yield
         stages[name] = time.perf_counter() - started
 
+    # Asked before anything is spent. Land cover is the fourth stage of nine and the two before it
+    # are the long ones, so a run that learns here that `GEE_PROJECT_NAME` is unset has already
+    # paid for a whole city's cleaning to be told about a one-line configuration fix. The local
+    # backend needs no equivalent: it reaches its tiles over plain HTTP with nothing to configure.
+    if settings.land_cover.source == "gee":
+        check_asset(
+            settings.land_cover.dataset(settings.ucp.land_cover_dataset),
+            settings.land_cover.gee_project,
+        )
+
     source = OvertureSource(settings)
     with timed("clean_vectors"):
         cleaned = clean_vectors(
@@ -230,13 +266,7 @@ def run_pipeline(
             measurement_units = EnclosureUnits().generate(bbox, barriers)
 
     with timed("land_cover"):
-        # `clip_worldcover` resolves the tiles the bbox actually spans and mosaics them. A single
-        # hardcoded tile is correct for one city and a 0x0 window — `RasterioIOError` — for the
-        # next one, or worse, a quarter of the map silently missing.
-        worldcover = clip_worldcover(bbox, settings.run_dir / "worldcover.tif")
-        raster = LocalRasterSource(
-            settings.land_cover.dataset(settings.ucp.land_cover_dataset), worldcover
-        )
+        raster = land_cover_source(settings, bbox)
         fractions = raster.fractions(units)
         # The surface fractions have to describe the units the parameters are measured on, or the
         # building share and the impervious share it is subtracted from would come from different

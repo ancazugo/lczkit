@@ -23,10 +23,13 @@ from lczkit.cities import BY_KEY, WINDOW_KM, shrink, so2sat_window
 from lczkit.cities import city as lookup_city
 from lczkit.cli._options import (
     BASEMAP_HELP,
+    LAND_COVER_SOURCE_HELP,
     apply_basemaps,
     apply_config_file,
+    apply_land_cover_source,
     parse_basemaps,
     parse_bbox,
+    parse_land_cover_source,
 )
 from lczkit.cli._render import (
     EXIT_MISSING_TOOL,
@@ -116,6 +119,10 @@ def run(
         list[str] | None,
         typer.Option("--basemap", metavar="KEY", help=BASEMAP_HELP),
     ] = None,
+    land_cover_source: Annotated[
+        str | None,
+        typer.Option("--land-cover-source", metavar="BACKEND", help=LAND_COVER_SOURCE_HELP),
+    ] = None,
     dry_run: Annotated[
         bool,
         typer.Option("--dry-run", help="Resolve and print the configuration, then stop."),
@@ -147,6 +154,7 @@ def run(
     if extent_km is not None and extent_km <= 0:
         fail(f"--extent-km must be positive, got {extent_km}")
     basemap_keys = parse_basemaps(basemap)
+    backend = parse_land_cover_source(land_cover_source)
 
     parsed: BBox
     extent: ExtentRecord
@@ -164,6 +172,9 @@ def run(
         apply_config_file(settings, config)
     settings.viz.include_buildings = buildings
     apply_basemaps(settings.viz, basemap_keys)
+    # After `--config`, so an explicit flag beats a file that also named a backend. `None` leaves
+    # the file's answer alone, which is what makes the two composable rather than exclusive.
+    apply_land_cover_source(settings, backend)
 
     # The city locators stay here on purpose: they read `guppd_bounds.csv` and the So2Sat archive
     # through `settings.source_dir`, so unlike a bbox they genuinely cannot answer without one.

@@ -8,12 +8,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import cast, get_args
 
 import typer
 from pydantic import ValidationError
 
-from lczkit.cli._render import console
-from lczkit.config import Settings, VizConfig
+from lczkit.cli._render import console, fail
+from lczkit.config import LandCoverBackend, Settings, VizConfig
+from lczkit.landcover.earthengine import check_asset
 from lczkit.protocols import BBox
 from lczkit.viz.basemaps import DEFAULT_BASEMAP_KEYS, PROVIDERS
 
@@ -22,6 +24,20 @@ BASEMAP_HELP = (
     f"or 'all', or 'none'. Defaults to the keyless grounds "
     f"({', '.join(DEFAULT_BASEMAP_KEYS)}); the MapTiler ones must be asked for, because they "
     "write an API key into the built site."
+)
+
+LAND_COVER_BACKENDS: tuple[str, ...] = get_args(LandCoverBackend)
+"""The accepted `--land-cover-source` values, read off the config type rather than listed here.
+
+A backend added to `LandCoverBackend` reaches the command line by being added, and one removed
+stops being accepted — the alternative is a second list that agrees until someone edits one.
+"""
+
+LAND_COVER_SOURCE_HELP = (
+    f"Where land-cover fractions come from ({', '.join(LAND_COVER_BACKENDS)}). "
+    "'local' mosaics the ESA WorldCover tiles the extent spans and reduces them here; "
+    "'gee' reduces the configured Earth Engine asset server-side and needs credentials and a "
+    "billable project. Defaults to what the preset or --config says, which is 'local'."
 )
 
 
@@ -95,6 +111,60 @@ def apply_basemaps(config: VizConfig, keys: list[str] | None) -> None:
     console.print(
         "  [dim]each carries its provider's usage terms, shown when you name one; "
         "--basemap none to build a site that reaches no network[/dim]"
+    )
+
+
+def parse_land_cover_source(value: str | None) -> LandCoverBackend | None:
+    """`--land-cover-source` resolved to a backend name, or `None` when the flag was not given.
+
+    `None` means "I did not say", which leaves whatever the preset and `--config` resolved to.
+    That is the same distinction `parse_basemaps` draws, and it matters for the same reason: a
+    config file may set `land_cover.source`, and a flag that could not tell "unset" from "local"
+    would silently overrule it on every run that did not repeat it.
+
+    Validated here rather than by `typer`'s own enum handling so that the message names the
+    alternatives in the package's own words, and so that it is refused before `DATA_DIR` is
+    consulted — a mistyped backend is not an environment problem.
+    """
+    if value is None:
+        return None
+    cleaned = value.strip()
+    if cleaned not in LAND_COVER_BACKENDS:
+        raise typer.BadParameter(
+            f"unknown land-cover source {cleaned!r}; choose from {', '.join(LAND_COVER_BACKENDS)}"
+        )
+    return cast(LandCoverBackend, cleaned)
+
+
+def apply_land_cover_source(settings: Settings, value: LandCoverBackend | None) -> None:
+    """Put the chosen backend on `settings`, refuse one that cannot run, and print its terms.
+
+    The refusal calls `check_asset` rather than restating it, so there is one definition of what
+    Earth Engine needs and the command line only decides how it is reported. Without this a
+    `--dry-run` naming a backend with no `GEE_PROJECT_NAME` printed "project None" and exited
+    zero — the one command whose whole purpose is to say whether the configuration will run,
+    saying it will.
+
+    The terms are printed for the same reason a base map's are: Earth Engine is a credentialed,
+    quota-limited service billed to a named project, and the moment the choice is made is when
+    that is worth knowing. The local backend is the default and says nothing.
+    """
+    if value is not None:
+        settings.land_cover.source = value
+    if settings.land_cover.source != "gee":
+        return
+    dataset = settings.land_cover.dataset(settings.ucp.land_cover_dataset)
+    try:
+        check_asset(dataset, settings.land_cover.gee_project)
+    except ValueError as error:
+        fail(str(error))
+    console.print(
+        f"  land cover: [bold]Earth Engine[/bold] {dataset.gee.collection_id} "
+        f"as project {settings.land_cover.gee_project}"
+    )
+    console.print(
+        "  [dim]a billed, quota-limited service; --land-cover-source local reduces ESA "
+        "WorldCover here instead[/dim]"
     )
 
 

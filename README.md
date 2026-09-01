@@ -99,6 +99,34 @@ do with a new city; `--dry-run` resolves the whole configuration and writes noth
 run directory; `--config FILE` overlays a JSON file on any settings section, and **a run manifest
 works there**, so a run can be reproduced from its own output.
 
+## What a run fetches
+
+Nothing has to be staged by hand. A run downloads what it needs and caches it under
+`input/<provider>/`, where a cache hit is just a file that is already there — so the second city
+in a region is faster than the first, and nothing existing is ever rewritten.
+
+| what | from | size |
+|---|---|---|
+| Overture buildings, streets, water, land use | Overture's S3 bucket, at the pinned release | the extent |
+| ESA WorldCover, for land cover | the ESA bucket, mosaicking whichever 3° tiles the extent spans | the extent |
+| WSF-3D building height | one global GeoTIFF from DLR, read by window | 2.1 GB, once, ever |
+| GHS-BUILT-H building height | the JRC tiles the extent covers | 1-40 MB per 1000 km tile |
+
+Land cover can instead be reduced inside Google Earth Engine, with
+`--land-cover-source gee`. The two backends return the same table — they disagree by about a
+percent on a unit's boundary cells, because one weights each cell by the fraction the unit covers
+and the other counts whole pixels by centre — so the choice is where the arithmetic happens, and
+the run manifest records which one answered. It needs credentials and a billable project in
+`GEE_PROJECT_NAME`; the default needs neither.
+
+**The height products are not offered that way, and the reason is availability rather than
+policy.** GHS-BUILT-H is in the Earth Engine catalogue and is byte-identical to the tiles fetched
+above, so a second route to it would only add a credential requirement. WSF-3D is not in the
+catalogue at all — Earth Engine publishes DLR's 2015 settlement mask, which is not a height
+product — and it is the tier that answers for most building area outside Europe. Fine-resolution
+Google Open Buildings 2.5D *is* Earth Engine-only, and is switched off by default because it was
+measured to make the map worse.
+
 ## What a run writes
 
 ```

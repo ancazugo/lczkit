@@ -97,11 +97,31 @@ class RunPreset:
 
         Each section is copied rather than shared, so two runs configured from one preset cannot
         mutate each other's settings through it.
+
+        **`gee_project` survives the copy.** It is resolved from `GEE_PROJECT_NAME` by
+        `Settings.load`, so it is a credential and not a measured configuration, and replacing the
+        whole `land_cover` section discarded it — every `lczkit run` cleared the variable moments
+        after reading it. That was invisible while nothing downstream read the field, and it is
+        exactly the silent-discard failure `Settings.load` documents in the other direction: an
+        absent value must leave what is already there alone. A preset that names a project itself
+        still wins, so the precedence is preset, then environment.
+
+        A consequence worth naming, because the field now reaches places it never did: every
+        manifest on disk before this fix recorded `gee_project: null`, and every one after it
+        records the project the environment supplied, whichever backend answered. The manifest is
+        `settings.model_dump()` verbatim and `build_site` copies it into the site, so the project
+        ID is published with any site built from such a run. That is the designed behaviour rather
+        than a leak — a Google Cloud project ID names a tenancy and is not a credential, unlike
+        `VizConfig.maptiler_key`, which is `exclude=True` precisely because it is one — but it is
+        the same three-files-deep path, so it is stated rather than left to be discovered.
         """
         settings.overture.release = self.overture_release
         settings.cleaning = self.cleaning.model_copy(deep=True)
         settings.heights = self.heights.model_copy(deep=True)
-        settings.land_cover = self.land_cover.model_copy(deep=True)
+        land_cover = self.land_cover.model_copy(deep=True)
+        if land_cover.gee_project is None:
+            land_cover.gee_project = settings.land_cover.gee_project
+        settings.land_cover = land_cover
         settings.ucp = self.ucp.model_copy(deep=True)
         return settings
 

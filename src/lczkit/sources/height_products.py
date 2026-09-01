@@ -13,6 +13,32 @@ complete, so an interrupted fetch can never be mistaken for a cache hit.
 None of these classes implements `HeightSource`. They resolve a path; `ArealRasterTier` reads
 it. Keeping fetch and read apart is what lets the tier stay offline and testable, and what lets
 a user who *has* placed a product by hand skip these entirely.
+
+**Why these two fetch over HTTP while land cover can reduce inside Earth Engine.** The question is
+asked often enough to answer here with the measurement rather than leave it looking like an
+oversight, since `LandCoverConfig.source` does offer that choice:
+
+| product | in the Earth Engine public catalogue? |
+|---|---|
+| GHS-BUILT-H ANBH | **yes** — `JRC/GHSL/P2023A/GHS_BUILT_H/2018`, band `built_height`, 100 m |
+| WSF-3D building height | **no** — `DLR/WSF` holds only `WSF2015`, a 10 m settlement mask |
+
+So an Earth Engine route could serve at most one of the two default tiers, and not the one that
+matters: WSF-3D answers for 92-99% of building area in the cities measured, with GHS-BUILT-H the
+fallback beneath it. A backend switch that silently meant "the full cascade" in one place and "the
+fallback tier alone" in another is a configuration whose meaning changes with the city.
+
+And for GHS-BUILT-H it would be a second route to the same numbers. Sampled against the tiles this
+module downloads — 120 points over a low-rise window and 60 over the tallest cells of the same
+tile, 15.38-32.31 m — the Earth Engine band and the local ANBH raster agree to **0.000000 m**. That
+is worth stating precisely because the name alone could not settle it: GHSL publishes ANBH
+(`BUVOL / BUSURF`) beside the gross AGBH, the two differ by the built-up share, and this package
+reads ANBH deliberately. Neither the asset ID nor its Earth Engine metadata says which one the band
+carries; only sampling both did.
+
+There is therefore nothing to gain and a credential requirement to add, so both tiers stay on
+plain HTTP. Open Buildings 2.5D is the exception below and goes through Earth Engine because it
+has no public bucket at all.
 """
 
 from __future__ import annotations
