@@ -244,12 +244,27 @@ def test_a_rule_reading_an_absent_column_is_refused_by_name() -> None:
         rules.apply_semantic_rules(_ranked([3], [6]), _params(sem_x=[0.9]), [rule])
 
 
-def test_every_shipped_semantic_rule_is_disabled_pending_calibration() -> None:
+def test_every_shipped_semantic_rule_is_enabled_only_if_it_was_calibrated() -> None:
     """CLAUDE.md's standing ruling: a threshold is swept against a reference and chosen at an
-    operating point, never picked. These have not been swept, so shipping one enabled would put an
-    invented number into a published label."""
-    shipped = ClassificationConfig().semantic_rules
+    operating point, never picked.
 
-    assert shipped, "the rules should exist and be off, not be absent"
-    assert not any(rule.enabled for rule in shipped)
-    assert all(rule.reason for rule in shipped)
+    Both rules were swept together over eight cities by `scripts/lcz78_threshold_sweep.py`.
+    `large_lowrise` cleared the acceptance criteria at 0.70 with no size gate and ships enabled;
+    `lightweight` was refused at all 95 settings and ships disabled. The numbers are pinned here
+    rather than only in the sweep's own tests because the sweep needs eight cities of built
+    evidence under `DATA_DIR` and cannot be re-run offline, so this is what would notice if the
+    config moved away from what was measured.
+    """
+    shipped = {rule.name: rule for rule in ClassificationConfig().semantic_rules}
+
+    assert set(shipped) == {"large_lowrise", "lightweight"}
+    assert all(rule.reason for rule in shipped.values())
+
+    large = shipped["large_lowrise"]
+    assert large.enabled is True
+    assert large.min_fraction == pytest.approx(0.70)
+    # Measured harmful: the fraction's denominator is already the unit's whole building area, so
+    # the extra gate only cut reach while raising the accuracy of the label being displaced.
+    assert large.min_mean_building_area_m2 is None
+
+    assert shipped["lightweight"].enabled is False

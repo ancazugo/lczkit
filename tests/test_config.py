@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from lczkit.config import Settings
 
@@ -75,6 +76,26 @@ def test_default_run_id_is_used_when_not_overridden(
 
     assert settings.run_id
     assert settings.run_dir == data_dir / "output" / "lczkit" / settings.run_id
+
+
+def test_an_enabled_semantic_rule_without_its_evidence_column_is_refused_at_load(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`large_lowrise` ships enabled and `ucp.semantic_groups` may be set to `[]`, so the two can
+    be individually reasonable and jointly impossible. The classifier already raises on the
+    missing column, but classification is the last stage of a run — this is the same refusal at
+    config load, before a ten-minute run instead of after it."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    monkeypatch.setenv("DATA_DIR", str(data_dir))
+    settings = Settings.load(dotenv_path=_no_dotenv(tmp_path), run_id="run-a")
+    # `model_copy(update=...)` does not re-run validators, so the refusal has to be exercised
+    # through `model_validate`, the same path a caller's own edited config goes through.
+    dumped = settings.model_dump()
+    dumped["ucp"]["semantic_groups"] = []
+
+    with pytest.raises(ValidationError, match="large_lowrise reads"):
+        Settings.model_validate(dumped)
 
 
 def test_json_round_trip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

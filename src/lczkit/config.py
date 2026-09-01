@@ -851,10 +851,10 @@ class SemanticRuleConfig(BaseModel):
     The same mechanism as the LCZ 10 rule, generalised: a unit over `min_fraction` takes `lcz`
     whatever the distance metric said, and the displaced answer is kept as `lcz_secondary`.
 
-    **All of these ship disabled, and that is deliberate rather than cautious.** A threshold here
-    is *calibrated* against a reference and chosen at an operating point, never picked because it
-    looks reasonable. The values below are placeholders marking where a calibrated number goes,
-    and enabling one before that would put an invented number into a published label.
+    **A rule ships enabled only once its threshold has been calibrated**, and disabled otherwise.
+    A threshold here is swept against a reference and chosen at an operating point, never picked
+    because it looks reasonable, so an uncalibrated rule would put an invented number into a
+    published label. Each rule's `reason` states which of the two it is and on what measurement.
     """
 
     name: str
@@ -881,22 +881,40 @@ class SemanticRuleConfig(BaseModel):
 
 
 def _default_semantic_rules() -> list[SemanticRuleConfig]:
-    """The candidate rules, all disabled pending calibration."""
+    """The two functional rules, both swept against eight cities: LCZ 8 enabled, LCZ 7 refused.
+
+    Order is most-general to most-specific, since a later rule overrides an earlier one on a unit
+    both would fire on.
+    """
     return [
         SemanticRuleConfig(
             name="large_lowrise",
             lcz=8,
             column="sem_large_lowrise_buildings_of_building_area",
-            min_fraction=0.5,
-            min_mean_building_area_m2=1000.0,
-            enabled=False,
+            min_fraction=0.70,
+            min_mean_building_area_m2=None,
+            enabled=True,
             reason=(
-                "LCZ 8 fails by construction, not by tuning: its building-surface band "
-                "overlaps LCZ 3 and 6, its Hr band is identical to LCZ 3, 6 and 9, so aspect ratio "
-                "is its only separator in the metric — and aspect ratio is null exactly where "
-                "large setbacks stop streets reaching buildings, which is most of an LCZ 8 unit. "
-                "Measured 0.0% agreement over 224 Rotterdam cells. A functional route is the only "
-                "evidence available that does not depend on a parameter the class nullifies."
+                "LCZ 8 fails by construction in the distance metric, not by tuning: its "
+                "building-surface band overlaps LCZ 3 and 6, its Hr band is identical to LCZ 3, 6 "
+                "and 9, so aspect ratio is its only separator — and aspect ratio is null exactly "
+                "where large setbacks stop streets reaching buildings, which is most of an LCZ 8 "
+                "unit. Measured 0.0% agreement over 224 Rotterdam cells. A functional route is the "
+                "only evidence available that does not depend on a parameter the class nullifies. "
+                "Threshold calibrated over 19 settings x 6 size gates against So2Sat hand labels "
+                "in eight cities: at 0.70 the rule relabels 662 labelled cells, 72.2% of which the "
+                "reference calls LCZ 8 against 14.8% for the morphological label it displaced, and "
+                "LCZ 8's precision, recall, F1 and built-class agreement all rise in all eight. "
+                "Six of 114 settings clear the acceptance criteria, all of them here in 0.70-0.95. "
+                "The mean-footprint gate this rule shipped with was measured harmful and is off: "
+                "the denominator is already the unit's whole building area, so untagged area "
+                "counts against the fraction and the gate charges for size a second time. It cut "
+                "reach at all 95 gated settings, and at the operating point a 1000 m gate takes "
+                "662 relabelled cells to 237 while raising the displaced label's accuracy from "
+                "14.8% to 24.5%; no gated setting passes at any threshold. Against WUDAPT, the "
+                "secondary reference, LCZ 8's "
+                "F1 still rises in all eight cities but no setting clears the criteria — precision "
+                "falls in Berlin and Milan while recall roughly doubles."
             ),
         ),
         SemanticRuleConfig(
@@ -907,13 +925,24 @@ def _default_semantic_rules() -> list[SemanticRuleConfig]:
             max_mean_building_area_m2=100.0,
             enabled=False,
             reason=(
-                "LCZ 7 reaches its published building-surface range in 8.2% of cells, low on both "
-                "tails across five non-European cities, and it is the class the height-coverage "
-                "limit bears on most. **This rule will mostly not fire where it "
-                "matters**: Overture has no slum/shanty/ger/tent value, and tagged building area "
-                "runs 13.6% outside Europe and North America against 48.6% inside — Rio at 3.1%. "
-                "That is a result to report, not a reason to omit the rule, and "
-                "`building_tag_coverage` is what makes the non-firing legible rather than "
+                "Disabled on measurement, not pending one. LCZ 7 is the informal-settlement class "
+                "and a tag-based rule cannot detect it: Overture has no slum/shanty/ger/tent "
+                "value, so `lightweight` maps to an outbuilding vocabulary — hut, shed, cabin, "
+                "roof, kiosk, carport, guardhouse. Swept over 19 thresholds x 5 size gates against "
+                "both reference sets in eight cities, and refused at all 95 settings under both. "
+                "What refuses every one of them is the second criterion: the rule is wrong more "
+                "often than the label it overwrote at 95 of 95 settings under both references. "
+                "The tagged evidence sits in Berlin, Milan and Vancouver, "
+                "which carry no reference LCZ 7 cells at all, and is near-absent in the five "
+                "cities that do: the best any setting reached was 2 correct LCZ 7 labels against "
+                "So2Sat and 7 against WUDAPT, while displacing 93 and 160 labels the metric had "
+                "right. The binding limit is tag coverage rather than the threshold — tagged "
+                "building area runs 48.6% across Europe and North America against 13.6% "
+                "elsewhere, Rio at 3.1%, because Google Open Buildings and Microsoft ML supply "
+                "footprint geometry with no attributes and Overture's conflation is "
+                "winner-takes-all per building. So even a calibrated tag rule would fire where "
+                "Overture is well described and not where informal settlement is, and "
+                "`building_tag_coverage` is what makes that shortfall legible rather than "
                 "invisible."
             ),
         ),
@@ -983,8 +1012,10 @@ class ClassificationConfig(BaseModel):
     `docs/references/tables/lczkit_natural_class_ranges.md` - lczkit's own, not Tier 1."""
 
     semantic_rules: list[SemanticRuleConfig] = Field(default_factory=_default_semantic_rules)
-    """Functional rules read off Overture's semantic attributes, all shipped disabled pending
-    calibration. See `SemanticRuleConfig`, and `lczkit.classify.rules.apply_semantic_rules`."""
+    """Functional rules read off Overture's semantic attributes, each enabled only if its threshold
+    has been swept against a reference and cleared the acceptance criteria there. LCZ 8 is enabled
+    at 0.70; LCZ 7 is disabled because the same sweep refused it. See `SemanticRuleConfig`, and
+    `lczkit.classify.rules.apply_semantic_rules`."""
 
     natural_negligible_fraction: float = 0.10
     """Tree or water cover a natural class treats as absent. Reuses the 10% boundary Stewart &
@@ -1579,6 +1610,35 @@ class Settings(BaseModel):
                 "Set DATA_DIR in .env to the shared data directory."
             )
         return value
+
+    @model_validator(mode="after")
+    def _semantic_rules_have_their_evidence(self) -> Settings:
+        """Refuse a run whose enabled semantic rules read a column no configured group emits.
+
+        `ucp.semantic_groups` may be set to `[]` to skip the semantic layer, and `large_lowrise`
+        ships enabled — so the two settings can be individually reasonable and jointly impossible.
+        The classifier already raises on the missing column with a message naming both halves, but
+        classification is the *last* stage of a run: on a metropolitan extent that is a ten-minute
+        wait for an answer this check gives at config load.
+        """
+        from lczkit.ucp.semantics import group_columns
+
+        available = set(group_columns(self.ucp.semantic_groups))
+        missing = {
+            rule.name: rule.column
+            for rule in self.classification.semantic_rules
+            if rule.enabled and rule.column not in available
+        }
+        if missing:
+            named = ", ".join(
+                f"{name} reads {column!r}" for name, column in sorted(missing.items())
+            )
+            raise ValueError(
+                f"enabled semantic rules read columns no configured group emits: {named}. "
+                "Add the group to `ucp.semantic_groups`, or disable the rule in "
+                "`classification.semantic_rules`."
+            )
+        return self
 
     @property
     def input_dir(self) -> Path:

@@ -61,6 +61,11 @@ def make_parameters(units: gpd.GeoDataFrame) -> pd.DataFrame:
             "industrial_fraction_of_unit_area": np.zeros(n),
             "industrial_fraction": np.zeros(n),
             "mean_building_area_m2": np.linspace(123.456789, 9876.54321, n),
+            # The semantic evidence the shipped LCZ 8 rule reads. Zero, so the rule never fires
+            # here — but present, because a real `compute_parameters` table carries these and the
+            # classifier refuses one that does not.
+            "sem_large_lowrise_buildings_of_building_area": np.zeros(n),
+            "sem_lightweight_buildings_of_building_area": np.zeros(n),
         },
         index=units.index,
     )

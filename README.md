@@ -152,13 +152,18 @@ emits.
   Overture exposes one `industrial` value with no heavy/light split. Class 10 is assigned
   functionally, at a threshold calibrated against a reference rather than picked, and the manifest
   records how often the rule fired.
-- **Classes 7 and 8 come out inverted on building size.** Class 8 is *large* low-rise — warehouses
-  and malls — and class 7 is *lightweight* low-rise, the informal-settlement class. Across the four
-  cities checked, the units labelled 8 hold buildings of 55–93 m² and those labelled 7 hold
-  buildings of 7 000–13 000 m². Neither class's published parameter ranges mention building size, so
-  nothing in the classification pulls either back. `mean_building_area_m2` is present as a parameter
-  and carries **zero weight** until its weight has been calibrated. Until then, treat those two
-  labels with suspicion.
+- **Classes 7 and 8 come out inverted on building size in the distance metric.** Class 8 is *large*
+  low-rise — warehouses and malls — and class 7 is *lightweight* low-rise, the informal-settlement
+  class. Across the four cities checked, the units the metric alone labels 8 hold buildings of
+  55–93 m² and those labelled 7 hold buildings of 7 000–13 000 m². `mean_building_area_m2` is
+  present as a parameter and carries **zero weight** until its weight has been calibrated. Class 8
+  has a second route around this by default: a unit over 70% tagged warehouse/hangar/retail-shed
+  building area is labelled class 8 on that evidence, a threshold swept against hand-drawn labels
+  in eight cities where it improved every measure in all eight. Class 7 has no equivalent — Overture
+  has no slum/shanty/ger/tent vocabulary, the cities carrying the tags it does have are not the
+  cities with informal settlement, and the same sweep was refused there. Read `building_tag_coverage`
+  beside a class 7 share of zero: it may mean no informal settlement, or it may mean nobody tagged
+  the buildings.
 - **A 100 m cell is not an LCZ patch.** Stewart & Oke's parameter ranges describe a patch of
   hundreds of metres, and on a grid the within-class spread is wider than the published ranges can
   hold — one class of ten reaches its published building-surface-fraction range.
