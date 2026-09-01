@@ -2502,6 +2502,229 @@ No dependency was added — `earthengine-api` has been declared since Phase 4.
 pass, including the new one that goes through `land_cover_source` and checks the table it gets back
 is the one the local backend would have produced.
 
+### Phase 28 — the two rules that were never swept — CONCLUDED
+
+**The outstanding item on the deferred list, taken on request.** Phase 18 shipped the LCZ 7 and
+LCZ 8 semantic rules **disabled**, and said so as a ruling rather than as caution: a threshold is
+swept against a reference and chosen at an operating point, never picked. Phase 25 then measured
+what the omission costs — LCZ 7 and LCZ 8 come out **inverted on building size** in every city
+looked at — and left the sweep undone. This is that sweep, on the same methodology as
+`scripts/lcz10_threshold_sweep.py`: nineteen thresholds, precision and recall against a real
+reference, the whole curve reported, an operating point chosen by a rule stated in advance.
+
+**One rule is enabled and one is refused, and the refusal is the more interesting half.**
+
+`scripts/lcz78_threshold_sweep.py`; record archived at
+`output/lczkit/lcz78-sweep/lcz78_threshold_sweep.json`. Re-running the sweep stage over the stored
+evidence reproduces every curve, every candidate and both verdicts **bit-identically** — the
+expensive half is `--build`, and the sweep over it is minutes.
+
+**One field does move on a re-run, and it is supposed to.** `verify_amortisation` runs at
+`_shipped_gate(rule_name)`, which reads the *current* config — so the archived checks record
+`size_gate: 1000.0`, the placeholder that was still shipping when the record was written, and a
+re-run today records `None`, the gate this phase removed. The mismatch counts are 0 at both, so the
+check passes either way and now verifies the amortisation at the gate that actually ships. Recorded
+because the next person to re-run this will see one field differ and needs to know which half moved:
+**a self-referential check tracks the config it validates, so it cannot be bit-identical across the
+change it was run to justify.**
+
+#### Eight cities, chosen for the axis under test
+
+The rules read a fraction whose denominator is building area and whose numerator is *tagged*
+building area, so tag coverage is the thing under test and the sample has to span it. Arm A, grid
+units, cascade `coarse`, Overture `2026-07-22.0`, each city's 30 km So2Sat window — the same
+`build_arms` every published multi-city figure came through.
+
+| city | region | tagged building area | So2Sat LCZ 8 cells | So2Sat LCZ 7 cells |
+|---|---|---:|---:|---:|
+| Berlin | Europe | 62.3% | 911 | **0** |
+| Milan | Europe | 51.7% | 708 | **0** |
+| Vancouver | North America | 50.1% | 2 126 | **0** |
+| Mumbai | South Asia | 13.9% | 138 | 242 |
+| Cape Town | Africa | 11.3% | 1 280 | 295 |
+| Jakarta | Southeast Asia | 7.7% | 508 | 121 |
+| Nairobi | Africa | 3.5% | 722 | 444 |
+| Islamabad | South Asia | 2.8% | 258 | 846 |
+
+**Eight of the twenty-eight registry cities, not sixteen.** Building the evidence took 8–35 minutes
+a city (median 14, recorded per city in its own `evidence_<city>.json`) and the sweep over it is
+seconds, so the population is what the time budget bought rather than a selection. Anything
+differencing a later sweep against this record must intersect the city sets first.
+
+#### LCZ 8 — enabled at 0.70, no size gate
+
+**Six of 114 settings clear all four criteria, and they are a contiguous band** — thresholds 0.70
+through 0.95, every one of them with the size gate off. Pooled over the eight cities, gate off:
+
+| threshold | relabelled | rule right | displaced label right | mean Δ built | worst Δ built |
+|---:|---:|---:|---:|---:|---:|
+| 0.05 | 2 023 | 41.7% | 20.3% | +1.35 | **−0.80** |
+| 0.30 | 1 182 | 58.2% | 18.0% | +1.40 | +0.05 |
+| 0.50 | 891 | 65.3% | 15.7% | +1.31 | +0.05 |
+| **0.70** | **662** | **72.2%** | **14.8%** | **+1.11** | **+0.03** |
+| 0.95 | 396 | 81.1% | 11.6% | +0.72 | +0.00 |
+
+At the operating point **every one of the eight cities improves on every measure** — LCZ 8's
+user's accuracy, recall, F1, built-class agreement and overall agreement all rise, with no
+exception. F1 moves +5.0 points on average (Berlin 10.1 → 21.7, Vancouver 20.3 → 29.4, Milan
+6.0 → 11.3, Islamabad 7.3 → 7.5) and built-class agreement +1.11 (Vancouver +2.81, Jakarta +2.35,
+Islamabad +0.03).
+
+**Precision is *not* flat, which is the contrast with the LCZ 10 sweep and worth recording as
+one.** There, precision moved six points over a nineteen-fold change in threshold and the
+conclusion was that the threshold governs the *rate* and not the accuracy. Here the rule's own
+precision runs **41.7% → 81.1%** across the same grid while reach falls 2 023 → 396: a real
+trade-off, and the threshold is buying correctness. The two rules are not the same kind of object,
+and reading either one's shape onto the other would have been wrong.
+
+**The `mean_building_area_m2` gate the rule shipped with is measured harmful and is removed.** It
+cuts reach at every one of the 95 gated settings, and at 91 of them it also raises the accuracy of
+the label it displaces — the four exceptions are all at the widest 4 000 m² gate and move it by at
+most 0.5 points, so the direction is not universal but its shape is. At the operating point it is:
+1 000 m² at 0.70 takes 662 relabelled cells to 237, the rule's precision from 72.2% to 67.1%, and
+the displaced label's from 14.8% to 24.5%, and **no gated setting passes at any threshold.** The
+mechanism is in the column's own name:
+`sem_large_lowrise_buildings_of_building_area` divides by the unit's **whole** building area, so
+untagged and small-building area already counts against the fraction and the gate re-charges for
+size a second time.
+
+**The rule's reach is a map of Overture's tag coverage, and that is what makes it safe where the
+evidence is thin.** It relabels 2.0% of Berlin's cells and 0.04% of Islamabad's, a fifty-fold
+spread across the same denominator — because untagged building area counts against the fraction, a
+city Overture cannot describe simply does not trip it.
+
+**WUDAPT disagrees, and it is recorded rather than set aside.** So2Sat decides, per the standing
+ruling that it is primary where it exists, and that was pre-registered before the sweep ran. But
+against WUDAPT **zero of 114 settings clear the criteria**: LCZ 8's F1 still rises in all eight
+cities and the rule still beats the label it displaced at *every one* of the 114 settings
+(58.1% against 17.6% at 0.70), yet class precision falls in Berlin (67.8 → 59.2) and Milan
+(65.4 → 63.5) while recall roughly doubles, and Mumbai loses 0.016 points of built agreement. The
+substantive direction is the same under both references; the strict no-loss-anywhere bar is met
+under one and not the other.
+
+#### It does not repair the size inversion, and that is checked rather than assumed
+
+Phase 25's finding is that LCZ 8 — *large* low-rise — lands on cells of small buildings while LCZ 7
+lands on sheds. It would be easy to read an enabled LCZ 8 rule as closing that, and **it does not.**
+Median `mean_building_area_m2` on built cells (BSF > 0.05), rule off → rule on:
+
+| | LCZ 7 median | LCZ 8 median | ratio 8/7 |
+|---|---:|---:|---:|
+| Berlin | 12 975 → 9 115 | 739 → 798 | 0.0569 → **0.0875** |
+| Milan | 15 985 → 15 982 | 699 → 780 | 0.0437 → 0.0488 |
+| Mumbai | 5 716 → 3 588 | 141 → 143 | 0.0246 → 0.0399 |
+| Jakarta | 2 090 → 2 286 | 106 → 106 | 0.0505 → 0.0464 |
+| Cape Town | 11 084 → 8 193 | 119 → 119 | 0.0107 → 0.0145 |
+| Vancouver | 19 053 → 14 991 | 208 → 219 | 0.0109 → 0.0146 |
+| Islamabad | 6 226 → 6 226 | 168 → 168 | 0.0270 → 0.0271 |
+| Nairobi | 3 789 → 3 776 | 95 → 95 | 0.0250 → 0.0251 |
+
+**All eight are listed, and the ratio is given at four decimals, because two decimals cannot carry
+this comparison.** Nairobi moves by 0.00016 and crosses a rounding boundary while doing it, so at
+2 dp it prints `0.02 → 0.03` and looks like the third-largest mover; Cape Town and Vancouver move
+twenty times further and print `0.01 → 0.01`. Rounding decided the ranking rather than the data.
+
+The ratio rises in seven of eight and falls in Jakarta, and **in every city LCZ 8's median footprint
+stays 11× to 93× below LCZ 7's** — Berlin moves furthest, from 17.6× inverted to 11.4×, and is still
+inverted. The reason is structural: **a semantic rule
+can only add LCZ 8, never remove it.** The small-footprint cells the metric wrongly calls LCZ 8 are
+untouched, because nothing in the rule looks at what the metric already decided. The rule buys
+agreement; it does not buy the dimension the metric is blind on, and the thing that would is the
+`mean_building_area_m2` weight, which remains unswept and at zero.
+
+Berlin and Nairobi are the two cities this and Phase 25 share, and the rule-off figures reproduce
+that phase's independently: 12 975 / 739 against its 13 419 / 767 on Berlin (ratio 0.0569 against
+0.0572) and 3 789 / 95 against 3 749 / 93 on Nairobi (0.0250 against 0.0248) — different runs over
+different extents in Nairobi's case, and the ratios agree to three decimal places in both.
+
+#### LCZ 7 — refused, and not by a margin
+
+**All 95 settings are refused, against both references, and criterion 2 is what refuses every one
+of them** — the rule is wrong more often than the label it overwrote at **95 of 95 settings under
+both**, which is the sharp instrument the criterion was written to be. The other three are failed
+widely but not universally, and the difference is worth stating rather than rounding to "all four":
+under So2Sat, C1 passes at 1 setting, C3 at 13 and C4 at 7; under WUDAPT C4 passes at 88, because
+firing widely is easy where the thing being counted is wrong. Only 74 of 95 (So2Sat) and 7 of 95
+(WUDAPT) fail all four at once.
+
+The best any setting anywhere reached was **2 correct LCZ 7 labels** against So2Sat and 7 against
+WUDAPT — while displacing 93 and 160 labels the metric had right. Not a threshold that needs
+moving: a rule that destroys forty to seventy correct labels for each one it creates.
+
+**The mechanism is two-sided, and neither side is the threshold.**
+
+- **Overture's `lightweight` vocabulary is outbuildings, not settlements.** There is no `slum`,
+  `shanty`, `ger` or `tent` value in the schema, so the crosswalk maps
+  *hut, shed, cabin, roof, kiosk, carport, guardhouse*. What it finds in a well-described city is
+  garden sheds and carports.
+- **So the tagged evidence sits in the three cities that carry no LCZ 7 at all.** At its widest
+  setting the rule fires on 1 223 scored cells in Berlin, 472 in Vancouver and 108 in Milan, whose
+  reference LCZ 7 counts are 0, 0 and 0 — and on 4 cells in Islamabad against 846 reference LCZ 7
+  cells, 6 in Mumbai against 242, 18 in Nairobi against 444.
+
+**The cities with the tags have no informal settlement and the cities with informal settlement have
+no tags.** Phase 18 predicted the second half — "this rule will mostly not fire where it matters" —
+and the first half is what makes it worse than under-firing: the rule is not weak, it is pointed at
+the wrong ground. It is disabled on that measurement, which is a **result and not a placeholder**,
+and `building_tag_coverage` is what keeps the shortfall legible.
+
+#### What the instrument cost, and two defects in it
+
+**The sweep classifies each city once and applies the rule to the result.** `apply_semantic_rules`
+is the *last* thing `PrototypeClassifier.classify` does to the ranking, so a run with the rule on
+differs from one with it off only by that call — and the distance metric, which is 8.4 s on a
+91 000-cell city, does not depend on the threshold at all. Re-deriving it per setting is 220
+classifies a city and **~4.1 hours**; amortised it is **~1 minute** for the whole sweep.
+
+That is a local operation standing in for a global one, so it is measured and not asserted: at one
+setting per city per rule, the amortised labels are checked against a full `classify` with the rule
+configured. **16 checks, 0 mismatches**, on `lcz_primary`, `lcz_secondary` and the fired mask.
+
+Two criteria did not match the prose that defined them, both found by reading the code against its
+own docstring before running it:
+
+- **Criterion 4 counted the wrong thing.** "The rule relabels a non-trivial share of the class" was
+  implemented as `n_predicted`, which is every cell carrying the label *including the ones the
+  metric assigned* — so a rule that fired on nothing would pass wherever the metric already
+  over-predicted. It counts cells the rule relabelled now.
+- **Criteria 1 and 3 failed on equality.** Written as "must exceed the baseline in every city",
+  they are unsatisfiable the moment one city's tag coverage stops the rule firing there, since the
+  city's figure is then unchanged rather than better. Restated as no-loss-anywhere plus a gain
+  somewhere — the same vacuous-comparison trap as `all()` over an empty sequence, which the same
+  file had already been fixed for one criterion along.
+
+Criterion 4 also asks the class to be reached in **one** city rather than all of them, and the
+reason is on the record before the sweep ran: the committed tag-coverage measurement — 48.6% of
+building area tagged across Europe and North America against 13.6% elsewhere — already predicts
+that a tag-reading rule cannot fire where the tags are absent. Requiring it everywhere would make
+the criterion a test of Overture's coverage rather than of the rule, and would have refused both
+rules before a threshold was tried.
+
+#### Rulings
+
+1. **A rule ships enabled once its threshold has been swept, and disabled otherwise — and both
+   halves are now demonstrated by the same sweep.** Phase 18's "disabled is a ruling, not caution"
+   named the *only* reason those rules were off. That reason is discharged for LCZ 8 and replaced
+   by a stronger one for LCZ 7, which is now disabled on measurement rather than pending it. The
+   config docstrings, `apply_semantic_rules`, `docs_src/index.md` and the two test files say which
+   is which, because a ruling is not applied until the code says so.
+2. **Every stored figure in this project predates an enabled LCZ 8 rule.** It relabels 0.04%–2.0%
+   of a city's cells and moves built-class agreement by up to +2.8 points, so a run at today's
+   defaults is not comparable with a stored one. Any comparison must set
+   `large_lowrise.enabled=False` or re-baseline, exactly as `modal_filter` and
+   `measure_on="enclosures"` require — with the difference that this one is **on** by default.
+3. **A tag-driven rule is not a global instrument, and the documentation now says so where a
+   reader meets it.** `docs_src/index.md` states the 48.6%/13.6% split, names the mechanism
+   (Google Open Buildings and Microsoft ML supply geometry with no attributes, and Overture's
+   conflation is winner-takes-all per building), and tells the reader to read
+   `building_tag_coverage` beside anything that depends on a tag. A class 7 share of zero where
+   95% of building area carries no tag is not evidence of absence.
+
+**Not done, and recorded rather than dropped.** The `mean_building_area_m2` weight sweep Phase 25
+pre-registered is a separate measurement and is not in this phase: this one changes what a *rule*
+does and leaves the metric's weights untouched, so the two do not confound each other and the
+weight sweep is still outstanding on the deferred list.
+
 ### STOP RULE — applies after Phase 13
 
 **No further diagnostic phases.** Thirteen phases in, the finding rate remains high but the returns
@@ -2566,8 +2789,16 @@ Remaining work, in order:
     `gee_project` moments after `Settings.load` read it, so all 24 manifests on disk record it as
     null — and that **WSF-3D is not in the Earth Engine catalogue at all**, which is why the
     height tiers keep fetching over HTTP.
-16. **The paper.**
-17. **Cleanup** — release. **The docs half landed as Phase 20, the notebook half as Phase 22, the
+16. ~~**Phase 28 — the two rules that were never swept.**~~ **Concluded**, on explicit request, and
+    it is the outstanding deferred calibration rather than a new question. Eight cities, nineteen
+    thresholds crossed with the size gate, both references. **LCZ 8's rule is enabled at 0.70 with
+    no size gate** — every one of the eight cities improves on precision, recall, F1, built-class
+    and overall agreement — and **LCZ 7's is refused**, because Overture's lightweight vocabulary
+    is outbuildings and the tagged evidence sits in the three cities that carry no LCZ 7 at all.
+    It found that the size gate the rule shipped with was harmful, and that this threshold buys
+    correctness where the LCZ 10 one did not.
+17. **The paper.**
+18. **Cleanup** — release. **The docs half landed as Phase 20, the notebook half as Phase 22, the
     README split as Phase 23 and the de-narrativising pass as Phase 26**; what is left here is the
     release itself.
 
@@ -2926,7 +3157,12 @@ reconcile silently.** That flagging behaviour is working; keep it.
 | Semantic fractions without a coverage column | **Unreadable, and the reason the layer exists.** A `lightweight` fraction of 0.0 in Nairobi is 94.8% of building area carrying no tag, not an absence of informal settlement — the same distinction `height_tier_fractions` draws for the cascade. `building_tag_coverage` is **area**-weighted, not count: tagged buildings are systematically larger (Berlin 64.4% vs 46.6%) and area is the denominator every fraction divides by. | 3, 18 |
 | Whole-extent `union_all` over the land-use layer | **Caught before shipping, third instance of the anti-pattern** — and this one does not merely cost time: over real Overture land use it raises `GEOSException: side location conflict` **even after `make_valid`**, because per-feature validity does not make a collection unionable. `industrial.py` survives by unioning a few dozen parcels; the coverage column ran on Berlin's 70 509. Clip to units first, dissolve per unit: bounded, exact. Found by running the diagnostic over a real city rather than a fixture. | 12, 18 |
 | `.loc[an_index]` over a building layer | Returns extra rows on a duplicated index, reporting `building_tag_coverage = 1.0` for an untagged unit. The building layer carries no uniqueness guarantee; all selection is positional now. Found by the one test written to prove the module's central property. | 18 |
-| Uncalibrated functional rules for LCZ 7 and 8 | **Shipped disabled, and that is the ruling.** A threshold is swept against a reference and chosen at an operating point, never picked — the LCZ 10 sweep ran nineteen settings and Phase 14 found the threshold was not even the binding constraint there. Shipped values are placeholders. For LCZ 7 the sweep needs a city where the class exists *and* is tagged, which the coverage table suggests may not exist — itself the finding. | 6, 14, 18 |
+| Uncalibrated functional rules for LCZ 7 and 8 | **Shipped disabled in Phase 18, swept in Phase 28, and the two rules parted company.** LCZ 8's is **enabled at `min_fraction=0.70` with no size gate**: 6 of 114 settings clear the four pre-registered criteria, they form a contiguous 0.70–0.95 band, and at the operating point all eight cities gain on precision, recall, F1, built-class and overall agreement (F1 +5.0 mean, built +1.11). LCZ 7's is **refused at all 95 settings against both references** and is now disabled *on* measurement rather than pending it. Phase 18's "the sweep needs a city where the class exists *and* is tagged" was right and is measured: the three cities with tags carry **zero** reference LCZ 7 cells, and the five with LCZ 7 carry 2.8–13.9% tagged building area. | 6, 14, 18, 28 |
+| The `mean_building_area_m2` gate on the LCZ 8 rule | **Measured harmful and removed.** It cut reach at all 95 gated settings and raised the accuracy of the label being displaced at 91 of them (the four exceptions are at the widest 4 000 m² gate, ≤0.5 points), and **no gated setting passes at any threshold** — 1 000 m² at 0.70 takes 662 relabelled cells to 237, the rule's precision 72.2% → 67.1%, the displaced label's 14.8% → 24.5%. The mechanism is in the column's own name: `sem_large_lowrise_buildings_of_building_area` divides by the unit's **whole** building area, so untagged and small-building area already counts against the fraction and the gate charges for size twice. **A quantity's denominator belongs in its name, and reading it is what explains the result.** | 18, 25, 28 |
+| Reading the LCZ 10 sweep's flat precision as the shape a functional threshold has | **Not general, and the contrast is the finding.** LCZ 10's precision moves six points over a nineteen-fold change in threshold, so there the knob governs the rate. The LCZ 8 rule's own precision runs **41.7% → 81.1%** over the same grid while reach falls 2 023 → 396 — a real trade-off, and the threshold is buying correctness. Two functional rules on one instrument are not thereby the same kind of object. | 14, 28 |
+| So2Sat and WUDAPT disagreeing about whether to enable a rule | **So2Sat decides, pre-registered before the sweep ran, and the disagreement is recorded rather than set aside.** Against WUDAPT **zero of 114 settings** clear the criteria — LCZ 8's F1 still rises in all eight cities and the rule beats the label it displaced at *every* setting, but class precision falls in Berlin (67.8 → 59.2) and Milan (65.4 → 63.5) while recall roughly doubles, and Mumbai loses 0.016 points of built agreement. Same substantive direction under both; the strict no-loss-anywhere bar is met under one. Which reference produced which figure is in the record, per the standing rule that "the reference" must name a file and not a role. | 16, 28 |
+| Amortising the distance metric across a threshold sweep | The metric does not depend on the rule — `apply_semantic_rules` is the last thing `classify` does to the ranking — so the sweep classifies each city once and applies the rule 220 times: **~4.1 h to ~1 min**. A local operation standing in for a global one, so it is **measured, not asserted**: at one setting per city per rule the amortised labels are checked against a full `classify`, **16 checks, 0 mismatches** on primary, secondary and the fired mask. | 8, 12, 28 |
+| Acceptance criteria that fail on equality, and one that counted the wrong column | Both found by reading the sweep's code against its own docstring before running it. "Must exceed the baseline in **every** city" is unsatisfiable the moment one city's tag coverage stops the rule firing there, since that city is unchanged rather than better — restated as no-loss-anywhere plus a gain somewhere. And "the rule relabels a non-trivial share of the class" was implemented as `n_predicted`, which counts the *metric's* assignments too, so a rule firing on nothing would pass wherever the metric already over-predicted. **The vacuous-comparison trap, twice more, in a file already fixed for it once.** | 28 |
 | Nothing asserted that a clipped raster covers its window | The silent variant was one line away and would not have raised: `clip_raster` windows with `from_bounds` and `read(window=…)`, which **returns a smaller array** rather than erroring, and `LocalRasterSource.fractions` turns uncovered units into **all-`NaN`** by design. Two correct behaviours composing into a quarter-missing map. `clip_worldcover` now reopens what it wrote and raises, naming the short side; `coverage_shortfall` ignores sub-pixel gaps because every real clip has one. The last `WORLDCOVER_URL` call sites were retired — Berlin-only, so no stored result moves. | 4, 7, 13 |
 | Pooling a partial sweep against a complete stored record | Reported the difference between two city lists as a pipeline deviation (6.6%). Stability comparisons now intersect the city sets; restricted, the deviation is 0.0%. | 13 |
 | Superseded text left in concluded phase blocks | Phase 8's block opened with a nine-minute runtime and later asserted the package could not process a city; Phase 3 still carried the corrected-away axis pairing; deferred still listed SVF first. **Concluded phases keep measurements and rulings and drop imperatives.** | 3, 6, 8, 13 |
@@ -3008,9 +3244,19 @@ buildings (only if MapLibre `fill-extrusion` proves insufficient) · run-compari
 site · OSM `industrial=*` subtags as supplementary heavy/light industry evidence (arrives with the
 deferred OSM source; the only realistic route to the distinction Overture discards, and reaffirmed
 in Phase 18 — an Overture-native crosswalk cannot recover it, because the values are not in the
-normalised vocabulary at all) · **calibration sweeps for the Phase 18 LCZ 7 and LCZ 8 rules**, which
-ship disabled precisely because a threshold is swept and not picked; note the LCZ 7 sweep needs a
-city where the class exists *and* is tagged, and the coverage table suggests there may not be one
+normalised vocabulary at all)
+
+*(**The LCZ 7 and LCZ 8 calibration sweeps were removed from this list in Phase 28**, run on
+explicit request. LCZ 8's rule is calibrated and enabled; LCZ 7's is refused on measurement. The
+"needs a city where the class exists *and* is tagged" caveat was correct and is now measured: of
+eight cities, the three carrying tags carry no LCZ 7 and the five carrying LCZ 7 carry almost no
+tags.)*
+
+**The `mean_building_area_m2` weight sweep** pre-registered in Phase 25 is still outstanding, and
+is a different measurement from the rule sweep above: it moves the metric rather than a rule, and
+Phase 28 measured that the LCZ 8 rule does **not** close the size inversion — a semantic rule can
+only add LCZ 8, never remove it, so the small-footprint cells the metric wrongly calls LCZ 8 are
+untouched.
 
 *(**CLI removed from this list in Phase 15**, built on explicit request. `lczkit run` and
 `lczkit site build|serve`.)*

@@ -143,6 +143,12 @@ def test_a_unit_inside_two_boxes_reports_the_tie_and_one_inside_none_does_not() 
             "water_fraction": [0.0, 0.0],
             "mean_building_area_m2": [np.nan, np.nan],
             "industrial_fraction_of_building_area": [0.0, 0.0],
+            # The semantic evidence the shipped LCZ 8 rule reads. Zero, so the rule cannot fire and
+            # move either unit off the tie the distance metric alone produces — but present, because
+            # a real `compute_parameters` table carries these and the classifier refuses one that
+            # does not.
+            "sem_large_lowrise_buildings_of_building_area": [0.0, 0.0],
+            "sem_lightweight_buildings_of_building_area": [0.0, 0.0],
         },
         index=pd.Index(["tied", "clear"], name="unit_id"),
     )

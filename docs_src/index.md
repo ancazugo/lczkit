@@ -122,10 +122,29 @@ is a limit of Overture's normalised schema and is recorded in every run's manife
 
 **Classes 7 and 8 come out inverted on building size.** Class 8 is *large* low-rise and class 7 is
 *lightweight* low-rise, the informal-settlement class. Neither one's published parameter ranges
-mention building size, so nothing in the classification separates them on it — and across the four
-cities checked, the units labelled 8 hold the *smaller* buildings, by a factor of 17 to 100. Treat
-both labels with suspicion. `mean_building_area_m2` is computed and carries zero weight until its
-weight has been calibrated.
+mention building size, so nothing in the distance metric separates them on it — and across the four
+cities checked, the units labelled 8 held the *smaller* buildings, by a factor of 17 to 100.
+`mean_building_area_m2` is computed and carries zero weight until its weight has been calibrated.
+
+Class 8 now has a second route that does not go through the metric: where more than 70% of a
+unit's building area is tagged as a warehouse, a hangar, a retail shed or the like, the unit is
+labelled class 8 on that evidence. The threshold was chosen by sweeping it against hand-drawn
+labels in eight cities, and at that setting class 8 improves on every measure in all eight.
+
+**Class 7 has no such route, and Overture cannot give it one.** Overture has no `slum`, `shanty`,
+`ger` or `tent` value, so the nearest thing it offers is a vocabulary of outbuildings — hut, shed,
+cabin, roof, kiosk, carport. And the tags are in the wrong cities: **48.6% of building area carries
+a tag across Europe and North America against 13.6% elsewhere, and 3.1% in Rio de Janeiro**, because
+Google Open Buildings and Microsoft ML supply footprint geometry with no attributes at all and a
+building takes its attributes from whichever source Overture's conflation gave it. The same sweep
+was run for a class 7 rule and refused it: over eight cities no setting produced more than a handful
+of correct labels, because the cities with the tags have no informal settlement and the cities with
+informal settlement have no tags.
+
+So **read `building_tag_coverage` beside anything that depends on a tag.** A class 7 share of zero
+in a city where 95% of building area carries no tag is not evidence that there is no informal
+settlement there; it is evidence that nobody has described the buildings. Any tag-driven rule in
+this package fires where Overture happens to be well described, which is not where the need is.
 
 **Two options ship switched off**, because their thresholds have not been calibrated against a
 reference and this package does not pick thresholds. `ucp.measure_on = "enclosures"` measures

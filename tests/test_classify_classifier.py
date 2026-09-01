@@ -31,6 +31,11 @@ BASE = {
     "industrial_fraction_of_building_area": 0.0,
     "industrial_fraction_of_unit_area": 0.0,
     "industrial_fraction": 0.0,
+    # The semantic evidence the shipped LCZ 8 rule reads. Zero, so the rule never fires on a unit
+    # built to be unambiguous on the morphological dimensions — but present, because a real
+    # `compute_parameters` table carries these and the classifier refuses one that does not.
+    "sem_large_lowrise_buildings_of_building_area": 0.0,
+    "sem_lightweight_buildings_of_building_area": 0.0,
 }
 
 

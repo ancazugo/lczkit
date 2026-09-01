@@ -38,6 +38,10 @@ SHACK = {**SHED, "mean_building_area_m2": 40.0}
 def _units(**rows: dict[str, float]) -> pd.DataFrame:
     frame = pd.DataFrame(rows).T
     frame["industrial_fraction_of_building_area"] = 0.0
+    # Zero, so the shipped LCZ 8 semantic rule cannot fire: these units are meant to be told apart
+    # by building size alone, and a functional rule reaching them would decide the answer instead.
+    frame["sem_large_lowrise_buildings_of_building_area"] = 0.0
+    frame["sem_lightweight_buildings_of_building_area"] = 0.0
     frame.index.name = "unit_id"
     return frame
 

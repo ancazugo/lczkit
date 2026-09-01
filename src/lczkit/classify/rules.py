@@ -173,9 +173,11 @@ def apply_semantic_rules(
     **A rule that never fires must be distinguishable from one never configured**, which is why
     every configured rule appears in the returned mapping whether or not it fired.
 
-    Every threshold here is **uncalibrated**, which is why they all ship disabled. A threshold is
-    swept against a reference and chosen at an operating point, never picked; enabling one of
-    these before that would put an invented number into a published label.
+    **A rule is enabled only once its threshold has been swept**, and the two shipped rules were
+    swept together against eight cities. `large_lowrise` is enabled at 0.70 with no size gate;
+    `lightweight` is disabled because the sweep refused it, which is a result rather than a
+    placeholder — Overture's lightweight vocabulary is outbuildings, and the tags sit in the
+    cities that have no LCZ 7. A threshold is chosen at an operating point, never picked.
     """
     # Which rule *last* fired on each unit. Counting from this rather than from the resulting
     # labels is the difference between "this rule placed 40 units" and "40 units carry LCZ 8",
