@@ -19,7 +19,7 @@ import pytest
 from conftest import LANDCOVER_FIXTURES_DIR, SMALL_BBOX
 from dotenv import load_dotenv
 
-from lczkit.config import LandCoverConfig, LandCoverDatasetConfig
+from lczkit.config import LandCoverConfig, LandCoverDatasetConfig, Settings
 from lczkit.landcover.earthengine import EarthEngineSource
 from lczkit.landcover.local import LocalRasterSource
 from lczkit.units.grid import GridUnits
@@ -143,3 +143,41 @@ def test_an_oversized_run_is_refused_before_any_call(project: str, tmp_path: Pat
 
     with pytest.raises(ValueError, match="gee_max_units"):
         source.fractions(GridUnits().generate(SMALL_BBOX))
+
+
+def test_the_pipeline_reaches_earth_engine_when_the_config_asks_for_it(
+    project: str, units: gpd.GeoDataFrame, tmp_path: Path
+) -> None:
+    """The wiring, measured rather than claimed — and it is the half that was missing.
+
+    Everything above tests `EarthEngineSource` directly, which is what could always be reached. The
+    chain named `LocalRasterSource` outright, so for several phases a schema-identical backend and
+    a populated `gee_project` existed and no run could use either. This goes through
+    `land_cover_source`, which is what `run_pipeline` calls, and checks the table it gets back is
+    the one the local backend would have produced.
+
+    A `Settings` built on `tmp_path` rather than loaded, so this needs no `DATA_DIR` — only the
+    credentials every test in this file already needs.
+    """
+    from lczkit.pipeline import land_cover_source
+
+    (tmp_path / "input").mkdir()
+    settings = Settings(data_dir=tmp_path)
+    settings.land_cover.source = "gee"
+    settings.land_cover.gee_project = project
+
+    source = land_cover_source(settings, SMALL_BBOX)
+    remote = source.fractions(units)
+    local = _local(settings.land_cover.dataset("worldcover"), "worldcover_berlin.tif").fractions(
+        units
+    )
+
+    assert isinstance(source, EarthEngineSource)
+    assert list(remote.columns) == list(local.columns)
+    assert remote.index.equals(local.index)
+    for column in local.columns:
+        difference = (local[column] - remote[column]).abs().dropna()
+        assert difference.max() < AGREEMENT_TOLERANCE, column
+
+    # Its cache belongs under `input/GEE/`, where a cache hit is just a file that is already there.
+    assert source.cache_path(units).parent == settings.source_dir("GEE")

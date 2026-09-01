@@ -161,6 +161,35 @@ def counts_from_histograms(
     return pd.DataFrame(counts, index=index, columns=pd.Index(range(n_classes)))
 
 
+def check_asset(config: LandCoverDatasetConfig, project: str | None) -> None:
+    """Raise unless this dataset can actually be reduced by Earth Engine.
+
+    Refuses both an absent project and a dataset with no asset configured, rather than guessing an
+    asset ID — the failure mode of a wrong one is a plausible fractions table computed over the
+    wrong imagery.
+
+    Separate from `__init__` so that a caller can ask the question *before* spending anything.
+    Land cover is the fourth of nine pipeline stages and the two before it are the long ones, so a
+    run told at that point that `GEE_PROJECT_NAME` is unset has already paid for a whole city's
+    cleaning to learn about a one-line configuration fix. One definition, two call sites: this and
+    `lczkit.pipeline.run_pipeline`.
+    """
+    if project is None:
+        raise ValueError(
+            "No Earth Engine project is set. Put GEE_PROJECT_NAME in .env, or set "
+            "`settings.land_cover.gee_project` explicitly."
+        )
+    gee = config.gee
+    missing = [field for field in gee.required_fields() if getattr(gee, field) is None]
+    if missing:
+        raise ValueError(
+            f"Land-cover dataset {config.name!r} has no Earth Engine asset configured "
+            f"(missing: {', '.join(missing)}). Set them on "
+            f"`settings.land_cover.dataset({config.name!r}).gee`. This package will not guess "
+            "an asset ID."
+        )
+
+
 class EarthEngineSource:
     """Zonal land-cover fractions for a units layer, computed by Earth Engine."""
 
@@ -175,33 +204,19 @@ class EarthEngineSource:
     ) -> None:
         """Bind to a dataset, project and cache directory, and initialise Earth Engine.
 
-        Refuses both an absent project and a dataset with no asset configured, rather than
-        guessing an asset ID — the failure mode of a wrong one is a plausible fractions table
-        computed over the wrong imagery. `batch_size` keeps `reduceRegions` under Earth Engine's
-        element-count and payload caps; `max_units` bounds a request that would exceed them
-        anyway.
+        `check_asset` refuses both an absent project and a dataset with no asset configured, and
+        runs before Earth Engine is imported so that a configuration error is reported as itself
+        rather than behind an import or an authentication failure. `batch_size` keeps
+        `reduceRegions` under Earth Engine's element-count and payload caps; `max_units` bounds a
+        request that would exceed them anyway.
         """
+        check_asset(config, project)
         self.config = config
         self.cache_dir = cache_dir
         self.batch_size = batch_size
         self.max_units = max_units
         self._classes = ClassIndex(config)
         self._ee = _import_ee()
-
-        if project is None:
-            raise ValueError(
-                "No Earth Engine project is set. Put GEE_PROJECT_NAME in .env, or set "
-                "`settings.land_cover.gee_project` explicitly."
-            )
-        gee = config.gee
-        missing = [field for field in gee.required_fields() if getattr(gee, field) is None]
-        if missing:
-            raise ValueError(
-                f"Land-cover dataset {config.name!r} has no Earth Engine asset configured "
-                f"(missing: {', '.join(missing)}). Set them on "
-                f"`settings.land_cover.dataset({config.name!r}).gee`. This package will not guess "
-                "an asset ID."
-            )
         self.project = project
         self._ee.Initialize(project=project)
 

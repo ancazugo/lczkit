@@ -287,6 +287,10 @@ def test_an_argument_is_judged_before_the_environment_is_consulted() -> None:
         (["run", "--bbox", "10,2,5,4"], "-180 <= W < E <= 180"),
         (["run", "--bbox", "13.0,52.0,13.1,52.1", "--basemap", "nonesuch"], "unknown basemap"),
         (["run", "--bbox", "13.0,52.0,13.1,52.1", "--extent-km", "0"], "must be positive"),
+        (
+            ["run", "--bbox", "13.0,52.0,13.1,52.1", "--land-cover-source", "nonesuch"],
+            "unknown land-cover source",
+        ),
     ):
         result = runner.invoke(app, argv)
         assert result.exit_code != 0, f"{argv} was accepted"
@@ -393,12 +397,12 @@ def test_a_config_file_with_an_unknown_section_says_what_is_valid(
 # --------------------------------------------------------------------------- base maps
 
 
-def _dry_run_config(data_dir: Path, *argv: str) -> dict:
+def _dry_run_config(data_dir: Path, *argv: str, section: str = "viz") -> dict:
     result = runner.invoke(
         app, ["run", "--bbox", "13.0,52.0,13.1,52.1", "--run-id", "dry", "--dry-run", *argv]
     )
     assert result.exit_code == 0, result.output
-    return json.loads(result.stdout[result.stdout.index("{") :])["config"]["viz"]
+    return json.loads(result.stdout[result.stdout.index("{") :])["config"][section]
 
 
 def test_no_basemap_flag_offers_the_keyless_grounds(data_dir: Path) -> None:
@@ -475,6 +479,91 @@ def test_the_licence_and_the_terms_are_printed_when_a_basemap_is_chosen(data_dir
     assert "OpenStreetMap" in result.output
     assert "donated resource" in result.output  # the OSMF tile policy
     assert "plain text" in result.output  # the key travels with the site
+
+
+# ------------------------------------------------------------------- choosing a land-cover backend
+
+
+def test_land_cover_defaults_to_the_local_backend(data_dir: Path) -> None:
+    """The default is the path that needs nothing but HTTP.
+
+    Earth Engine wants credentials, a billable project and a quota, and it is not what continuous
+    integration exercises — so a default requiring all three would make a first run fail on setup
+    rather than on data.
+    """
+    assert _dry_run_config(data_dir, section="land_cover")["source"] == "local"
+
+
+def test_the_land_cover_flag_selects_the_earth_engine_backend(
+    data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`EarthEngineSource` existed and was schema-identical to the local backend for several
+    phases, and no chain could reach it — setting `GEE_PROJECT_NAME` had no effect on `lczkit run`
+    at all. This is the flag that reaches it."""
+    monkeypatch.setenv("GEE_PROJECT_NAME", "a-project")
+
+    resolved = _dry_run_config(data_dir, "--land-cover-source", "gee", section="land_cover")
+
+    assert resolved["source"] == "gee"
+    assert resolved["gee_project"] == "a-project"
+
+
+def test_the_preset_does_not_discard_the_project_the_environment_supplied(
+    data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`gee_project` is a credential, not a measured configuration, and a preset must not clear it.
+
+    `RunPreset.apply` replaces the whole `land_cover` section, so it overwrote the value
+    `Settings.load` had just read from `GEE_PROJECT_NAME` — every `lczkit run` cleared the variable
+    moments after reading it. Invisible while nothing downstream read the field, and immediately
+    fatal once a backend did. The same silent-discard failure `Settings.load` documents in the
+    other direction, one layer up.
+    """
+    monkeypatch.setenv("GEE_PROJECT_NAME", "a-project")
+
+    from_load = Settings.load(run_id="a", create_run_dir=False)
+    assert from_load.land_cover.gee_project == "a-project"
+
+    assert apply_preset(from_load).land_cover.gee_project == "a-project"
+
+
+def test_earth_engine_without_a_project_is_refused_before_the_run_starts(data_dir: Path) -> None:
+    """A dry run's whole purpose is to say whether the configuration will run.
+
+    Without this it printed "as project None" and exited zero, which is the one command that must
+    not do that. The check is `landcover.earthengine.check_asset` rather than a second copy of it,
+    so the library still refuses the same way when a caller skips the command line.
+    """
+    result = runner.invoke(
+        app,
+        ["run", "--bbox", "13.0,52.0,13.1,52.1", "--dry-run", "--land-cover-source", "gee"],
+    )
+
+    assert result.exit_code == EXIT_CONFIG
+    assert "GEE_PROJECT_NAME" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_the_land_cover_flag_beats_a_config_file_that_also_names_a_backend(
+    data_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Not passing the flag leaves the file's answer alone; passing it overrules the file.
+
+    Both directions are needed, which is why `parse_land_cover_source` returns `None` for an absent
+    flag rather than the default name — a flag that could not tell "I did not say" from "local"
+    would silently overrule a config file on every run that did not repeat it.
+    """
+    monkeypatch.setenv("GEE_PROJECT_NAME", "a-project")
+    config = tmp_path / "gee.json"
+    config.write_text(json.dumps({"land_cover": {"source": "gee", "gee_project": "a-project"}}))
+
+    deferred = _dry_run_config(data_dir, "--config", str(config), section="land_cover")
+    overruled = _dry_run_config(
+        data_dir, "--config", str(config), "--land-cover-source", "local", section="land_cover"
+    )
+
+    assert deferred["source"] == "gee"
+    assert overruled["source"] == "local"
 
 
 @pytest.mark.parametrize("command", [["run", "--bbox", "13.0,52.0,13.1,52.1"], None])

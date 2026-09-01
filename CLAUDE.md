@@ -2391,6 +2391,117 @@ all. It is now `## Install`, above `## Quick start`, with the shared-cluster rul
 contributor note. `docs_src/index.md` had the `pip install` all along, which is how it went
 unnoticed.
 
+---
+
+### Phase 27 — the land-cover backend nothing could reach — CONCLUDED
+
+**Opened by an audit, on explicit request.** Not a diagnostic phase: it moved no measurement, and
+**every default is unchanged**, so nothing stored is superseded. `EarthEngineSource` has been in
+the package since Phase 4 — protocol-correct, batched, cached, and schema-identical to
+`LocalRasterSource` by that phase's own acceptance criterion, which its live tests measure — and
+**no chain could reach it.** `run_pipeline` held a literal `LocalRasterSource`, so
+`GEE_PROJECT_NAME` had no effect on `lczkit run` at all.
+
+That is the sixth instance of the pattern: WUDAPT named the secondary reference in Phase 0 and
+built in Phase 16, the height cascade specified in Phase 3 and built in Phase 10, `unit_strategy`
+ruled in Phase 11 and applied in Phase 17, GUPPD on disk unread since Phase 0, `mean_building_area_m2`
+computed from Phase 5 and never read by the metric. Here the code existed *and* the acceptance
+criterion had been measured; only the seam was missing, which is the least visible version of it.
+
+#### The seam
+
+- **`LandCoverConfig.source`**, `Literal["local", "gee"]`, default `"local"` — the path that needs
+  nothing but HTTP and the one CI exercises. It is an ordinary field, so it reaches the manifest by
+  being one, and a reader can tell which backend answered.
+- **`--land-cover-source`**, parsed by `cli._options.parse_land_cover_source` in the shape
+  `parse_basemaps` established: `None` means "I did not say" and leaves the preset's and
+  `--config`'s answer alone, which is what makes the flag and a config file composable rather than
+  exclusive. Its accepted values are `get_args(LandCoverBackend)` rather than a second list.
+  Refused before `DATA_DIR` is read, per Phase 24 — a mistyped backend is not an environment
+  problem.
+- **`pipeline.land_cover_source`** is the one dispatch. The local branch keeps `clip_worldcover`,
+  which mosaics whichever 3° tiles the extent spans; the Earth Engine branch fetches nothing
+  locally, and a test pins that choosing it does not also spend the download it exists to avoid.
+- **`check_asset`** lifted out of `EarthEngineSource.__init__` so the precondition is askable
+  before anything is spent. Land cover is the fourth stage of nine and the two before it are the
+  long ones. `run_pipeline` and the command line both call it rather than restating it; without it
+  a `--dry-run` naming the backend with no project printed *"as project None"* and exited zero,
+  which is the one command that must not.
+
+**The two backends are not bit-identical and the docstrings say so**: `exactextract` weights each
+cell by the exact fraction of it a unit covers, `reduceRegions` counts whole pixels by centre, so a
+100 m unit against a 10 m product disagrees by a single percent on its ~40-cell boundary ring. The
+live tolerance is 0.08. **The choice is where the arithmetic happens, not what is computed.**
+
+#### Two defects the seam exposed rather than introduced
+
+**`RunPreset.apply` discarded `gee_project`, and had since Phase 15.** It replaced the whole
+`land_cover` section with a copy of the preset's, whose `gee_project` is `None` — so every
+`lczkit run` cleared the value `Settings.load` had read from `GEE_PROJECT_NAME` moments earlier.
+Reproduced directly against unmodified code, not inferred: `Settings.load` gives the project,
+`apply_preset` gives `None`. **All 24 manifests on disk record `gee_project: null`.** This is the
+same silent-discard failure `Settings.load` documents in the other direction — an absent value must
+leave what is there alone — one layer up, and it was invisible for exactly as long as nothing
+downstream read the field.
+
+> A consequence stated rather than left to be found: the field now reaches every manifest and any
+> site built from one. That is designed behaviour and a Google Cloud project ID names a tenancy
+> rather than authorising anything, unlike `VizConfig.maptiler_key`, which is `exclude=True`
+> because it is a credential — but it is the same three-files-deep path Phase 21 opened, so it is
+> written down.
+
+**`land_cover.max_raster_cells` was unreachable from a run.** The stage built
+`LocalRasterSource(dataset, worldcover)` without it, so only the constructor default ever applied.
+The two happen to be equal at 200 000 000, which is why nothing noticed.
+
+#### Are WSF-3D and GHS-BUILT-H queryable Earth Engine assets? Measured, not assumed
+
+| product | in the Earth Engine public catalogue |
+|---|---|
+| GHS-BUILT-H ANBH | **yes** — `JRC/GHSL/P2023A/GHS_BUILT_H/2018`, an `Image`, band `built_height` |
+| WSF-3D building height | **no** — `projects/earthengine-public/assets/DLR/WSF` lists exactly one child, `WSF2015/v1`, band `WSF`, a 10 m settlement mask |
+
+So an Earth Engine route serves at most one of the two default tiers, **and not the one that
+matters**: WSF-3D answers for 92–99% of building area in the cities measured, with GHS-BUILT-H the
+fallback beneath it. A backend switch meaning "the whole cascade" in one place and "the fallback
+tier alone" in another is a configuration whose meaning changes with the city.
+
+**And for GHS-BUILT-H it would be a second route to the same numbers.** Measured twice, on
+different tiles and different strata, cell centres reprojected out of Mollweide: 180 points across
+a low-rise window and a tall tail reaching 32.31 m, which is the figure the `GhslProductConfig` and
+`sources.height_products` docstrings carry, and then independently 80 cells on tile `R4_C20` — 50
+at 2.5–8.54 m and 30 at 12.09–18.50 m. The Earth Engine band and the local ANBH raster agree to
+**0.000000 m** both times, mean and max. Worth stating precisely because the name alone
+could not settle it: GHSL publishes ANBH (`BUVOL / BUSURF`) beside the gross AGBH, the two differ
+by the built-up share, this package reads ANBH deliberately, and **neither the asset ID nor its
+Earth Engine metadata says which one the band carries**. Only sampling both did.
+
+**Ruling: both height tiers stay on plain HTTP, and the asymmetry is documented rather than left
+looking like an oversight.** There is nothing to gain and a credential requirement to add. Open
+Buildings 2.5D is the exception and already goes through Earth Engine, because it has **no public
+bucket at all** — and it is off by default on measurement, not on availability.
+
+#### Scaling, stated because the anti-pattern requires it
+
+**No whole-extent operation is added.** The switch selects between two implementations that both
+existed; `EarthEngineSource` already bounds each `reduceRegions` call at `gee_batch_size` and the
+whole run at `gee_max_units`. What is worth knowing before choosing it: a GUPPD region's median
+80 km² is ~8 000 cells on a 100 m grid and Berlin's 891 km² is ~89 000, and with
+`UcpConfig.measure_on = "enclosures"` the stage reduces **twice**, once per unit set.
+
+**The two backends have never been benchmarked against each other, and the config docstring says
+so rather than implying otherwise.** The reasons to choose the remote one are a dataset with an
+asset and no local product, and a covering window that would exceed `max_raster_cells` — a ceiling
+the local read has and the server-side reduction does not. Wall time is not one of them, because
+nobody has measured it; a plausible-sounding performance claim in a docstring is the kind that
+gets quoted.
+
+No dependency was added — `earthengine-api` has been declared since Phase 4.
+
+**Verified against live Earth Engine**, not only in the offline suite: all seven `network` tests
+pass, including the new one that goes through `land_cover_source` and checks the table it gets back
+is the one the local backend would have produced.
+
 ### STOP RULE — applies after Phase 13
 
 **No further diagnostic phases.** Thirteen phases in, the finding rate remains high but the returns
@@ -2448,8 +2559,15 @@ Remaining work, in order:
     README, the published site, every source docstring and the strings that reach a run's
     manifest and the map site's sidebar. It found that the README carried no `pip install` at
     all, and that 19 description strings naming phases were being serialised into every run.
-15. **The paper.**
-16. **Cleanup** — release. **The docs half landed as Phase 20, the notebook half as Phase 22, the
+15. ~~**Phase 27 — the land-cover backend nothing could reach.**~~ **Concluded**, on explicit
+    request after an audit. Not measurement, and no default moved: `LandCoverConfig.source` and
+    `--land-cover-source` give `run_pipeline` a way to select the Earth Engine backend that had
+    been protocol-correct and unreachable since Phase 4. It found that `RunPreset.apply` cleared
+    `gee_project` moments after `Settings.load` read it, so all 24 manifests on disk record it as
+    null — and that **WSF-3D is not in the Earth Engine catalogue at all**, which is why the
+    height tiers keep fetching over HTTP.
+16. **The paper.**
+17. **Cleanup** — release. **The docs half landed as Phase 20, the notebook half as Phase 22, the
     README split as Phase 23 and the de-narrativising pass as Phase 26**; what is left here is the
     release itself.
 
@@ -2856,6 +2974,10 @@ reconcile silently.** That flagging behaviour is working; keep it.
 | The metric's per-class geometric prior | Unreported until Phase 25, and uneven: LCZ 2 claims **38.8%** of the reachable parameter cube against LCZ 8's **3.4%**, before any city is seen. Not a defect — the classes are genuinely different sizes in UCP space — but per-class recall is not comparable across classes without it. Also checked and **contrary to intuition**: the built boxes are essentially disjoint on the three weighted dimensions, only 3~7 overlapping, so there is no pervasive tie problem. And **the confusion axes fall out of the box geometry alone** — dropping `Hr` ties {2,3}, {2,7}, {3,7}, {5,6}; dropping `aspect_ratio` ties {3,8}, {6,8}. | 6, 9, 12, 25 |
 | `units.aggregate` read as excluding nulls from its weight | **It does not**, and a test written to check the design caught it before it shipped. `groupby.sum()` skips a null in the numerator while the denominator stays the *total* overlap area, so a null piece drags the mean toward zero — harmless where every column is populated, wrong for `aspect_ratio`, which is null exactly where no street reached a building. `transfer_parameters` weights per column over the pieces that carried a value; `aggregate` is untouched, since its normalisation is what every stored arm-B projection used. | 2, 12, 25 |
 | CI red on `master`, and red before the cleanup pass too | Checked rather than assumed, by running the same test against an extracted `38bce20`: **identical failures, so this predates the nine commits and is not their regression.** The Actions API gives the fuller picture: **4 CI runs in the repository's history, all `push`, all after Phase 20 fixed the trigger, all failed** — this repository has never had a green CI run, and before Phase 20 it had none at all. **A gate turned on after the fact reports the past, not just the future**, and the first thing it says is usually not about the change that turned it on. | 20, 24 |
+| `EarthEngineSource` protocol-correct, measured against its acceptance criterion, and unreachable | **Sixth instance of "the capability exists and the seam does not", and the least visible one** — here the code *and* the live measurement existed; `run_pipeline` simply named `LocalRasterSource` outright, so setting `GEE_PROJECT_NAME` did nothing to a run. `LandCoverConfig.source` and `--land-cover-source` select it, default `"local"`, and `pipeline.land_cover_source` is the single dispatch. The two backends are schema-identical and **not** bit-identical — `exactextract` area-weights each cell, `reduceRegions` counts whole pixels by centre, a single percent on a 100 m unit's boundary ring — so the field records which one answered. | 4, 15, 27 |
+| `RunPreset.apply` cleared `gee_project` | It replaced the whole `land_cover` section with the preset's copy, whose value is `None`, so every run discarded what `Settings.load` had just read from `GEE_PROJECT_NAME` — **all 24 manifests on disk record it as null**, and the discard reproduces directly against unmodified code. The same silent-discard failure `Settings.load` documents in the other direction, one layer up, and invisible for exactly as long as nothing downstream read the field. Preserved on the copy; precedence is preset, then environment. Consequence written down rather than left to be found: the value now reaches every manifest and any site built from one, which is designed behaviour, since a Google Cloud project ID names a tenancy and authorises nothing — unlike `maptiler_key`, which is `exclude=True` because it does. | 4, 15, 21, 27 |
+| Is there an Earth Engine route for the height tiers? | **One of the two, and not the one that matters — checked against the catalogue rather than assumed.** GHS-BUILT-H is `JRC/GHSL/P2023A/GHS_BUILT_H/2018` band `built_height`; `projects/earthengine-public/assets/DLR/WSF` lists exactly one child, `WSF2015/v1`, a 10 m settlement mask and not a height product, and WSF-3D answers for 92–99% of building area. And GHS-BUILT-H would be a **second route to identical numbers**: sampled twice against the tiles this package downloads, on different tiles and strata — 180 points and then 80 — max and mean |Δ| **0.000000 m** both times. The name could not settle that — GHSL publishes ANBH beside gross AGBH and neither the asset ID nor its metadata says which the band carries. Both tiers stay on HTTP; the asymmetry with land cover is documented in `sources.height_products` rather than left looking like an oversight. Open Buildings 2.5D is Earth Engine-only because it has no public bucket, and is off by default on measurement. | 3, 10, 11, 27 |
+| `land_cover.max_raster_cells` unreachable from a run | The stage built `LocalRasterSource(dataset, worldcover)` without it, so the configured ceiling never applied and only the constructor default did. **The two happen to be equal at 200 000 000**, which is why nothing noticed — the same shape as the twin `CLEANING` constants, where agreeing today is what hides the second definition. | 4, 15, 27 |
 
 ---
 

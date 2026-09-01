@@ -223,7 +223,13 @@ class Wsf3dConfig(BaseModel):
     version: str = "V02"
     filename: str = "WSF3D_V02_BuildingHeight.tif"
     url: str = "https://download.geoservice.dlr.de/WSF3D/files/global/WSF3D_V02_BuildingHeight.tif"
-    """The global product, a tiled GeoTIFF with overviews — read by window, never clipped."""
+    """The global product, a tiled GeoTIFF with overviews — read by window, never clipped.
+
+    A 2.1 GB download, once, and there is no alternative to it: WSF-3D is **not** in the Earth
+    Engine public catalogue. `DLR/WSF` publishes only `WSF2015`, a 10 m binary settlement mask,
+    which is not a height product. Since this tier answers for 92-99% of building area in the
+    cities measured, no Earth Engine route can stand in for the cascade as a whole.
+    """
 
 
 class GhslProductConfig(BaseModel):
@@ -233,6 +239,12 @@ class GhslProductConfig(BaseModel):
     `ANBH = BUVOL / BUSURF`, building volume over *built-up* surface, so it is the mean height of
     the built fabric rather than a height averaged over open ground. Float32 metres, nodata 255,
     100 m World Mollweide (p. 36).
+
+    This product *is* in the Earth Engine catalogue, as `JRC/GHSL/P2023A/GHS_BUILT_H/2018` band
+    `built_height`, and it is the same numbers: sampled against these tiles at 180 points across
+    two height strata it agrees to 0.000000 m. It is fetched over HTTP anyway, because a second
+    route to an identical raster only adds a credential requirement — and because WSF-3D, the tier
+    above it, has no Earth Engine asset at all. See `lczkit.sources.height_products`.
     """
 
     tier_name: str = "ghsl"
@@ -610,11 +622,43 @@ def _default_land_cover_datasets() -> list[LandCoverDatasetConfig]:
     ]
 
 
+LandCoverBackend = Literal["local", "gee"]
+"""Which `RasterSource` reduces the land cover for a run.
+
+`"local"` mosaics the ESA WorldCover tiles the extent spans into the run directory and reduces
+them with `exactextract`. `"gee"` reduces the configured Earth Engine asset server-side with
+`reduceRegions` and brings back a table.
+
+The two return schema-identical tables by design — that is the acceptance criterion the land-cover
+phase was built against, and `tests/test_landcover_earthengine_live.py` measures it — so this
+chooses where the arithmetic happens and not what is computed. They are not bit-identical:
+`exactextract` weights each cell by the exact fraction of it a unit covers, while `reduceRegions`
+counts whole pixels by centre, which is a single-percent disagreement on a 100 m unit against a
+10 m product. A run records which one it used, so the two are never mistaken for each other.
+"""
+
+
 class LandCoverConfig(BaseModel):
     """Configuration for the land-cover fraction sources.
 
     Datasets are an ordered list so adding a third product is a config entry, not a code change —
     the same shape as `HeightConfig.areal_tiers`.
+    """
+
+    source: LandCoverBackend = "local"
+    """Which backend supplies the fractions. See `LandCoverBackend`.
+
+    Defaults to `"local"` because it is the path that needs nothing but HTTP: Earth Engine wants
+    credentials, a billable project and a quota, and a default that silently required all three
+    would make a first run fail on setup rather than on data. It is also the path continuous
+    integration exercises, so it is the one known to be right on every checkout.
+
+    Reasons to choose `"gee"`, and **wall time is not among them, because the two have never been
+    benchmarked against each other**: a dataset with an Earth Engine asset and no local product,
+    or a units layer whose covering window would exceed `max_raster_cells`, which is a ceiling the
+    local read has and the server-side reduction does not. Every dataset needs `gee.collection_id`,
+    `gee.band` and `gee.scale_m` set; `EarthEngineSource` refuses rather than guessing at an asset
+    ID. `gee_max_units` is the corresponding ceiling on this side.
     """
 
     datasets: list[LandCoverDatasetConfig] = Field(default_factory=_default_land_cover_datasets)
@@ -629,7 +673,12 @@ class LandCoverConfig(BaseModel):
     element-count and payload limits."""
 
     gee_max_units: int | None = None
-    """Refuse an Earth Engine run covering more than this many units. `None` means no ceiling."""
+    """Refuse an Earth Engine run covering more than this many units. `None` means no ceiling.
+
+    `gee_batch_size` bounds each request; this bounds the whole run, and it is the one that
+    matters once `source="gee"` puts a whole city through the backend — a GUPPD region's median
+    80 km² is ~8 000 cells on a 100 m grid, and Berlin's 891 km² is ~89 000.
+    """
 
     max_raster_cells: int = 200_000_000
     """Refuse a local read whose covering window exceeds this many cells, rather than exhausting
