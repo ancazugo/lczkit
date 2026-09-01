@@ -471,8 +471,9 @@ UNUSED_PROPERTIES: tuple[tuple[str, str], ...] = (
         "Not computed: the single most expensive component, and strongly correlated with "
         "aspect ratio, which is computed. Its absence is the main reason the published table "
         "cannot separate LCZ A, B, C and D: it is one of only three dimensions distinguishing "
-        "them, and the other two are also building-derived. Bernard et al. (2024) weight it at 4 "
-        "of 21.5, second only to building surface fraction.",
+        "them, and the other two are also building-derived. Bernard et al. (2024) Sect. 2.5, "
+        "p. 2085 weight it at 4 of 21.5 — third of the seven, behind building surface fraction "
+        "at 8 and height of roughness elements at 6.",
     ),
     (
         "terrain_roughness_class",
