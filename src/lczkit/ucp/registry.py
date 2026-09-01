@@ -403,7 +403,10 @@ NOT_COMPUTED: tuple[tuple[str, str], ...] = (
         "sky_view_factor",
         "Not computed. The single most expensive component, and strongly correlated with "
         "aspect ratio, which is computed. Bernard et al. (2018), 10.3390/cli6030060, "
-        "is the preferred route when it is picked up: vector ray-launching, no DSM required.",
+        "is the preferred route when it is picked up: vector ray-launching, no DSM required. "
+        "That is also the route GeoClimate takes — buildings as the only obstacles, 100 m rays "
+        "in 60 directions, no elevation model (Bernard et al. 2024, 10.5194/gmd-17-2077-2024, "
+        "Table 1) — so this is a gap in what lczkit builds, not in the data it has.",
     ),
     (
         "terrain_roughness_class",

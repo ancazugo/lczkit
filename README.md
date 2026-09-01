@@ -138,7 +138,10 @@ emits.
   aspect ratio, which is computed. Roughness length describes how much the surface slows the wind.
   The active weight preset is named `bernard2024_partial` for this reason: it applies 17 of the
   published 21.5 weight units, and the manifest records which dimensions were dropped and how the
-  rest were renormalised.
+  rest were renormalised. This is a gap in what `lczkit` builds, not in the data it has:
+  [GeoClimate](https://doi.org/10.5194/gmd-17-2077-2024) computes sky view factor from vector
+  building footprints alone — buildings as the only obstacles, no elevation model (Table 1) — so a
+  comparison table showing it there and not here is reporting a real difference.
 - **Building surface fraction carries roughly half the classification.** With only three
   weighted parameters left, the share of ground covered by building dominates. Read it, and read
   `height_completeness` beside it.

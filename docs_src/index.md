@@ -86,7 +86,9 @@ function.
 the most expensive parameter to derive. It is also strongly correlated with aspect ratio — building
 height over street width — which *is* computed. A documented omission rather than an oversight; the
 run manifest records which parameters were unavailable and how the remaining weights were
-renormalised.
+renormalised. It is a gap in what `lczkit` builds and not in the data it has —
+[GeoClimate](https://doi.org/10.5194/gmd-17-2077-2024) derives it from vector building footprints
+alone, with buildings the only obstacles and no elevation model (Table 1).
 
 **Roughness length and displacement height are not computed either**, which is why a run's output
 is not yet a complete input to a weather model.
