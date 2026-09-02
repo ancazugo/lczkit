@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, get_args
 
 import typer
 from pydantic import ValidationError
@@ -41,7 +41,7 @@ from lczkit.cli._render import (
     report_site,
 )
 from lczkit.cli._render import stage_table as render_stages
-from lczkit.config import Settings
+from lczkit.config import RasterFormat, Settings
 from lczkit.output.extent import ExtentRecord
 from lczkit.pipeline import PipelineResult, run_pipeline
 from lczkit.places import load_places, normalise, place
@@ -144,8 +144,27 @@ def run(
         typer.Option(
             "--morphometrics-resolution",
             metavar="METRES",
-            help="With --morphometrics, also write morphometrics.tif at this pixel size. "
+            help="With --morphometrics, also write a morphometrics raster at this pixel size. "
             "Regenerate later at a different resolution with lczkit morphometrics raster.",
+        ),
+    ] = None,
+    morphometrics_format: Annotated[
+        str | None,
+        typer.Option(
+            "--morphometrics-format",
+            metavar="FORMAT",
+            help="With --morphometrics-resolution, the raster format "
+            f"({', '.join(get_args(RasterFormat))}). Defaults to 'gtiff'.",
+        ),
+    ] = None,
+    morphometrics_tile_deg: Annotated[
+        float | None,
+        typer.Option(
+            "--morphometrics-tile-deg",
+            metavar="DEGREES",
+            help="With --morphometrics-resolution, split the raster into a geographic tile grid "
+            "this many degrees on a side (geotessera's grid_<lon>_<lat> naming) instead of one "
+            "file. Unset writes a single file.",
         ),
     ] = None,
     dry_run: Annotated[
@@ -184,6 +203,17 @@ def run(
         fail("--morphometrics-resolution needs --morphometrics")
     if morphometrics_contextual and not morphometrics:
         fail("--morphometrics-contextual needs --morphometrics")
+    if morphometrics_format is not None and morphometrics_resolution is None:
+        fail("--morphometrics-format needs --morphometrics-resolution")
+    if morphometrics_format is not None and morphometrics_format not in get_args(RasterFormat):
+        fail(
+            f"unknown morphometrics format {morphometrics_format!r}; choose from "
+            f"{', '.join(get_args(RasterFormat))}"
+        )
+    if morphometrics_tile_deg is not None and morphometrics_resolution is None:
+        fail("--morphometrics-tile-deg needs --morphometrics-resolution")
+    if morphometrics_tile_deg is not None and morphometrics_tile_deg <= 0:
+        fail(f"--morphometrics-tile-deg must be positive, got {morphometrics_tile_deg}")
     basemap_keys = parse_basemaps(basemap)
     backend = parse_land_cover_source(land_cover_source)
 
@@ -206,6 +236,10 @@ def run(
         settings.morphometrics.enabled = True
         settings.morphometrics.contextual = morphometrics_contextual
         settings.morphometrics.raster_resolution_m = morphometrics_resolution
+        if morphometrics_format is not None:
+            settings.morphometrics.raster_format = morphometrics_format  # type: ignore[assignment]
+        if morphometrics_tile_deg is not None:
+            settings.morphometrics.raster_tile_deg = morphometrics_tile_deg
     apply_basemaps(settings.viz, basemap_keys)
     # After `--config`, so an explicit flag beats a file that also named a backend. `None` leaves
     # the file's answer alone, which is what makes the two composable rather than exclusive.
@@ -297,9 +331,17 @@ def _report_morphometrics(result: PipelineResult) -> None:
     )
     raster = result.outputs.manifest.morphometrics_raster
     if raster is not None:
+        from lczkit.morphometrics.raster import RASTER_TILE_DIR, raster_filename
+
+        tiles = raster.get("tiles") or []
+        if tiles:
+            target = result.run_dir / RASTER_TILE_DIR
+            detail = f"{len(tiles)} tiles, {raster.get('tile_deg'):g}° each"
+        else:
+            target = result.run_dir / raster_filename(raster.get("format", "gtiff"))
+            detail = f"{raster['n_rows']}x{raster['n_cols']}"
         console.print(
-            f"  wrote [bold]{result.run_dir / 'morphometrics.tif'}[/bold] "
-            f"({raster['n_rows']}x{raster['n_cols']}, {raster['resolution_m']:g} m)",
+            f"  wrote [bold]{target}[/bold] ({detail}, {raster['resolution_m']:g} m)",
             soft_wrap=True,
         )
 

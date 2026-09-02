@@ -212,11 +212,14 @@ class RunManifest(BaseModel):
     the stage did not run — the ordinary case, since it ships off by default."""
 
     morphometrics_raster: dict[str, Any] | None = None
-    """Resolution and band names of `morphometrics.tif`, if one was written — either at run time
-    (`--morphometrics-resolution`) or afterwards (`lczkit morphometrics raster`). A plain dict
-    rather than a typed model because `lczkit.morphometrics.raster.refresh_raster` also writes
-    this field by editing an already-written manifest's JSON directly, the same way
-    `lczkit.output.gis` backfills `crs`/`extent` on an archived run."""
+    """Resolution, format, and band names of the morphometrics raster, if one was written —
+    either at run time (`--morphometrics-resolution`) or afterwards (`lczkit morphometrics
+    raster`). Carries `format` (`"gtiff"`/`"cog"`/`"zarr"`) and `tile_deg`/`tiles`: `tile_deg` is
+    `None` for the default single-file output, or the tile size in degrees with `tiles` listing
+    the `geotessera`-style filenames written under `morphometrics_tiles/`. A plain dict rather
+    than a typed model because `lczkit.morphometrics.raster.refresh_raster` also writes this field
+    by editing an already-written manifest's JSON directly, the same way `lczkit.output.gis`
+    backfills `crs`/`extent` on an archived run."""
 
     crs: str | None = None
     """The CRS every geometry in this run is written in, as an authority code — `"EPSG:32618"`.

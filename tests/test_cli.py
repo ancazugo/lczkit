@@ -322,6 +322,96 @@ def test_morphometrics_flags_reach_settings(data_dir: Path) -> None:
     config = json.loads(result.stdout[result.stdout.index("{") :])["config"]["morphometrics"]
     assert config["enabled"] is True
     assert config["contextual"] is True
+
+
+def test_morphometrics_format_needs_morphometrics_resolution(data_dir: Path) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--bbox",
+            "13.0,52.0,13.1,52.1",
+            "--morphometrics",
+            "--morphometrics-format",
+            "cog",
+        ],
+    )
+    assert result.exit_code == EXIT_CONFIG
+    assert "--morphometrics-format needs --morphometrics-resolution" in result.output
+
+
+def test_an_unknown_morphometrics_format_is_refused(data_dir: Path) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--bbox",
+            "13.0,52.0,13.1,52.1",
+            "--morphometrics",
+            "--morphometrics-resolution",
+            "10",
+            "--morphometrics-format",
+            "netcdf",
+        ],
+    )
+    assert result.exit_code == EXIT_CONFIG
+    assert "unknown morphometrics format" in result.output
+
+
+def test_morphometrics_tile_deg_needs_morphometrics_resolution(data_dir: Path) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--bbox",
+            "13.0,52.0,13.1,52.1",
+            "--morphometrics",
+            "--morphometrics-tile-deg",
+            "0.1",
+        ],
+    )
+    assert result.exit_code == EXIT_CONFIG
+    assert "--morphometrics-tile-deg needs --morphometrics-resolution" in result.output
+
+
+def test_a_non_positive_morphometrics_tile_deg_is_refused(data_dir: Path) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--bbox",
+            "13.0,52.0,13.1,52.1",
+            "--morphometrics",
+            "--morphometrics-resolution",
+            "10",
+            "--morphometrics-tile-deg",
+            "0",
+        ],
+    )
+    assert result.exit_code == EXIT_CONFIG
+    assert "--morphometrics-tile-deg must be positive" in result.output
+
+
+def test_morphometrics_format_and_tile_deg_reach_settings(data_dir: Path) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--bbox",
+            "13.0,52.0,13.1,52.1",
+            "--morphometrics",
+            "--morphometrics-resolution",
+            "10",
+            "--morphometrics-format",
+            "zarr",
+            "--morphometrics-tile-deg",
+            "0.1",
+            "--dry-run",
+        ],
+    )
+    config = json.loads(result.stdout[result.stdout.index("{") :])["config"]["morphometrics"]
+    assert config["raster_format"] == "zarr"
+    assert config["raster_tile_deg"] == 0.1
     assert config["raster_resolution_m"] == 10.0
 
 
@@ -766,6 +856,67 @@ def test_morphometrics_raster_refuses_a_non_positive_resolution(tmp_path: Path) 
     result = runner.invoke(app, ["morphometrics", "raster", str(tmp_path), "--resolution", "0"])
     assert result.exit_code == EXIT_CONFIG
     assert "--resolution must be positive" in result.output
+
+
+def test_morphometrics_raster_writes_a_zarr_store(tmp_path: Path) -> None:
+    import geopandas as gpd
+    from shapely.geometry import box
+
+    gpd.GeoDataFrame(
+        {"unit_id": ["etc_bld_0", "etc_bld_1"], "area_etc": [50.0, 75.0]},
+        geometry=[box(0.0, 0.0, 10.0, 10.0), box(10.0, 0.0, 20.0, 10.0)],
+        crs="EPSG:32633",
+    ).set_index("unit_id").to_parquet(tmp_path / "morphometrics.parquet")
+
+    result = runner.invoke(
+        app, ["morphometrics", "raster", str(tmp_path), "--resolution", "5", "--format", "zarr"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "morphometrics.zarr").is_dir()
+    assert "morphometrics.zarr" in result.output
+
+
+def test_morphometrics_raster_refuses_an_unknown_format(tmp_path: Path) -> None:
+    result = runner.invoke(
+        app,
+        ["morphometrics", "raster", str(tmp_path), "--resolution", "5", "--format", "netcdf"],
+    )
+    assert result.exit_code == EXIT_CONFIG
+    assert "unknown format" in result.output
+
+
+def test_morphometrics_raster_refuses_a_non_positive_tile_deg(tmp_path: Path) -> None:
+    result = runner.invoke(
+        app,
+        ["morphometrics", "raster", str(tmp_path), "--resolution", "5", "--tile-deg", "0"],
+    )
+    assert result.exit_code == EXIT_CONFIG
+    assert "--tile-deg must be positive" in result.output
+
+
+def test_morphometrics_raster_tiles_into_a_directory(tmp_path: Path) -> None:
+    import geopandas as gpd
+    from shapely.geometry import box
+
+    gpd.GeoDataFrame(
+        {"unit_id": ["etc_bld_0", "etc_bld_1"], "area_etc": [50.0, 75.0]},
+        geometry=[box(0.0, 0.0, 10.0, 10.0), box(10.0, 0.0, 20.0, 10.0)],
+        crs="EPSG:32633",
+    ).set_index("unit_id").to_parquet(tmp_path / "morphometrics.parquet")
+
+    result = runner.invoke(
+        app,
+        ["morphometrics", "raster", str(tmp_path), "--resolution", "5", "--tile-deg", "0.1"],
+    )
+
+    assert result.exit_code == 0, result.output
+    from lczkit.morphometrics.raster import RASTER_TILE_DIR
+
+    tile_dir = tmp_path / RASTER_TILE_DIR
+    assert tile_dir.is_dir()
+    assert any(tile_dir.iterdir())
+    assert "tiles" in result.output
 
 
 # --------------------------------------------------------------------------- the drift guard

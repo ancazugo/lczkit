@@ -364,12 +364,18 @@ def run_pipeline(
                 outputs.run_dir,
                 settings.morphometrics.raster_resolution_m,
                 max_cells=settings.morphometrics.max_raster_cells,
+                format=settings.morphometrics.raster_format,
+                tile_deg=settings.morphometrics.raster_tile_deg,
+                max_bytes=settings.morphometrics.max_raster_bytes,
             )
             outputs.manifest.morphometrics_raster = {
                 "resolution_m": raster_report.resolution_m,
                 "n_rows": raster_report.n_rows,
                 "n_cols": raster_report.n_cols,
                 "band_names": list(raster_report.band_names),
+                "format": raster_report.format,
+                "tile_deg": raster_report.tile_deg,
+                "tiles": list(raster_report.tiles),
             }
 
     site: SiteReport | None = None

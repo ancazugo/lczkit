@@ -160,9 +160,11 @@ extent and the coordinate system. A run can be traced back to what produced it.
 Fleischmann, 2026) computed over building-level tessellation cells, a separate table from
 `units.parquet` since the two are keyed on different, differently-scaled units and morphometrics
 is a descriptive output rather than classifier input. `--morphometrics-resolution METRES` also
-writes `morphometrics.tif`, one band per attribute, area-weighted onto a regular grid; regenerate
-it later at a different resolution with `lczkit morphometrics raster <run_dir> --resolution`. Off
-by default.
+writes a raster, one band per attribute, area-weighted onto a regular grid — `--morphometrics-format
+{gtiff,cog,zarr}` (default `gtiff`) picks the file format, and `--morphometrics-tile-deg DEGREES`
+splits it into a `geotessera`-style geographic tile grid instead of one file; regenerate either
+later, or at a different resolution, with `lczkit morphometrics raster <run_dir> --resolution
+... [--format ...] [--tile-deg ...]`. Off by default.
 
 ## What it will not tell you
 

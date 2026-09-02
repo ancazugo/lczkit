@@ -2939,6 +2939,87 @@ opt-in and strictly additive; rasterization is area-weighted with band count mat
 count; scaling measured at four extents with the ceilings set from the measurement; the full
 suite (1117 tests, excluding network) passes with no regressions.
 
+### Phase 30 — cloud-native morphometrics raster: tiling, COG, Zarr — CONCLUDED
+
+**Built on explicit request** — split the morphometrics raster into smaller geographic tiles
+rather than one large file, and offer COG and Zarr alongside plain GeoTIFF. Not a diagnostic
+phase; it moves no measurement and touches nothing morphometrics writes by default.
+
+**Two design forks, both put to the user rather than picked silently, per the standing "ask
+before an ambiguous decision" rule.** Tile naming: a fixed-size pixel grid with no geographic
+meaning, or a geographic degree grid matching the existing WorldCover tile-naming precedent —
+resolved as the geographic grid, and further pinned to **`geotessera`'s own convention**
+(github.com/ucam-eo/geotessera), confirmed by reading its source (`tiles.py`) rather than
+guessing from the name: `grid_{lon:.2f}_{lat:.2f}`, named after the tile's *centre*, with tiles on
+a `tile_deg`-wide grid whose centres sit on the half-step offset (0.05° for a 0.1° tile). Zarr
+backend: GDAL's own driver (already reachable through `rasterio`, no new dependency) or
+`xarray`/`rioxarray`/`zarr` (new dependencies, standards-compliant output) — resolved as the
+latter, on a measurement made before either option was offered:
+
+**GDAL's `Zarr` driver writes the array correctly and the CRS nowhere a plain reader can find
+it.** `rasterio.open(path, "w", driver="Zarr", crs=..., transform=...)` produces a real,
+readable Zarr store — `.zgroup`, `.zmetadata`, chunked arrays, both Zarr v2 and v3 confirmed — but
+the CRS lands only in a `pam.aux.xml` GDAL sidecar file, invisible to `zarr.open()` or
+`xarray.open_zarr()` used without GDAL underneath. Reopening the just-written store through
+`rasterio` itself came back `crs: None`. `rioxarray`'s own `.rio.to_raster(..., driver="Zarr")`
+was tried next and has the same defect — it still writes through GDAL's `Zarr` driver
+underneath. Only `xarray.Dataset.to_zarr()`, fed a `DataArray` that has been through
+`.rio.write_crs()`/`.rio.write_transform()`, writes a CF-convention `spatial_ref` coordinate with
+a `grid_mapping` attribute pointing to it — confirmed to round-trip via
+`xr.open_zarr(path, decode_coords="all")`, both a hand-written probe and the shipped test.
+**A cloud-native format whose georeferencing only a proprietary sidecar carries is not
+interoperable, which is the entire point of choosing it over GeoTIFF.**
+
+Dependencies added, licences checked against each project's own LICENSE file rather than assumed:
+**zarr 3.3.0 (MIT), xarray 2026.7.0 (Apache-2.0), rioxarray 0.23.0 (Apache-2.0)**, pulling
+**donfig (MIT)** and **numcodecs (MIT)**. All permissive, none GPL/LGPL.
+
+**A real gap-between-tiles defect, caught by the test built to prove tiles reconstruct the
+untiled raster.** The first implementation reprojected each tile's geographic box to the working
+CRS independently and rounded its own edges to pixel indices — and two tiles sharing a
+geographic boundary can round that shared edge to two different pixel rows, because reprojecting
+a latitude or longitude line into a UTM CRS does not land exactly on a pixel boundary and the two
+independent roundings do not have to agree. Measured directly: two tiles either side of the
+51.5° parallel left a full pixel row uncovered (5 706 000 m against 5 705 500 m, a 500 m gap at
+500 m resolution) — silent, since an unwritten pixel is exactly what the raster's own `NaN`
+nodata already looks like. Fixed by computing every row cut and column cut **exactly once** and
+reusing the same rounded pixel index for the tile on each side of it, ruling the gap out by
+construction rather than by tolerance. `tests/test_morphometrics_raster.py`'s
+`test_an_untiled_and_a_tiled_run_agree_pixel_for_pixel` stitches a tiled run back together and
+asserts it equals the untiled raster on a synthetic extent chosen to straddle a 0.1° boundary —
+it is what caught the gap, and what pins the fix.
+
+**A second, smaller consequence of one array replacing per-band writes.** Zarr's writer needs the
+whole band stack at once (`xarray` has no natural region-write idiom as simple as GeoTIFF's
+per-band `dst.write`), so all three formats now build one `(bands, rows, cols)` array before
+writing, where the previous GeoTIFF-only path wrote one band at a time and let each be
+garbage-collected before the next. `MorphometricsConfig.max_raster_bytes` (4 GB) refuses before
+allocating, the same shape as `max_tessellation_cells`/`max_raster_cells` above it but stated for
+what it is — an arithmetic ceiling (`bands x rows x cols x 4` bytes) set to a conservative round
+number for a shared HPC node, not a value swept at scale like `max_tessellation_cells` was.
+
+**What shipped:** `RasterFormat = Literal["gtiff", "cog", "zarr"]` and
+`MorphometricsConfig.raster_format` (default `"gtiff"`, unchanged), `raster_tile_deg` (default
+`None`, unchanged — untiled single-file output is still what a bare `--morphometrics-resolution`
+produces), `max_raster_bytes`; `lczkit.morphometrics.raster._tile_grid`, `_write_gdal_raster`,
+`_write_zarr`; `RasterExportReport.format`/`tile_deg`/`tiles`; `manifest.morphometrics_raster`
+gains the same three keys; `lczkit run --morphometrics-format`/`--morphometrics-tile-deg` and
+`lczkit morphometrics raster --format`/`--tile-deg`, both validated before `DATA_DIR` is read
+(Phase 24's ordering) and both composing with `--morphometrics-resolution` the same way
+`--land-cover-source` composes with a preset (Phase 27).
+
+**No default moved and no stored figure is affected.** A bare `--morphometrics-resolution` with
+neither new flag writes exactly the single plain GeoTIFF it always did, at the same path, so
+every existing caller, test, and script (`scripts/morphometrics_scaling.py`) is unchanged.
+
+*Acceptance:* `rasterize_attributes`/`refresh_raster` accept `format`/`tile_deg`/`max_bytes` with
+the pre-existing single-GeoTIFF behaviour as the default in both; COG round-trips the same values
+as plain GeoTIFF and is internally tiled; Zarr round-trips CRS and values through
+`xr.open_zarr(..., decode_coords="all")`; a tiled run reconstructs the untiled raster
+pixel-for-pixel with no gap or overlap on an extent straddling a 0.1° tile boundary; tile
+filenames match `geotessera`'s `grid_{lon:.2f}_{lat:.2f}` convention; the byte ceiling refuses
+before allocating; `ruff`/`mypy` clean; full suite green with no regressions.
+
 ### STOP RULE — applies after Phase 13
 
 **No further diagnostic phases.** Thirteen phases in, the finding rate remains high but the returns
@@ -3024,8 +3105,15 @@ Remaining work, in order:
     found a `MultiPolygon`-input defect in `momepy.courtyard_area` (silently returns `-area`
     instead of raising) on 0.04% of real buildings, and floating-point overshoot on five
     genuinely-bounded ratios large enough to warrant clipping rather than tolerating.
-18. **The paper.**
-19. **Cleanup** — release. **The docs half landed as Phase 20, the notebook half as Phase 22, the
+18. ~~**Phase 30 — cloud-native morphometrics raster: tiling, COG, Zarr.**~~ **Concluded**, on
+    explicit request. Not a diagnostic phase; no default moved. Splits the morphometrics raster
+    into a `geotessera`-style geographic tile grid and adds COG and Zarr as selectable output
+    formats alongside the original plain GeoTIFF. It found that GDAL's own `Zarr` driver — the
+    zero-new-dependency route tried first — writes the CRS only into a proprietary sidecar file
+    invisible to a plain `zarr`/`xarray` reader, and that reprojecting and rounding each tile's
+    geographic box independently leaves a real one-pixel gap between adjacent tiles.
+19. **The paper.**
+20. **Cleanup** — release. **The docs half landed as Phase 20, the notebook half as Phase 22, the
     README split as Phase 23 and the de-narrativising pass as Phase 26**; what is left here is the
     release itself.
 
@@ -3442,6 +3530,8 @@ reconcile silently.** That flagging behaviour is working; keep it.
 | Is there an Earth Engine route for the height tiers? | **One of the two, and not the one that matters — checked against the catalogue rather than assumed.** GHS-BUILT-H is `JRC/GHSL/P2023A/GHS_BUILT_H/2018` band `built_height`; `projects/earthengine-public/assets/DLR/WSF` lists exactly one child, `WSF2015/v1`, a 10 m settlement mask and not a height product, and WSF-3D answers for 92–99% of building area. And GHS-BUILT-H would be a **second route to identical numbers**: sampled twice against the tiles this package downloads, on different tiles and strata — 180 points and then 80 — max and mean |Δ| **0.000000 m** both times. The name could not settle that — GHSL publishes ANBH beside gross AGBH and neither the asset ID nor its metadata says which the band carries. Both tiers stay on HTTP; the asymmetry with land cover is documented in `sources.height_products` rather than left looking like an oversight. Open Buildings 2.5D is Earth Engine-only because it has no public bucket, and is off by default on measurement. | 3, 10, 11, 27 |
 | `land_cover.max_raster_cells` unreachable from a run | The stage built `LocalRasterSource(dataset, worldcover)` without it, so the configured ceiling never applied and only the constructor default did. **The two happen to be equal at 200 000 000**, which is why nothing noticed — the same shape as the twin `CLEANING` constants, where agreeing today is what hides the second definition. | 4, 15, 27 |
 | Does GeoClimate's SVF need a DSM? | **No — vector-only, checked from the documentation and the methods paper rather than the source, and the answer is the opposite of what a feature checklist invites.** GeoClimate computes `GROUND_SKY_VIEW_FACTOR` from building footprints alone: H2GIS `ST_SVF`, 100 m rays in 60 directions, sample points scattered over free ground at 0.008 pt/m², with Bernard et al. (2018) cited for those settings — Bernard et al. (2024), `10.5194/gmd-17-2077-2024`, Table 1, p. 2081, and [RSU indicators](https://geoclimate.readthedocs.io/en/latest/RSU-indicators.html), "only buildings are considered as obstructing the atmosphere". The same paper states what that excludes, p. 2084: "SVF does not take into account vegetation nor elevation". So **no auxiliary raster separates the two tools**, and the deferred note's "no DSM required" of Bernard 2018 is exactly the route GeoClimate already takes. The gap is real and it is in what lczkit *builds*, not in the data it has; the README and landing page say so rather than leaving cost as the only stated reason. **Caught while checking it:** `prototypes.UNUSED_PROPERTIES` called SVF's weight of 4 "second only to building surface fraction" — it is **third**, behind `FB` 8 and `Hr` 6 (p. 2085), which `weights.py` has encoded correctly all along. That string is serialised into every run's manifest and was published in both committed demo sites; corrected in all four places by re-deriving from the live constant. | 5, 6 |
+| GDAL's own `Zarr` driver as the zero-dependency Zarr route | **Rejected on measurement.** It writes the array correctly but the CRS only into a `pam.aux.xml` GDAL sidecar, invisible to a plain `zarr`/`xarray` reader — confirmed by writing a store and reopening it (`crs: None`), and `rioxarray`'s own `.rio.to_raster(..., driver="Zarr")` has the identical defect, since it goes through the same GDAL driver underneath. `xarray.Dataset.to_zarr()` fed a `.rio.write_crs()`-tagged `DataArray` writes a CF-convention `spatial_ref` coordinate instead, confirmed to round-trip. Three new permissive dependencies (`zarr` MIT, `xarray`/`rioxarray` Apache-2.0) added on that measurement. | 30 |
+| Independently rounding each geographic tile's pixel window | **Left a real one-pixel gap between adjacent tiles**, caught by a test built to prove tiling reconstructs the untiled raster: two tiles either side of a shared latitude line rounded that shared edge to two different pixel rows, since reprojecting a geographic line into a UTM CRS does not land on a pixel boundary and independent roundings need not agree. Fixed by rounding each row/column cut exactly once and sharing it between the tiles on both sides — a gap is then impossible by construction rather than by tolerance. | 30 |
 
 ---
 

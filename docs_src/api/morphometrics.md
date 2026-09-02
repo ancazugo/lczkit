@@ -17,8 +17,8 @@ The full attribute-to-momepy-call mapping is transcribed in
 `docs/references/tables/majer_2026_morphometrics_menu.md`, the authoritative checklist this
 package's own test suite parses cell for cell against the registry below.
 
-**Output ships as its own run artefact**, `morphometrics.parquet` — and `morphometrics.tif`, one
-band per attribute, area-weighted, if a raster resolution is requested. Neither is joined into
+**Output ships as its own run artefact**, `morphometrics.parquet` — and a raster, one band per
+attribute, area-weighted, if a raster resolution is requested. Neither is joined into
 `units.parquet` or the classification table: ETCs are a different, finer-grained unit set than
 whatever the run's classification units are.
 
@@ -75,12 +75,28 @@ attributes are kept once the expansion is computed rather than dropped.
 
 ::: lczkit.morphometrics.registry
 
-## Rasterizing to a GeoTIFF
+## Rasterizing
 
 Not part of the paper. Builds a fine grid over the ETC layer's own bounds at the requested
 resolution, reusing [`lczkit.units.overlay`](units.md#overlay) rather than a new vector-to-raster
 library — the overlay-and-measure primitive already in the package is exactly what "which ETCs
 does this pixel cover, and how much of each" is.
+
+**Three output formats.** `"gtiff"` (default) and `"cog"` both go through `rasterio`'s own GDAL
+drivers. `"zarr"` goes through `xarray`/`rioxarray` rather than GDAL's own `Zarr` driver — GDAL's
+driver writes the array correctly but stores the CRS only in a `pam.aux.xml` sidecar a plain
+`zarr`/`xarray` reader never sees, which was measured directly rather than assumed and defeats
+the interoperability a cloud-native format exists for. `xr.open_zarr(path,
+decode_coords="all")`, or any other CF-aware reader, round-trips the CRS this package writes.
+
+**Optional geographic tiling.** `MorphometricsConfig.raster_tile_deg` splits the output into a
+`geotessera`-style tile grid (github.com/ucam-eo/geotessera) — tiles named
+`grid_{lon:.2f}_{lat:.2f}` after their centre — instead of one file for the whole extent. The
+expensive step (the area-weighted overlay) still runs exactly once; tiling only changes how the
+resulting array is windowed and written. Adjacent tiles' shared edges are reprojected and rounded
+to a pixel index exactly once, so they cannot leave a gap or overlap between two tiles — an
+earlier version rounded each tile's box independently and did exactly that, caught by a test
+that stitches tiled output back together and compares it to the untiled raster.
 
 ::: lczkit.morphometrics.raster
 

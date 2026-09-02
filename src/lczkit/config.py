@@ -1434,6 +1434,18 @@ def _default_reference_dataset() -> LandCoverDatasetConfig:
 
 UnitStrategy = Literal["grid", "enclosure", "patch"]
 
+RasterFormat = Literal["gtiff", "cog", "zarr"]
+"""`"gtiff"` — plain GeoTIFF, the pre-existing behaviour. `"cog"` — GDAL's `COG` driver, the same
+GeoTIFF file format internally reorganised (tiled, with overviews) for efficient partial HTTP
+reads; verified to need no new dependency (`rasterio`'s own driver). `"zarr"` — chunked,
+cloud-native, written through `xarray`/`rioxarray` rather than GDAL's own `Zarr` driver: measured
+directly before choosing this route — GDAL's driver writes the array correctly but stores the CRS
+only in a GDAL-specific `pam.aux.xml` sidecar, invisible to a plain `zarr`/`xarray` reader that
+does not go through GDAL, which defeats the interoperability a cloud-native format is for.
+`xarray.Dataset.to_zarr` with `rioxarray.write_crs`/`write_transform` writes the CRS as a
+CF-convention `spatial_ref` coordinate instead, confirmed to round-trip via
+`xr.open_zarr(path, decode_coords="all")`."""
+
 
 class UnitsConfig(BaseModel):
     """Which spatial units the pipeline computes on.
@@ -1711,6 +1723,32 @@ class MorphometricsConfig(BaseModel):
     """Mirrors `LandCoverConfig.max_raster_cells`: refuses a resolution whose grid would be
     unreasonably large for the extent, rather than silently taking minutes and gigabytes."""
 
+    raster_format: RasterFormat = "gtiff"
+    """`"gtiff"` is the pre-existing default and stays so — a new capability ships without moving
+    the one that came before it, per the project's own convention for introducing an optional
+    format alongside an established one (`LandCoverConfig.source`, Phase 27). `"cog"` and
+    `"zarr"` are opt-in."""
+
+    raster_tile_deg: float | None = None
+    """`None` (default) writes one file, exactly the pre-existing behaviour. Set to split the
+    raster into a geographic tile grid — tiles are named `grid_{lon:.2f}_{lat:.2f}` after their
+    centre, on a `raster_tile_deg`-wide grid whose centres sit on the half-step offset (e.g. the
+    0.05° grid for `raster_tile_deg=0.1`) — the same convention used by `geotessera`
+    (github.com/ucam-eo/geotessera), so tile ids from the two tools line up. Tile edges are
+    computed in EPSG:4326 and reprojected into the run's working UTM CRS to cut the grid; for a
+    single city-scale extent this reprojection is a bounding-rectangle approximation (UTM is
+    not geographic), stated rather than treated as exact. Tiles with no real (non-null) pixel
+    anywhere are dropped rather than written empty."""
+
+    max_raster_bytes: int = 4_000_000_000
+    """Writing now builds one in-memory band stack (`bands x rows x cols x 4` bytes, float32)
+    before dispatching to a writer — required for `raster_format="zarr"`, which needs the whole
+    array rather than a band at a time, and applied uniformly so all three formats share one code
+    path. This is an arithmetic memory ceiling, not a measured wall-time one like
+    `max_tessellation_cells` above: 4 GB is a conservative round number for a shared HPC node,
+    not a value swept at scale. Revisit once a metropolitan-extent raster has actually been
+    built."""
+
     @model_validator(mode="after")
     def _check(self) -> MorphometricsConfig:
         if self.tessellation_shrink <= 0 or self.tessellation_segment <= 0:
@@ -1749,6 +1787,10 @@ class MorphometricsConfig(BaseModel):
             raise ValueError("max_tessellation_cells and max_contextual_cells must be positive")
         if self.max_raster_cells <= 0:
             raise ValueError(f"max_raster_cells must be positive, got {self.max_raster_cells}")
+        if self.raster_tile_deg is not None and self.raster_tile_deg <= 0:
+            raise ValueError(f"raster_tile_deg must be positive, got {self.raster_tile_deg}")
+        if self.max_raster_bytes <= 0:
+            raise ValueError(f"max_raster_bytes must be positive, got {self.max_raster_bytes}")
         return self
 
 
