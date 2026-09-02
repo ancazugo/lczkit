@@ -1,7 +1,7 @@
 # Command line
 
-`lczkit cities`, `lczkit run`, `lczkit site build|serve`, and `lczkit export`. Installed as the
-`lczkit` console script.
+`lczkit cities`, `lczkit run`, `lczkit site build|serve`, `lczkit export`, and
+`lczkit morphometrics raster`. Installed as the `lczkit` console script.
 
 The command line is deliberately thin. It configures a run through `apply_preset` rather than by
 restating any setting of its own, so there is one definition of what a preset means and the command
@@ -16,6 +16,8 @@ lczkit run --city berlin --dry-run          # resolve the config, create nothing
 lczkit site build output/lczkit/<run_id>
 lczkit site serve output/lczkit/<run_id>
 lczkit export output/lczkit/<run_id>        # add units.gpkg to a run already on disk
+lczkit run --city berlin --morphometrics --morphometrics-resolution 10
+lczkit morphometrics raster output/lczkit/<run_id> --resolution 25
 ```
 
 **Three locators, and they mean different ground.** `--city` names one of GUPPD's 5 558 urban
@@ -49,3 +51,7 @@ byte-identical afterwards.
 ## `lczkit cities`
 
 ::: lczkit.cli.cities
+
+## Morphometrics
+
+::: lczkit.cli.morphometrics

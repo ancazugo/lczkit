@@ -14,6 +14,7 @@ dependencies = [
     "libpysal>=4.15.0",
     "momepy>=1.0.0",
     "neatnet>=0.1.6",
+    "networkx>=3.0",
     "pyarrow>=25.0.0",
     "pydantic>=2.13.4",
     "pypdf>=6.15.0",
@@ -110,6 +111,13 @@ ignore_missing_imports = true
 # functions `cleaning.streets` imports to reproduce neatnet's face-artifact threshold.
 [[tool.mypy.overrides]]
 module = ["scipy.*"]
+ignore_missing_imports = true
+
+# `types-networkx` exists on PyPI too, same story: `lczkit.morphometrics.streets` only names the
+# `networkx.Graph` type momepy's own network functions already return, and pulling in a whole
+# stub dependency for one type annotation is not worth it.
+[[tool.mypy.overrides]]
+module = ["networkx", "networkx.*"]
 ignore_missing_imports = true
 
 # `pyogrio` ships no py.typed marker; `tippecanoe` is a wheel wrapping a C++ binary, whose Python

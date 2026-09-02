@@ -31,6 +31,9 @@ from lczkit.config import Settings
 from lczkit.heights.cascade import HeightFillReport
 from lczkit.heights.diagnostic import SourceAvailability
 from lczkit.heights.dispersion import DispersionReport
+from lczkit.morphometrics.registry import PARAMETERS as MORPHOMETRICS_PARAMETERS
+from lczkit.morphometrics.registry import contextual_specs
+from lczkit.morphometrics.report import MorphometricsReport
 from lczkit.output.breaks import VariableBreaks
 from lczkit.output.extent import ExtentRecord
 from lczkit.ucp.registry import LIMITATIONS, NOT_COMPUTED, PARAMETERS, semantic_specs
@@ -201,6 +204,20 @@ class RunManifest(BaseModel):
     before a residual there is called a defect. Measured at 53.2% on the Berlin fixture, which is
     inside the 50-60% band lczkit was being compared against as though it were a target."""
 
+    morphometrics: MorphometricsReport | None = None
+    """What the Phase 29 morphometrics stage produced, if `morphometrics.enabled` was set.
+
+    A wholly separate report from `units`/`cleaning`/etc.: it describes `morphometrics.parquet`,
+    a run artefact keyed by ETC `unit_id`, not the classification `units.parquet`. `None` where
+    the stage did not run — the ordinary case, since it ships off by default."""
+
+    morphometrics_raster: dict[str, Any] | None = None
+    """Resolution and band names of `morphometrics.tif`, if one was written — either at run time
+    (`--morphometrics-resolution`) or afterwards (`lczkit morphometrics raster`). A plain dict
+    rather than a typed model because `lczkit.morphometrics.raster.refresh_raster` also writes
+    this field by editing an already-written manifest's JSON directly, the same way
+    `lczkit.output.gis` backfills `crs`/`extent` on an archived run."""
+
     crs: str | None = None
     """The CRS every geometry in this run is written in, as an authority code — `"EPSG:32618"`.
 
@@ -237,6 +254,8 @@ def build_manifest(
     validation: AgreementReport | None = None,
     validation_ground_truth: AgreementReport | None = None,
     reference_ceiling: AgreementReport | None = None,
+    morphometrics: MorphometricsReport | None = None,
+    morphometrics_raster: dict[str, Any] | None = None,
     crs: CRS | None = None,
     outputs: list[str] | None = None,
 ) -> RunManifest:
@@ -268,7 +287,18 @@ def build_manifest(
             # The semantic specs come from the configured groups, not from a static
             # list, so a group added in config documents itself here rather than
             # appearing in the output with no unit and no reference.
-            for parameter in (*PARAMETERS, *semantic_specs(settings.ucp.semantic_groups))
+            for parameter in (
+                *PARAMETERS,
+                *semantic_specs(settings.ucp.semantic_groups),
+                # Only documented when the stage actually ran — otherwise a run that never
+                # touched morphometrics would claim 107+ parameters it does not carry.
+                *(MORPHOMETRICS_PARAMETERS if morphometrics is not None else ()),
+                *(
+                    contextual_specs(settings.morphometrics.contextual_quantiles)
+                    if morphometrics is not None and morphometrics.contextual_enabled
+                    else ()
+                ),
+            )
         ],
         not_computed=dict(NOT_COMPUTED),
         limitations=dict(LIMITATIONS),
@@ -294,6 +324,8 @@ def build_manifest(
         validation=validation,
         validation_ground_truth=validation_ground_truth,
         reference_ceiling=reference_ceiling,
+        morphometrics=morphometrics,
+        morphometrics_raster=morphometrics_raster,
         crs=None if epsg is None else f"EPSG:{epsg}",
         crs_wkt=None if crs is None else crs.to_wkt(),
         outputs=outputs or [],

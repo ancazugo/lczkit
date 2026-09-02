@@ -128,6 +128,7 @@ nav:
       - Height cascade: api/heights.md
       - Land cover: api/landcover.md
       - Urban canopy parameters: api/ucp.md
+      - Morphometrics: api/morphometrics.md
       - Classification: api/classify.md
       - Validation: api/validation.md
       - Output: api/output.md

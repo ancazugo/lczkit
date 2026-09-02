@@ -34,6 +34,8 @@ from lczkit.heights.inherit import inherit_heights
 from lczkit.heights.tiers import build_cascade
 from lczkit.landcover.earthengine import EarthEngineSource, check_asset
 from lczkit.landcover.local import LocalRasterSource
+from lczkit.morphometrics.compute import compute_morphometrics
+from lczkit.morphometrics.raster import refresh_raster
 from lczkit.output import RunOutputs, write_run
 from lczkit.output.extent import ExtentRecord
 from lczkit.protocols import BBox, RasterSource, SpatialUnitStrategy
@@ -50,6 +52,7 @@ from lczkit.viz import SiteReport, TippecanoeMissingError, build_site
 
 STAGES = (
     "clean_vectors",
+    "morphometrics",
     "heights",
     "units",
     "land_cover",
@@ -57,6 +60,7 @@ STAGES = (
     "parameters",
     "classify",
     "write_run",
+    "morphometrics_raster",
     "build_site",
 )
 """Stage names, in order, so a caller can size a progress display before the run starts."""
@@ -227,6 +231,21 @@ def run_pipeline(
             cache_dir=settings.tile_cache_dir,
         )
 
+    with timed("morphometrics"):
+        # 2D-only and independent of everything else in the chain: no height data, no unit
+        # strategy, no classification. Ships off by default (`MorphometricsConfig.enabled`), so
+        # this is a no-op for every run that does not ask for it.
+        morphometrics_table = None
+        morphometrics_report = None
+        if settings.morphometrics.enabled:
+            morphometrics_table, morphometrics_report = compute_morphometrics(
+                bbox,
+                cleaned.buildings_area,
+                cleaned.streets,
+                cleaned.waterbodies,
+                config=settings.morphometrics,
+            )
+
     with timed("heights"):
         # Places the products the configured cascade needs, and returns the config with each
         # tier's file resolved. Without this step `build_cascade` finds every areal tier's
@@ -330,7 +349,28 @@ def run_pipeline(
                 "land_use": cleaned.land_use,
                 "buildings": buildings_area,
             },
+            morphometrics=morphometrics_table,
+            morphometrics_report=morphometrics_report,
         )
+
+    if morphometrics_table is not None and settings.morphometrics.raster_resolution_m is not None:
+        with timed("morphometrics_raster"):
+            # The same function `lczkit morphometrics raster` calls on an existing run — one
+            # code path whether the raster is produced now or requested later at a different
+            # resolution. It patches the manifest *file* as JSON (see its own docstring); mirrored
+            # onto the in-memory `outputs.manifest` here so a caller reading this call's return
+            # value sees the same thing a fresh read of the manifest would.
+            raster_report = refresh_raster(
+                outputs.run_dir,
+                settings.morphometrics.raster_resolution_m,
+                max_cells=settings.morphometrics.max_raster_cells,
+            )
+            outputs.manifest.morphometrics_raster = {
+                "resolution_m": raster_report.resolution_m,
+                "n_rows": raster_report.n_rows,
+                "n_cols": raster_report.n_cols,
+                "band_names": list(raster_report.band_names),
+            }
 
     site: SiteReport | None = None
     skipped: str | None = None

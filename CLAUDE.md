@@ -2725,6 +2725,220 @@ pre-registered is a separate measurement and is not in this phase: this one chan
 does and leaves the metric's weights untouched, so the two do not confound each other and the
 weight sweep is still outstanding on the deferred list.
 
+### Phase 29 — 2D morphometrics from Majer & Fleischmann (2026) — CONCLUDED
+
+**Built on explicit request, and scoped down from what was asked.** The ask was to port Majer &
+Fleischmann (2026)'s morphometrics computation and add a capability the paper does not have —
+rasterizing the result at a user-defined resolution. Confirmed before building: **metrics only**,
+not the paper's RandomForest/CNN LCZ-prediction schemes (S1–S4), and none of it feeds
+`PrototypeClassifier`. This is consistent with the deferred list, which already carries "ML
+classifier trained on So2Sat LCZ42 / DFC2017" untouched, and with the paper's own finding — 2D
+morphometrics alone predict LCZ "selectively and inconsistently" — which is the reason this
+package prioritises height quality over parameter count in the first place (Tier 3 table).
+
+**Licensing, checked before anything was read.** The reference repository
+(github.com/majerhugo/lcz_morphometrics) is MIT — no GeoClimate/UMEP-style concern — but its
+`environment.yml` pins no momepy version and its notebooks predate or ignore momepy's 1.0
+functional-API rewrite. **No code was ported from it.** Every metric here was implemented from
+momepy's own current API, introspected live rather than assumed, and from the paper's
+Supplementary Material A, transcribed in full at
+`docs/references/tables/majer_2026_morphometrics_menu.md` — paraphrased, per the standing
+quotation rule, and independently re-tallied by section (62 + 23 + 22 = 107) before any code was
+written against it. No new dependency was needed: momepy, libpysal, geopandas, rasterio and
+exactextract were all already declared. `networkx` — already a transitive dependency of momepy's
+own network functions — is now a direct one, since `lczkit.morphometrics.streets` calls
+`momepy.gdf_to_nx`/`node_degree`/etc. directly; BSD-3-Clause, permissive.
+
+**Units: enclosed tessellation cells, not a partition.** `TessellationUnits`
+(`lczkit.units.tessellation`) is the "tessellation-based building-level units" strategy the
+deferred list named since Phase 0 — one `momepy.enclosed_tessellation` cell per building, grown
+inside `EnclosureUnits`' own enclosures. Unlike every other `SpatialUnitStrategy`, it does not
+partition the bbox: cells with no parent building get a negative index from momepy and are
+dropped, per the paper's own rule. Measured on four concentric Berlin extents (1/4/9/16 km²): 39
+of 12 361 buildings (0.3%) excluded at 16 km², rising to 10 of 377 (2.7%) at 1 km² — edge effects
+shrinking with extent, as expected for a boundary phenomenon.
+
+Two things about `enclosed_tessellation` that were not obvious from its docstring alone and would
+have silently corrupted the unit_id scheme:
+
+- Its enclosure-linking output column is named after **the input enclosures' own index name** —
+  `EnclosureUnits` indexes by `unit_id`, so passing it straight through would have produced a
+  column called `unit_id` colliding with the one this strategy sets on its own result. Fixed by
+  renaming the axis before the call.
+- Neither Overture's `id` nor lczkit's own `building_id`/`feature_id` can be trusted blindly as a
+  per-row key into it: `buildings_area`'s own documented contract makes `building_id` unique, but
+  a defensive per-group counter is applied regardless (`lczkit.units.tessellation.building_ids`),
+  since a caller violating that contract would otherwise silently collapse two footprints under
+  one `unit_id` at `set_index`. A hand-built test with every `building_id` set to the same value
+  is what this guards against, and does.
+
+**The 107 primary attributes, cross-checked cell for cell against the transcribed menu.**
+`lczkit.morphometrics.registry.PARAMETERS` and the 107-row table produced the same set with zero
+mismatches in either direction before a single test was written against real data — the check
+that proves all 107 were actually built, not merely counted. Three momepy functions carry more
+weight than their names suggest and are worth recording:
+
+- `momepy.percentile(y, graph, q)` is exactly the contextual-expansion primitive — no custom
+  percentile code was needed.
+- `momepy.neighbor_distance(geometry, graph)` already computes "mean distance to neighbours" —
+  a function the pre-implementation design pass believed did not exist in momepy, would have been
+  hand-rolled, and turned out to be a direct, confirmed call once the installed library was
+  checked rather than the paper's prose alone.
+- `momepy.enclosed_tessellation`'s own docstring specifies that a contiguity graph over its output
+  must be **fuzzy** (`Graph.build_fuzzy_contiguity`), not the plain queen contiguity
+  (`Graph.build_contiguity(..., rook=False)`) used everywhere else in this package
+  (`lczkit.units.patches`, `lczkit.classify.smoothing`) — the tessellation's shrink/segment step
+  does not produce a precise polygonal coverage, so an exact-touching graph misses real neighbour
+  pairs. `lczkit.morphometrics.graphs` is the one place every such graph is built, exactly so this
+  deviation is made once rather than risked at each call site.
+- "5 m / 400 m" street-connectivity radii are **network-distance**, not topological hops —
+  confirmed against the installed momepy (`radius` reads as hops unless `distance` names an edge
+  attribute) rather than assumed from the paper's prose, since 5 or 400 topological hops would be
+  a nonsensical pairing on any real street network.
+
+**Two geometric findings, measured rather than assumed bounded.** Every "area over an enclosing
+shape" ratio (`circular_compactness`, `convexity`, `rectangularity`, `courtyard_index`) is
+guaranteed in [0, 1] because the denominator's shape always contains the numerator's. Two
+attributes that look like they should be are not:
+
+- **`coverage_area_ratio_etc`** (a building's footprint area over its own ETC's area) exceeded 1
+  on 7 of 110 ETCs (6.4%) on the Hong Kong fixture, one as high as 2.67 — `enclosed_tessellation`'s
+  shrink/segment step does not guarantee a cell fully contains the building that seeded it, and on
+  dense, irregular fabric it measurably does not. Reported as measured, not clipped, and the
+  registry's `unit` field was corrected from `"fraction"` to `"dimensionless"` to stop implying a
+  bound the quantity does not have.
+- **`square_compactness`** (`(4·√area/perimeter)²`) is exactly 1 for a square and *exceeds* 1 for
+  shapes rounder than a square — a genuine property of the formula, not a defect, and momepy's own
+  worked example never reaches values near 1 so this would not have been visible without testing
+  real ETC geometry. Same registry correction applied to all five `square_compactness*` columns.
+
+**Two more defects, found on request by testing against a second real city.** Nairobi's Overture
+building fabric — more ML-detected footprints, structurally different from Berlin's OSM-heavy one
+— surfaced two things neither the ~110-building Hong Kong fixture nor the ~25 000 Berlin buildings
+across four scaling extents did:
+
+- `momepy.courtyard_area` calls `shapely.get_exterior_ring`, defined only for a single `Polygon`.
+  On a `MultiPolygon` it returns `None`, and the courtyard-area formula silently computes
+  `0 - area = -area` instead of raising. `buildings_area` legitimately holds MultiPolygons — small-
+  building absorption (Phase 1) dissolves two non-adjacent footprints without erasing either — so
+  this is a real input, not a data-quality problem to clean away. Found on 3 of 7 214 real Nairobi
+  buildings (0.04%), `courtyard_index_building` reading exactly -1.0. Fixed by nulling both
+  `courtyard_area_building`/`courtyard_index_building` for a `MultiPolygon` row rather than
+  reporting the negative.
+- The five ratios genuinely bounded by construction (`circular_compactness`, `convexity`,
+  `elongation`, `rectangularity`, `shape_index`, plus `courtyard_index`) are now clipped to [0, 1]
+  in code rather than left to whatever GEOS's minimum-rotated-rectangle/enclosing-circle
+  computation returns: `rectangularity_building` reached 1.000246 on Nairobi, two orders of
+  magnitude past the Hong Kong fixture's 1.0000039. Unlike `square_compactness`'s overshoot above,
+  this bound *is* mathematically real, so clipping removes measurement noise rather than hiding a
+  property — the opposite fix from the `coverage_area_ratio_etc`/`square_compactness` finding,
+  and the two are not to be confused.
+
+**A rare-input defect needs more than one small sample to surface, and a second real city is
+what a fixture sweep does not substitute for.** Both of the above sit below the rate either prior
+sample was likely to contain. `scripts/test_morphometrics_nairobi.py` is kept as a repeatable
+real-city smoke test — schema against the registry, every column numeric and not entirely null,
+the bounded ratios in range — deliberately outside the pytest suite, since it needs `DATA_DIR`
+and the network.
+
+**The contextual expansion — opt-in, off by default, and not what the paper does with it.** The
+25th/50th/75th percentile of each primary attribute across neighbouring ETCs
+(`momepy.percentile`), computed via `MorphometricsConfig.contextual`. Unlike the paper, which
+drops the 107 primary attributes once the 321 contextual ones are computed, lczkit keeps both — a
+deliberate divergence, recorded in the config docstring rather than left to be noticed.
+
+**Scaling, measured at four concentric Berlin extents before any ceiling was chosen, and it found
+exactly the failure the standing anti-pattern exists to catch.** `scripts/morphometrics_scaling.py`
+swept 1/4/9/16 km²:
+
+| km² | ETCs | enclosures | primary s | contextual s | raster (10 m) s |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 367 | 263 | 16.1 | 2.3 | 1.7 |
+| 4 | 2 176 | 225 | 23.8 | 13.3 | 8.8 |
+| 9 | 5 406 | 231 | 50.9 | 35.2 | 22.5 |
+| 16 | 12 322 | 2 159 | **1 029.2** | 81.4 | 43.0 |
+
+The 16 km² point — a ~20× time increase for 2.3× more ETCs — was measured twice: once
+concurrently with an unrelated full-suite test run on the same machine (1 082.2 s), and again in
+isolation with nothing else running (1 029.2 s). **The two agree to within 5%: this is a real
+property of the computation, not a contention artefact**, which was the first and more comfortable
+explanation and is now ruled out rather than assumed. Log-log exponent 1.04 against ETC count and
+1.29 against extent — both pulled toward linear by the first three, well-behaved points, which is
+exactly why a three-point fit including only small extents would have missed this: the cliff is
+between the third and fourth point, not a property visible earlier.
+
+Two things correlate with the jump, neither confirmed as the mechanism, both recorded rather than
+guessed past: the 16 km² window has **~10x more enclosures than the other three** (2 159 against
+~230-260), suggesting the extent crossed into markedly more fragmented street fabric; and
+momepy's own `weighted_character`/`percentile` docstrings warn they are "used extensively... to
+accelerate the computation of graphs" and "may become unduly slow" without `numba`, which is not
+currently an lczkit dependency (checked: absent from this environment). Per the standing
+anti-pattern against attributing cost by adjacency rather than by profiling, neither is asserted
+as the cause here — both are named so a future investigation does not have to rediscover them.
+
+`MorphometricsConfig.max_tessellation_cells` (**50 000**, not the `LandCoverConfig`-style
+200 000+ this file's other raster ceilings use) and `max_contextual_cells` (**20 000**) are set
+well below the largest measured point rather than extrapolated from it: this project's own
+history is that power-law extrapolations from small extents run optimistic, and the honest
+statement here is that 12 322 ETCs already take seventeen minutes for the primary attributes
+alone. Revisit both once the mechanism is profiled and a metropolitan-scale measurement exists.
+
+**Rasterization — a new capability, not in the paper.** Majer & Fleischmann never rasterize their
+2D attributes; the closest the paper comes is rasterizing a 20-attribute subset for its CNN fusion
+schemes, which are out of scope here. `lczkit.morphometrics.raster.rasterize_attributes` builds a
+fine grid over the ETC layer's own bounds at the requested resolution and reuses
+`lczkit.units.overlay.unit_pieces` for the area-weighted aggregation — no new vector-to-raster
+dependency, since the overlay-and-measure primitive already in the package (Phase 23) is exactly
+what "which ETCs does this pixel cover, and how much of each" is. Null pieces are excluded from
+**both** the numerator and the denominator of the area-weighted mean; weighting by the pixel's
+full covered area while summing only non-null values would have silently biased every mean toward
+zero wherever an attribute was null on part of a pixel, which several morphometric columns are by
+construction (a cell with no qualifying neighbour). `refresh_raster` is the one function both
+`lczkit run --morphometrics-resolution` and the new `lczkit morphometrics raster <run_dir>
+--resolution` subcommand call, so a raster produced at run time and one produced afterwards at a
+different resolution are the same artefact either way.
+
+**Architectural decisions, and the one that most deserved scrutiny.** `morphometrics.parquet` and
+`morphometrics.tif` ship as their own run artefacts — never joined into `units.parquet` or the
+classification table. CLAUDE.md's "one exchange format" rule governs the *classification* join
+graph (`unit_id` → parameters → classification); since morphometrics is explicitly not classifier
+input, this is a second, clearly-labelled artefact analogous to `layers/buildings.parquet`, not a
+second exchange format in the sense that rule addresses. `TessellationUnits` is deliberately not
+reachable via `UnitsConfig.strategy` — wiring it in would let ETCs become the main classification
+unit, a materially larger, unasked-for scope expansion coupling a purpose-built strategy to
+classification and validation.
+
+**A circular import, invisible to every ad hoc check that led up to it.** `output.writer` needs
+`MorphometricsReport` from `morphometrics.report`; `morphometrics/__init__.py` eagerly re-exported
+`raster.py`, which needs filename constants from `output.writer` — so importing `lczkit.output`
+first triggered `morphometrics/__init__.py`, which imported `raster.py`, which tried to import
+names from `output.writer` while that module was still mid-initialisation, an `ImportError` at
+collection time naming a "partially initialized module". Every verification script run during
+development imported `lczkit.morphometrics.*` submodules directly and never hit it; `mypy src`
+never hit it either, since it type-checks module by module rather than executing an import graph.
+Only `tests/test_output_writer.py`'s own import order — `lczkit.output` first, as a real caller
+would — surfaced it, immediately, the first time that specific pre-existing test file was run
+after the two `output/*.py` edits landed. Fixed by dropping the eager re-exports from
+`morphometrics/__init__.py`: every internal caller already imported the exact submodule it
+needed, so nothing outside the package depended on them.
+
+**What shipped:** `lczkit.units.tessellation` (`TessellationUnits`, `TessellationReport`,
+`buildings_for_etc`); `lczkit.morphometrics` (`graphs`, `dimensional`, `distribution`, `streets`,
+`contextual`, `registry`, `compute`, `raster`, `report`); `MorphometricsConfig`; a
+`"morphometrics"` pipeline stage between `clean_vectors` and `heights`, off by default;
+`morphometrics.parquet`/`morphometrics.tif` as run artefacts; `RunManifest.morphometrics` /
+`morphometrics_raster`; `lczkit run --morphometrics[-contextual][-resolution]`; `lczkit
+morphometrics raster`; `docs_src/api/morphometrics.md`; and
+`docs/references/tables/majer_2026_morphometrics_menu.md`.
+
+*Acceptance:* all 107 primary attributes present and registry-validated against the transcribed
+table (`tests/test_morphometrics_registry_matches_menu.py`); every parameter carries a documented
+unit and reference; `TessellationUnits` satisfies `SpatialUnitStrategy` and every surviving ETC
+traces to exactly one parent building on the Hong Kong fixture; the contextual expansion is
+opt-in and strictly additive; rasterization is area-weighted with band count matching attribute
+count; scaling measured at four extents with the ceilings set from the measurement; the full
+suite (1117 tests, excluding network) passes with no regressions.
+
 ### STOP RULE — applies after Phase 13
 
 **No further diagnostic phases.** Thirteen phases in, the finding rate remains high but the returns
@@ -2797,8 +3011,21 @@ Remaining work, in order:
     is outbuildings and the tagged evidence sits in the three cities that carry no LCZ 7 at all.
     It found that the size gate the rule shipped with was harmful, and that this threshold buys
     correctness where the LCZ 10 one did not.
-17. **The paper.**
-18. **Cleanup** — release. **The docs half landed as Phase 20, the notebook half as Phase 22, the
+17. ~~**Phase 29 — 2D morphometrics from Majer & Fleischmann (2026).**~~ **Concluded**, on
+    explicit request. Not a diagnostic phase; it moved no classification measurement. Ports the
+    paper's 107 primary 2D morphometric attributes over enclosed tessellation cells, as a
+    descriptive output that does not feed the classifier, plus a new capability the paper does
+    not have — an area-weighted multiband GeoTIFF at a user-defined resolution. It found that a
+    scaling sweep at four small extents produces exactly the failure the standing anti-pattern
+    exists to catch: a ~20x time jump between the third and fourth point that a three-extent fit
+    stopping earlier would have missed, verified against contention rather than assumed real, and
+    two attributes (`coverage_area_ratio_etc`, `square_compactness`) that are not bounded to
+    [0, 1] the way their sibling ratios are. A follow-up real-city smoke test against Nairobi
+    found a `MultiPolygon`-input defect in `momepy.courtyard_area` (silently returns `-area`
+    instead of raising) on 0.04% of real buildings, and floating-point overshoot on five
+    genuinely-bounded ratios large enough to warrant clipping rather than tolerating.
+18. **The paper.**
+19. **Cleanup** — release. **The docs half landed as Phase 20, the notebook half as Phase 22, the
     README split as Phase 23 and the de-narrativising pass as Phase 26**; what is left here is the
     release itself.
 
@@ -2991,7 +3218,7 @@ PDF and inferring it.
 
 | Reference | DOI / ID | Used by |
 |---|---|---|
-| Majer & Fleischmann, arXiv:2603.00132 | `arXiv:2603.00132` | Phase 1 — Supplementary D is the cleaning spec. Supplementary A is a morphometrics menu. |
+| Majer & Fleischmann, arXiv:2603.00132 | `arXiv:2603.00132` | Phase 1 — Supplementary D is the cleaning spec. Phase 29 — Supplementary A's 107-attribute morphometrics menu, transcribed in full at `docs/references/tables/majer_2026_morphometrics_menu.md` and implemented against the installed momepy 1.0+ API, not against the paper's own reference repository. |
 | Fleischmann (2019), *JOSS* 4(43), 1807 | `10.21105/joss.01807` | Phases 2, 5 — momepy |
 | Fleischmann et al. (2026), *CEUS* 123, 102354 | `10.1016/j.compenvurbsys.2025.102354` | Phase 1 — neatnet street simplification |
 | Arribas-Bel & Fleischmann (2022), *Habitat International* 128, 102641 | `10.1016/j.habitatint.2022.102641` | Phase 2 — enclosed tessellation and barrier logic |
@@ -3239,7 +3466,7 @@ trees as the roughness elements for A–D, so canopy height should recover A and
 push D toward near-zero canopy · additional height tiers (UT-GLOBUS, GlobalBuildingAtlas,
 EUBUCCO, morphology-based ML imputation) · ML classifier trained on So2Sat LCZ42 / DFC2017 ·
 fuzzy or continuous LCZ output · W2W / WRF export · OSM as an alternative `VectorSource` ·
-tessellation-based building-level units · dask-geopandas scaling · deck.gl overlay for
+dask-geopandas scaling · deck.gl overlay for
 buildings (only if MapLibre `fill-extrusion` proves insufficient) · run-comparison views in the
 site · OSM `industrial=*` subtags as supplementary heavy/light industry evidence (arrives with the
 deferred OSM source; the only realistic route to the distinction Overture discards, and reaffirmed
@@ -3260,6 +3487,10 @@ untouched.
 
 *(**CLI removed from this list in Phase 15**, built on explicit request. `lczkit run` and
 `lczkit site build|serve`.)*
+
+*(**Tessellation-based building-level units removed from this list in Phase 29**, built on
+explicit request. `TessellationUnits` ships, purpose-built for the morphometrics feature and
+deliberately not reachable via `UnitsConfig.strategy`.)*
 
 ---
 

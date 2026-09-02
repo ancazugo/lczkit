@@ -60,7 +60,16 @@ def test_every_command_has_help_that_does_not_need_data_dir() -> None:
     It is the first thing anyone runs, and a traceback about `DATA_DIR` at that point reads as
     "this package is broken" rather than "you have not set it up yet".
     """
-    for argv in ([], ["run"], ["export"], ["site"], ["site", "build"], ["site", "serve"]):
+    for argv in (
+        [],
+        ["run"],
+        ["export"],
+        ["site"],
+        ["site", "build"],
+        ["site", "serve"],
+        ["morphometrics"],
+        ["morphometrics", "raster"],
+    ):
         result = runner.invoke(app, [*argv, "--help"])
         assert result.exit_code == 0, f"lczkit {' '.join(argv)} --help failed:\n{result.output}"
         assert "Traceback" not in result.output
@@ -255,6 +264,65 @@ def test_a_non_positive_extent_is_refused(data_dir: Path) -> None:
     result = runner.invoke(app, ["run", "--bbox", "13.0,52.0,13.1,52.1", "--extent-km", "0"])
     assert result.exit_code == EXIT_CONFIG
     assert "--extent-km must be positive" in result.output
+
+
+def test_a_non_positive_morphometrics_resolution_is_refused(data_dir: Path) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--bbox",
+            "13.0,52.0,13.1,52.1",
+            "--morphometrics",
+            "--morphometrics-resolution",
+            "0",
+        ],
+    )
+    assert result.exit_code == EXIT_CONFIG
+    assert "--morphometrics-resolution must be positive" in result.output
+
+
+def test_morphometrics_resolution_needs_morphometrics(data_dir: Path) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--bbox",
+            "13.0,52.0,13.1,52.1",
+            "--morphometrics-resolution",
+            "10",
+        ],
+    )
+    assert result.exit_code == EXIT_CONFIG
+    assert "--morphometrics-resolution needs --morphometrics" in result.output
+
+
+def test_morphometrics_contextual_needs_morphometrics(data_dir: Path) -> None:
+    result = runner.invoke(
+        app, ["run", "--bbox", "13.0,52.0,13.1,52.1", "--morphometrics-contextual"]
+    )
+    assert result.exit_code == EXIT_CONFIG
+    assert "--morphometrics-contextual needs --morphometrics" in result.output
+
+
+def test_morphometrics_flags_reach_settings(data_dir: Path) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--bbox",
+            "13.0,52.0,13.1,52.1",
+            "--morphometrics",
+            "--morphometrics-contextual",
+            "--morphometrics-resolution",
+            "10",
+            "--dry-run",
+        ],
+    )
+    config = json.loads(result.stdout[result.stdout.index("{") :])["config"]["morphometrics"]
+    assert config["enabled"] is True
+    assert config["contextual"] is True
+    assert config["raster_resolution_m"] == 10.0
 
 
 # --------------------------------------------------------------------------- configuration
@@ -666,6 +734,38 @@ def test_export_refuses_a_directory_that_is_not_a_run(tmp_path: Path) -> None:
     assert result.exit_code == EXIT_CONFIG
     # Whitespace-collapsed: rich wraps the message, and where it wraps depends on the path length.
     assert "not a run directory" in " ".join(result.output.split())
+
+
+# --------------------------------------------------------------------------- morphometrics
+
+
+def test_morphometrics_raster_writes_a_geotiff(tmp_path: Path) -> None:
+    import geopandas as gpd
+    from shapely.geometry import box
+
+    gpd.GeoDataFrame(
+        {"unit_id": ["etc_bld_0", "etc_bld_1"], "area_etc": [50.0, 75.0]},
+        geometry=[box(0.0, 0.0, 10.0, 10.0), box(10.0, 0.0, 20.0, 10.0)],
+        crs="EPSG:32633",
+    ).set_index("unit_id").to_parquet(tmp_path / "morphometrics.parquet")
+
+    result = runner.invoke(app, ["morphometrics", "raster", str(tmp_path), "--resolution", "5"])
+
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "morphometrics.tif").exists()
+    assert "morphometrics.tif" in result.output
+
+
+def test_morphometrics_raster_refuses_a_run_with_no_morphometrics(tmp_path: Path) -> None:
+    result = runner.invoke(app, ["morphometrics", "raster", str(tmp_path), "--resolution", "5"])
+    assert result.exit_code == EXIT_CONFIG
+    assert "no morphometrics" in " ".join(result.output.split())
+
+
+def test_morphometrics_raster_refuses_a_non_positive_resolution(tmp_path: Path) -> None:
+    result = runner.invoke(app, ["morphometrics", "raster", str(tmp_path), "--resolution", "0"])
+    assert result.exit_code == EXIT_CONFIG
+    assert "--resolution must be positive" in result.output
 
 
 # --------------------------------------------------------------------------- the drift guard

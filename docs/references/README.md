@@ -81,7 +81,7 @@ Present ahead of need, so the context exists when SVF and roughness come off the
 
 | File | Citation | DOI / ID | Access | Phase | What to read |
 |---|---|---|---|---|---|
-| `majer_2026_lcz_morphometrics.pdf` | Majer & Fleischmann, arXiv | `arXiv:2603.00132` | **OA** | 1 | **Supplementary D is effectively the cleaning specification** — geometry validity, overlap handling, small-building absorption, cross-layer topology. Supplementary A is a morphometrics menu. The negative result on morphometrics-only prediction is the reason this package prioritises height quality over parameter count. |
+| `majer_2026_lcz_morphometrics.pdf` | Majer & Fleischmann, arXiv | `arXiv:2603.00132` | **OA** | 1, 29 | **Supplementary D is effectively the cleaning specification** — geometry validity, overlap handling, small-building absorption, cross-layer topology. Supplementary A is a morphometrics menu, transcribed in full at `tables/majer_2026_morphometrics_menu.md` and implemented in Phase 29. The negative result on morphometrics-only prediction is the reason this package prioritises height quality over parameter count. |
 | `fleischmann_2019_momepy.pdf` | Fleischmann (2019), *JOSS* 4(43), 1807 | `10.21105/joss.01807` | **OA** | 2, 5 | momepy overview. |
 | `fleischmann_2026_neatnet.pdf` | Fleischmann et al. (2026), *CEUS* 123, 102354 | `10.1016/j.compenvurbsys.2025.102354` | **OA** | 1 | Parameter-free street network simplification. Why dual carriageways and roundabouts must be collapsed before enclosure generation. |
 | `arribasbel_2022_tessellation.pdf` | Arribas-Bel & Fleischmann (2022), *Habitat International* 128, 102641 | `10.1016/j.habitatint.2022.102641` | **OA** | 2 | Enclosed tessellation and barrier logic. |
@@ -129,6 +129,7 @@ lookups**, not the PDFs.
 | `tables/esa_worldcover_classes.md` | ESA WorldCover v200 PUM | Class codes, plus this project's mapping to pervious / impervious / tree / water, **with the reasoning for each borderline decision recorded inline**. |
 | `tables/lcz_class_similarity.md` | Bechtel et al. (2020) | The 17x17 class similarity matrix, its complement, and the `OA_w` formula. Values are k/12 rounded to two decimals. **Two matrices with identical headers** — parse by section heading, not by header row. |
 | `tables/stewart_2014_ucp.md` | Stewart et al. (2014) | Only if the refined values are used in preference to the 2012 ranges. |
+| `tables/majer_2026_morphometrics_menu.md` | Majer & Fleischmann (2026), Supplementary A | The 107 primary 2D morphometric attributes `lczkit.morphometrics` implements, one row per column name, with the momepy 1.0+ call and scale — the checklist `tests/test_morphometrics_registry_matches_menu.py` parses cell for cell against the registry. |
 
 The LCZ integer codes and colour table are **not transcribed** — they ship as data files with
 `lczexplore` and `LCZ4r` and with the global map metadata. Fetch programmatically rather than

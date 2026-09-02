@@ -31,6 +31,7 @@ from lczkit.config import Settings
 from lczkit.heights.cascade import HeightFillReport
 from lczkit.heights.diagnostic import SourceAvailability
 from lczkit.heights.dispersion import dispersion_report
+from lczkit.morphometrics.report import MorphometricsReport
 from lczkit.output.breaks import breaks_for
 from lczkit.output.extent import ExtentRecord
 from lczkit.output.manifest import RunManifest, build_manifest
@@ -43,6 +44,13 @@ UNITS_FILE = "units.parquet"
 VIZ_FILE = "units_viz.parquet"
 MANIFEST_FILE = "manifest.json"
 LAYERS_DIR = "layers"
+
+MORPHOMETRICS_FILE = "morphometrics.parquet"
+"""The Phase 29 morphometrics vector output — ETC geometry plus attributes, keyed by its own
+`unit_id` scheme (`etc_<building id>`). Never merged into `units.parquet`: ETCs are a finer,
+differently-indexed unit set than whatever the run's classification units are, and morphometrics
+is a descriptive output, not classifier input. Written beside `units.parquet` the same way
+`layers/buildings.parquet` sits beside it without being joined into the classification table."""
 
 GPKG_FILE = "units.gpkg"
 GPKG_LAYER = "units"
@@ -80,6 +88,9 @@ class RunOutputs:
     layers: dict[str, Path] = field(default_factory=dict)
     """Context layers persisted under `layers/`, by name. Empty unless the caller asked for them."""
 
+    morphometrics: Path | None = None
+    """`morphometrics.parquet`. `None` unless the caller passed a morphometrics table."""
+
 
 def write_run(
     settings: Settings,
@@ -98,6 +109,8 @@ def write_run(
     smoothing: SmoothingReport | None = None,
     validation: AgreementReport | None = None,
     layers: Mapping[str, gpd.GeoDataFrame] | None = None,
+    morphometrics: gpd.GeoDataFrame | None = None,
+    morphometrics_report: MorphometricsReport | None = None,
 ) -> RunOutputs:
     """Write one run's three files into `settings.run_dir`, returning their paths.
 
@@ -111,6 +124,9 @@ def write_run(
     or extrude buildings would be to re-read `input/` at site-build time, which would make the site
     depend on data the run does not carry and could not be rebuilt from an archived run directory.
     Names outside `CONTEXT_LAYERS` are rejected rather than written.
+
+    `morphometrics`, if given, is written as `morphometrics.parquet` — its own artefact, keyed by
+    its own `unit_id` scheme, never joined into `attributes`/`table`. See `MORPHOMETRICS_FILE`.
 
     Nothing outside `run_dir` is touched, and nothing under `input/` is read.
     """
@@ -145,6 +161,10 @@ def write_run(
 
     written = _write_layers(run_dir, layers)
     gpkg_path = None if settings.output.gis_format == "none" else write_gpkg(run_dir, table)
+    morphometrics_path = None
+    if morphometrics is not None:
+        morphometrics_path = run_dir / MORPHOMETRICS_FILE
+        morphometrics.to_parquet(morphometrics_path)
     manifest = build_manifest(
         settings,
         classifier,
@@ -162,12 +182,14 @@ def write_run(
         tag_availability=tag_availability,
         smoothing=smoothing,
         validation=validation,
+        morphometrics=morphometrics_report,
         crs=units.crs,
         outputs=[
             UNITS_FILE,
             VIZ_FILE,
             MANIFEST_FILE,
             *([] if gpkg_path is None else [GPKG_FILE]),
+            *([] if morphometrics_path is None else [MORPHOMETRICS_FILE]),
             *(str(path.relative_to(run_dir)) for path in written.values()),
         ],
     )
@@ -184,6 +206,7 @@ def write_run(
         manifest=manifest,
         units_gpkg=gpkg_path,
         layers=written,
+        morphometrics=morphometrics_path,
     )
 
 

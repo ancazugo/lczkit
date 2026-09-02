@@ -123,6 +123,31 @@ def run(
         str | None,
         typer.Option("--land-cover-source", metavar="BACKEND", help=LAND_COVER_SOURCE_HELP),
     ] = None,
+    morphometrics: Annotated[
+        bool,
+        typer.Option(
+            "--morphometrics",
+            help="Compute the 107 2D morphometric attributes (Majer & Fleischmann 2026) on "
+            "enclosed tessellation cells, written as morphometrics.parquet. Off by default.",
+        ),
+    ] = False,
+    morphometrics_contextual: Annotated[
+        bool,
+        typer.Option(
+            "--morphometrics-contextual",
+            help="With --morphometrics, also compute the 25th/50th/75th-percentile contextual "
+            "expansion (up to 321 more attributes). Off by default.",
+        ),
+    ] = False,
+    morphometrics_resolution: Annotated[
+        float | None,
+        typer.Option(
+            "--morphometrics-resolution",
+            metavar="METRES",
+            help="With --morphometrics, also write morphometrics.tif at this pixel size. "
+            "Regenerate later at a different resolution with lczkit morphometrics raster.",
+        ),
+    ] = None,
     dry_run: Annotated[
         bool,
         typer.Option("--dry-run", help="Resolve and print the configuration, then stop."),
@@ -153,6 +178,12 @@ def run(
         fail("--country and --so2sat-window only apply to --city")
     if extent_km is not None and extent_km <= 0:
         fail(f"--extent-km must be positive, got {extent_km}")
+    if morphometrics_resolution is not None and morphometrics_resolution <= 0:
+        fail(f"--morphometrics-resolution must be positive, got {morphometrics_resolution}")
+    if morphometrics_resolution is not None and not morphometrics:
+        fail("--morphometrics-resolution needs --morphometrics")
+    if morphometrics_contextual and not morphometrics:
+        fail("--morphometrics-contextual needs --morphometrics")
     basemap_keys = parse_basemaps(basemap)
     backend = parse_land_cover_source(land_cover_source)
 
@@ -171,6 +202,10 @@ def run(
     if config is not None:
         apply_config_file(settings, config)
     settings.viz.include_buildings = buildings
+    if morphometrics:
+        settings.morphometrics.enabled = True
+        settings.morphometrics.contextual = morphometrics_contextual
+        settings.morphometrics.raster_resolution_m = morphometrics_resolution
     apply_basemaps(settings.viz, basemap_keys)
     # After `--config`, so an explicit flag beats a file that also named a backend. `None` leaves
     # the file's answer alone, which is what makes the two composable rather than exclusive.
@@ -208,6 +243,7 @@ def run(
         out.print(render_stages(result))
     console.print(f"  wrote [bold]{result.run_dir}[/bold]")
     _report_gis(result)
+    _report_morphometrics(result)
     _report_site(result)
 
 
@@ -243,6 +279,29 @@ def _report_gis(result: PipelineResult) -> None:
         console.print(f"  units in [bold]{crs}[/bold] (GeoParquet only)")
         return
     console.print(f"  open in a GIS: [bold]{outputs.units_gpkg}[/bold] ({crs})", soft_wrap=True)
+
+
+def _report_morphometrics(result: PipelineResult) -> None:
+    """Name the morphometrics artefact(s), if the run computed any.
+
+    Silent when the stage was not asked for — which is the ordinary run — so this adds nothing
+    to the output of a plain `lczkit run`.
+    """
+    report = result.outputs.manifest.morphometrics
+    if report is None:
+        return
+    console.print(
+        f"  morphometrics: [bold]{report.n_primary_attributes}[/bold] attributes on "
+        f"{report.tessellation.n_etc:,} ETCs"
+        + (f" + {report.n_contextual_attributes} contextual" if report.contextual_enabled else "")
+    )
+    raster = result.outputs.manifest.morphometrics_raster
+    if raster is not None:
+        console.print(
+            f"  wrote [bold]{result.run_dir / 'morphometrics.tif'}[/bold] "
+            f"({raster['n_rows']}x{raster['n_cols']}, {raster['resolution_m']:g} m)",
+            soft_wrap=True,
+        )
 
 
 def _load_settings(*, run_id: str | None, create: bool) -> Settings:

@@ -156,6 +156,14 @@ release, the resolved versions of `momepy`/`neatnet`/`geopandas`, the cleaning r
 counts **and footprint areas** in and out of every operation, the height-tier distribution, the
 extent and the coordinate system. A run can be traced back to what produced it.
 
+`--morphometrics` adds `morphometrics.parquet` — 107 2D urban-morphometric attributes (Majer &
+Fleischmann, 2026) computed over building-level tessellation cells, a separate table from
+`units.parquet` since the two are keyed on different, differently-scaled units and morphometrics
+is a descriptive output rather than classifier input. `--morphometrics-resolution METRES` also
+writes `morphometrics.tif`, one band per attribute, area-weighted onto a regular grid; regenerate
+it later at a different resolution with `lczkit morphometrics raster <run_dir> --resolution`. Off
+by default.
+
 ## What it will not tell you
 
 Stated here rather than in a footnote, because several of these bound every number the package

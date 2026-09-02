@@ -1629,6 +1629,129 @@ class ValidationConfig(BaseModel):
         return self
 
 
+class MorphometricsConfig(BaseModel):
+    """Configuration for the 2D urban-morphometrics stage (Majer & Fleischmann 2026).
+
+    Off by default, like `ClassificationConfig.modal_filter` and the WUDAPT QC gate: this is a
+    new whole-extent operation computed on a finer unit set (enclosed tessellation cells) than
+    the pipeline's classification units, and it ships opt-in until its scaling is measured on a
+    real extent — not because it is expected to be wrong, but because the project's standing rule
+    against shipping an unmeasured whole-extent operation as a default applies to it precisely.
+
+    Output is a wholly separate run artefact (`morphometrics.parquet`, and `morphometrics.tif` if
+    `raster_resolution_m` is set) — never joined to `units.parquet` or fed into classification.
+    """
+
+    enabled: bool = False
+
+    tessellation_shrink: float = 0.4
+    """Passed straight through to `momepy.enclosed_tessellation`; momepy's own default."""
+
+    tessellation_segment: float = 0.5
+    """Passed straight through to `momepy.enclosed_tessellation`; momepy's own default."""
+
+    tessellation_threshold: float | None = 0.05
+    """Passed straight through to `momepy.enclosed_tessellation`; momepy's own default."""
+
+    building_neighborhood_distances_m: list[float] = Field(
+        default_factory=lambda: [20.0, 100.0, 200.0]
+    )
+    """Distance-band neighbourhoods for building-scale metrics — the paper's own scales."""
+
+    building_knn_values: list[int] = Field(default_factory=lambda: [10, 20, 30])
+    """Nearest-neighbour counts for building-scale mean-distance metrics — the paper's own
+    scales."""
+
+    etc_topological_steps: list[int] = Field(default_factory=lambda: [1, 2, 3])
+    """Fuzzy-contiguity neighbourhood depths for ETC-scale metrics — the paper's own scales."""
+
+    street_node_radii_m: list[float] = Field(default_factory=lambda: [5.0, 400.0])
+    """Network-distance radii for the node/edge connectivity metrics. See
+    `lczkit.morphometrics.streets` for why these are read as network distance
+    (`distance="mm_len"`) rather than as topological hops."""
+
+    street_profile_distance_m: float = 10.0
+    """Mirrors `UcpConfig.street_profile_distance_m`, kept as a separate field rather than shared:
+    this stage's street profile always runs on 2D geometry alone (no `height` argument), and a
+    caller tuning one should not silently retune the other."""
+
+    street_profile_tick_length_m: float = 50.0
+    """See `street_profile_distance_m`."""
+
+    contextual: bool = False
+    """The opt-in 25th/50th/75th-percentile expansion to up to 321 attributes. Off by default:
+    a config flag, not a second code path chosen by extent size. Primary attributes are kept
+    when this is enabled — unlike the paper, which drops them once the expansion is computed."""
+
+    contextual_steps: int = 3
+    contextual_quantiles: list[int] = Field(default_factory=lambda: [25, 50, 75])
+
+    max_tessellation_cells: int = 50_000
+    """Refuse the stage rather than let it run for hours, per `scripts/morphometrics_scaling.py`'s
+    measurement on four concentric Berlin extents (1/4/9/16 km²): the primary-attribute stage
+    took 51 s at 5 406 ETCs and **1 029 s at 12 322** — a ~20x time increase for 2.3x more cells,
+    reproduced in an isolated re-run to rule out measurement noise from a concurrent process.
+    momepy's own `weighted_character`/`percentile` warn they are markedly slower without `numba`
+    (not currently an lczkit dependency), which is the most likely mechanism; a 16 km² extent also
+    had ~10x more enclosures than the three smaller ones, a plausible correlate not yet isolated
+    as a cause. Set well below the largest measured point rather than extrapolated from it — this
+    project's own history is that power-law extrapolations from small extents run optimistic."""
+
+    max_contextual_cells: int = 20_000
+    """A second, tighter ceiling than `max_tessellation_cells`, same reasoning: the higher-order
+    contiguity graph the contextual expansion runs `momepy.percentile` over is denser than the
+    base tessellation graph, once per primary attribute, and the primary stage's own measured
+    superlinearity has not been separately re-measured for this one."""
+
+    raster_resolution_m: float | None = None
+    """`None` disables raster generation at run time. Set via `--morphometrics-resolution`, or
+    regenerate later at a different resolution with `lczkit morphometrics raster`."""
+
+    max_raster_cells: int = 50_000_000
+    """Mirrors `LandCoverConfig.max_raster_cells`: refuses a resolution whose grid would be
+    unreasonably large for the extent, rather than silently taking minutes and gigabytes."""
+
+    @model_validator(mode="after")
+    def _check(self) -> MorphometricsConfig:
+        if self.tessellation_shrink <= 0 or self.tessellation_segment <= 0:
+            raise ValueError("tessellation_shrink and tessellation_segment must be positive")
+        if (
+            self.tessellation_threshold is not None
+            and not 0.0 <= self.tessellation_threshold <= 1.0
+        ):
+            raise ValueError(
+                f"tessellation_threshold must be in [0, 1] or None, got "
+                f"{self.tessellation_threshold}"
+            )
+        for name, values in (
+            ("building_neighborhood_distances_m", self.building_neighborhood_distances_m),
+            ("building_knn_values", self.building_knn_values),
+            ("etc_topological_steps", self.etc_topological_steps),
+            ("street_node_radii_m", self.street_node_radii_m),
+            ("contextual_quantiles", self.contextual_quantiles),
+        ):
+            if not values:
+                raise ValueError(f"{name} must not be empty")
+            if any(v <= 0 for v in values):
+                raise ValueError(f"{name} must be positive, got {values}")
+        if self.contextual_steps < max(self.etc_topological_steps):
+            raise ValueError(
+                "contextual_steps must be at least the largest etc_topological_steps entry "
+                f"({max(self.etc_topological_steps)}), got {self.contextual_steps} — a contextual "
+                "expansion narrower than a primary attribute's own highest-order weighting would "
+                "be an inconsistent configuration"
+            )
+        if self.raster_resolution_m is not None and self.raster_resolution_m <= 0:
+            raise ValueError(
+                f"raster_resolution_m must be positive, got {self.raster_resolution_m}"
+            )
+        if self.max_tessellation_cells <= 0 or self.max_contextual_cells <= 0:
+            raise ValueError("max_tessellation_cells and max_contextual_cells must be positive")
+        if self.max_raster_cells <= 0:
+            raise ValueError(f"max_raster_cells must be positive, got {self.max_raster_cells}")
+        return self
+
+
 class Settings(BaseModel):
     """Resolved configuration for a single lczkit run.
 
@@ -1640,6 +1763,7 @@ class Settings(BaseModel):
     run_id: str = Field(default_factory=_default_run_id)
     overture: OvertureConfig = Field(default_factory=OvertureConfig)
     cleaning: CleaningConfig = Field(default_factory=CleaningConfig)
+    morphometrics: MorphometricsConfig = Field(default_factory=MorphometricsConfig)
     heights: HeightConfig = Field(default_factory=HeightConfig)
     height_products: HeightProductsConfig = Field(default_factory=HeightProductsConfig)
     land_cover: LandCoverConfig = Field(default_factory=LandCoverConfig)

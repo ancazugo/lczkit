@@ -52,3 +52,12 @@ every per-unit area statistic in the package is built from, and which five near-
 helpers each carried a copy of.
 
 ::: lczkit.units.overlay
+
+## Tessellation
+
+A fourth strategy, built for [`lczkit.morphometrics`](morphometrics.md) rather than for
+classification: one polygon per building (an "enclosed tessellation cell"), not a partition of the
+bounding box — cells with no parent building are dropped, following Majer & Fleischmann (2026).
+Deliberately not reachable via `UnitsConfig.strategy`; see the module docstring for why.
+
+::: lczkit.units.tessellation
