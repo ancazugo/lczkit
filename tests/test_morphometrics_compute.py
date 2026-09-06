@@ -8,6 +8,7 @@ this test a second copy of the implementation.
 
 from __future__ import annotations
 
+import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pytest
@@ -91,6 +92,35 @@ def test_higher_order_is_inclusive_of_lower_orders(etc_and_buildings) -> None:
     two_step = graphs.etc_higher_order(base, 2)
     assert one_step.n_edges == base.n_edges
     assert two_step.n_edges >= one_step.n_edges
+
+
+def test_building_knn_survives_two_buildings_sharing_a_centroid(etc_and_buildings) -> None:
+    """libpysal's `build_knn` refuses coplanar points by default, taking the whole stage with it.
+
+    Found on real Overture data, not on a fixture: a 9 km² window over central Nairobi holds
+    8 014 buildings at 8 013 unique centroids, and that single duplicate pair raised
+    `CoplanarError` out of `compute_morphometrics`. Concentric footprints do occur, so this is a
+    property of real building data rather than of one city.
+    """
+    _, buildings = etc_and_buildings
+    duplicated = gpd.GeoDataFrame(
+        geometry=list(buildings.geometry) + [buildings.geometry.iloc[0]],
+        crs=buildings.crs,
+    )
+    graph = graphs.building_knn(duplicated, 10)
+    assert graph.n_nodes == len(duplicated)
+
+
+def test_building_knn_is_unchanged_where_no_centroids_coincide(etc_and_buildings) -> None:
+    """The coplanar handling must not move any value on ordinary input — it is a fallback for a
+    degenerate case, not a change of definition."""
+    from libpysal.graph import Graph
+
+    _, buildings = etc_and_buildings
+    centroids = buildings.geometry.centroid
+    assert graphs.building_knn(buildings, 10).adjacency.equals(
+        Graph.build_knn(centroids, k=10).adjacency
+    )
 
 
 def test_granularity_graph_includes_the_focal_cell(etc_and_buildings) -> None:
@@ -215,6 +245,7 @@ def test_distribution_metrics_shape_and_coverage_ratio(
         etc,
         cleaned.streets,
         building_contiguity=bc,
+        building_tessellation_adjacency=graphs.tessellation_adjacency_by_building(etc, buildings),
         building_adjacency_neighborhood=b200,
         building_w100m=b100,
         building_w200m=b200,
@@ -232,6 +263,65 @@ def test_distribution_metrics_shape_and_coverage_ratio(
     coverage = result["coverage_area_ratio_etc"].dropna()
     assert (coverage >= 0.0).all()
     assert (coverage <= 1.05).mean() > 0.9
+
+
+def test_mean_interbuilding_distance_is_a_distance_and_not_a_column_of_zeros(
+    etc_and_buildings, cleaned: CleanedVectors
+) -> None:
+    """The metric needs *tessellation* adjacency; building contiguity makes it identically zero.
+
+    momepy documents `adjacency_graph` as "a contiguity graph derived from tessellation cells
+    linked to buildings". Passing building-footprint queen contiguity instead satisfies the type
+    and destroys the quantity: footprints in the area-preserving layer mostly do not touch, so on
+    this fixture that graph leaves 2 975 of 5 448 buildings isolated and every value comes back
+    0.0 — against 23 128 edges, 12 isolates and a 10.06 m median from the documented graph.
+
+    Asserting "not entirely null" is what let that ship: an identically-zero column is not null.
+    This asserts the column *varies* and is positive somewhere, which zero cannot satisfy.
+    """
+    etc, buildings = etc_and_buildings
+    result = distribution_metrics(
+        buildings,
+        etc,
+        cleaned.streets,
+        building_contiguity=graphs.building_contiguity(buildings),
+        building_tessellation_adjacency=graphs.tessellation_adjacency_by_building(etc, buildings),
+        building_adjacency_neighborhood=graphs.building_distance_band(buildings, 200),
+        building_w100m=graphs.building_distance_band(buildings, 100),
+        building_w200m=graphs.building_distance_band(buildings, 200),
+        building_distance_bands={
+            "20m": graphs.building_distance_band(buildings, 20),
+            "100m": graphs.building_distance_band(buildings, 100),
+            "200m": graphs.building_distance_band(buildings, 200),
+        },
+        building_knn={f"knn{k}": graphs.building_knn(buildings, k) for k in (10, 20, 30)},
+        etc_higher_order={
+            steps: graphs.etc_higher_order(graphs.etc_contiguity(etc), steps) for steps in (1, 2, 3)
+        },
+    )
+
+    values = result["mean_interbuilding_distance_200m"].dropna()
+    assert len(values) > 0
+    assert (values >= 0.0).all(), "a distance cannot be negative"
+    assert values.max() > 0.0, "identically zero — the adjacency graph has no edges to measure"
+    assert values.nunique() > 1, "constant — carries no information as a model feature"
+
+
+def test_the_tessellation_adjacency_graph_is_denser_than_building_contiguity(
+    etc_and_buildings,
+) -> None:
+    """The measurement the graph choice rests on, pinned so a revert is visible.
+
+    Cells tile their enclosure and therefore touch; footprints largely do not. If these two ever
+    come out comparable, the premise of `tessellation_adjacency_by_building` has changed.
+    """
+    etc, buildings = etc_and_buildings
+    footprints = graphs.building_contiguity(buildings)
+    cells = graphs.tessellation_adjacency_by_building(etc, buildings)
+
+    assert cells.n_edges > 3 * footprints.n_edges
+    assert (cells.cardinalities == 0).sum() < (footprints.cardinalities == 0).sum() / 10
+    assert list(cells.unique_ids) == list(buildings.index), "must carry the building index"
 
 
 # --------------------------------------------------------------------------------------------

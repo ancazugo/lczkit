@@ -85,15 +85,45 @@ class RasterExportReport:
     where `out_path` itself (known to the caller) is the whole answer."""
 
 
+def _snap(
+    bounds: tuple[float, float, float, float],
+    resolution_m: float,
+    origin: tuple[float, float],
+) -> tuple[float, float, float, float]:
+    """`bounds` grown outward to the pixel lattice anchored at `origin` (an x, top-y pair).
+
+    Growing rather than rounding: the returned box always contains the input, so no data falls
+    outside the grid that gets built over it.
+    """
+    ox, oy = origin
+    minx = ox + math.floor((bounds[0] - ox) / resolution_m) * resolution_m
+    maxx = ox + math.ceil((bounds[2] - ox) / resolution_m) * resolution_m
+    maxy = oy - math.floor((oy - bounds[3]) / resolution_m) * resolution_m
+    miny = oy - math.ceil((oy - bounds[1]) / resolution_m) * resolution_m
+    return (minx, miny, maxx, maxy)
+
+
 def _pixel_grid(
-    bounds: tuple[float, float, float, float], resolution_m: float
+    bounds: tuple[float, float, float, float],
+    resolution_m: float,
+    origin: tuple[float, float] | None = None,
 ) -> tuple[gpd.GeoDataFrame, int, int]:
     """A regular `resolution_m` grid covering `bounds`, one row per pixel, `row`/`col` attached.
 
     Row 0 is the **top** row (highest y), matching `rasterio`'s array convention and
     `rasterio.transform.from_origin`'s own origin-at-top-left contract — so the array this module
     builds from `unit_id -> (row, col)` needs no vertical flip before it is written.
+
+    `origin` anchors the lattice to an external grid instead of to the data's own bounding box.
+    Without it a raster starts wherever the ETC layer happens to end, which is fine for a
+    standalone map and wrong the moment the pixels have to line up with a grid somebody else
+    defined: an existing training grid whose cells must land on whole pixels, or a second run over
+    a neighbouring extent. Measured on a real case — a 1 280 m training grid anchored at
+    x=227744.5668 against a raster starting at its own data bounds — the two lattices sat
+    0.998 px apart in x and 0.286 px in y, enough to misregister every patch cut from it.
     """
+    if origin is not None:
+        bounds = _snap(bounds, resolution_m, origin)
     minx, miny, maxx, maxy = bounds
     n_cols = max(1, math.ceil((maxx - minx) / resolution_m))
     n_rows = max(1, math.ceil((maxy - miny) / resolution_m))
@@ -311,6 +341,7 @@ def rasterize_attributes(
     format: RasterFormat = "gtiff",
     tile_deg: float | None = None,
     max_bytes: int = 4_000_000_000,
+    origin: tuple[float, float] | None = None,
 ) -> RasterExportReport:
     """Write `out_path` as a multiband raster, one band per attribute of `gdf`, area-weighted.
 
@@ -323,6 +354,10 @@ def rasterize_attributes(
     (`lczkit.morphometrics.raster._tile_grid`) instead of one file for the whole extent. Without
     it, `out_path` is the single output file (or, for `format="zarr"`, the single output store
     directory) — the original, still-default behaviour.
+
+    `origin` anchors the pixel lattice to an external grid rather than to `gdf`'s own bounds — see
+    `_pixel_grid`. Pass the top-left corner of the grid the output has to register against; the
+    extent is grown outward to that lattice, never cropped to it.
     """
     assert_projected_crs(gdf, "gdf")
     if resolution_m <= 0:
@@ -334,8 +369,13 @@ def rasterize_attributes(
         columns if columns is not None else [c for c in gdf.columns if c != "geometry"]
     )
 
-    bounds = gdf.total_bounds
-    grid, n_rows, n_cols = _pixel_grid((bounds[0], bounds[1], bounds[2], bounds[3]), resolution_m)
+    raw_bounds = gdf.total_bounds
+    bounds = (
+        _snap((raw_bounds[0], raw_bounds[1], raw_bounds[2], raw_bounds[3]), resolution_m, origin)
+        if origin is not None
+        else (raw_bounds[0], raw_bounds[1], raw_bounds[2], raw_bounds[3])
+    )
+    grid, n_rows, n_cols = _pixel_grid(bounds, resolution_m)
     if n_rows * n_cols > max_cells:
         raise ValueError(
             f"a {resolution_m} m grid over this extent would be {n_rows}x{n_cols} = "

@@ -45,6 +45,7 @@ def compute_morphometrics(
         shrink=config.tessellation_shrink,
         segment=config.tessellation_segment,
         threshold=config.tessellation_threshold,
+        n_jobs=config.tessellation_n_jobs,
     )
     etc = strategy.generate(bbox, barriers)
     assert strategy.report is not None  # generate() always sets it before returning
@@ -58,6 +59,9 @@ def compute_morphometrics(
     matched_buildings = buildings_for_etc(buildings, etc)
 
     building_contiguity = graphs.building_contiguity(matched_buildings)
+    building_tessellation_adjacency = graphs.tessellation_adjacency_by_building(
+        etc, matched_buildings
+    )
     building_distance_bands = {
         f"{int(distance)}m": graphs.building_distance_band(matched_buildings, distance)
         for distance in config.building_neighborhood_distances_m
@@ -84,6 +88,7 @@ def compute_morphometrics(
         etc,
         streets,
         building_contiguity=building_contiguity,
+        building_tessellation_adjacency=building_tessellation_adjacency,
         building_adjacency_neighborhood=building_distance_bands["200m"],
         building_w100m=building_distance_bands["100m"],
         building_w200m=building_distance_bands["200m"],

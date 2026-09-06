@@ -178,6 +178,13 @@ class OvertureSource:
         self._release = release
         self._cache_dir = settings.source_dir(settings.overture.source_dir_name)
         self._con = duckdb.connect(":memory:")
+        threads = settings.overture.duckdb_threads
+        if threads is not None:
+            # Set before anything else runs, so no statement below is planned against a wider
+            # pool. DuckDB sizes its threads from the host and reads none of the OpenMP/BLAS
+            # variables the pooled workers pin, so without this a worker count is not a CPU
+            # budget — see `OvertureConfig.duckdb_threads`.
+            self._con.execute(f"SET threads = {int(threads)};")
         self._con.execute("INSTALL spatial; LOAD spatial; INSTALL httpfs; LOAD httpfs;")
         self._con.execute(f"SET s3_region = '{_S3_REGION}';")
         _silence_progress_bar(self._con)

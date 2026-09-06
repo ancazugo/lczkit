@@ -155,6 +155,34 @@ def test_tiling_drops_tiles_with_no_real_data(tmp_path: Path) -> None:
     assert len(report.tiles) == 1
 
 
+def test_origin_anchors_the_pixel_lattice_to_an_external_grid(tmp_path: Path) -> None:
+    """Without `origin` the lattice starts at the data's own bounds, which lands off any grid
+    somebody else defined. Measured on the real case this was built for: a 1 280 m training grid
+    anchored at a non-round easting sat 0.998 px from a raster started at its data bounds — enough
+    to misregister every patch cut from it.
+    """
+    origin = (1234.5678, 98765.4321)  # deliberately off any round lattice
+    rasterize_attributes(_TWO_CELL, 10.0, tmp_path / "free.tif")
+    rasterize_attributes(_TWO_CELL, 10.0, tmp_path / "anchored.tif", origin=origin)
+
+    with rasterio.open(tmp_path / "anchored.tif") as anchored:
+        assert (anchored.transform.c - origin[0]) % 10.0 == pytest.approx(0.0, abs=1e-9)
+        assert (origin[1] - anchored.transform.f) % 10.0 == pytest.approx(0.0, abs=1e-9)
+
+    with rasterio.open(tmp_path / "free.tif") as free:
+        assert (free.transform.c - origin[0]) % 10.0 != pytest.approx(0.0, abs=1e-9)
+
+
+def test_an_anchored_grid_still_covers_every_input_geometry(tmp_path: Path) -> None:
+    """Snapping grows the extent outward, never crops it — so anchoring cannot drop data."""
+    origin = (7.5, 99999.5)
+    rasterize_attributes(_TWO_CELL, 10.0, tmp_path / "anchored.tif", origin=origin)
+    with rasterio.open(tmp_path / "anchored.tif") as src:
+        left, bottom, right, top = src.bounds
+        minx, miny, maxx, maxy = _TWO_CELL.total_bounds
+        assert left <= minx and bottom <= miny and right >= maxx and top >= maxy
+
+
 def test_byte_ceiling_refuses_before_allocating(tmp_path: Path) -> None:
     # The two-cell layer at 10 m resolution needs 1 x 2 x 4 = 8 bytes; below that is refused.
     with pytest.raises(ValueError, match="max_raster_bytes"):

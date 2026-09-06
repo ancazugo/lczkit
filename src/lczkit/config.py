@@ -33,6 +33,19 @@ class OvertureConfig(BaseModel):
     directory already used by other projects sharing `DATA_DIR`, rather than the plain
     "Overture"."""
 
+    duckdb_threads: int | None = None
+    """Threads each `OvertureSource`'s DuckDB connection may use. `None` leaves DuckDB's own
+    default, which is the machine's core count.
+
+    This is the only CPU knob in the package that a worker pool does not already control.
+    `OMP_NUM_THREADS=1` — pinned in every pooled worker since the `forkserver` adoption — governs
+    OpenMP, MKL and OpenBLAS and DuckDB reads none of them: it sizes its own pool from the host.
+    So a run with N workers uses N x (host cores) threads during ingestion rather than N, and on a
+    shared machine a worker count is not a CPU budget unless this is set alongside it. Measured on
+    this project's own multi-city extraction: one un-pinned prefetch process sat at 672% CPU, or
+    roughly seven cores, for its whole run.
+    """
+
 
 class CleaningConfig(BaseModel):
     """Configurable thresholds for the building-cleaning pipeline.
@@ -1664,6 +1677,17 @@ class MorphometricsConfig(BaseModel):
 
     tessellation_threshold: float | None = 0.05
     """Passed straight through to `momepy.enclosed_tessellation`; momepy's own default."""
+
+    tessellation_n_jobs: int = -1
+    """Processes `momepy.enclosed_tessellation` may use. `-1` is momepy's own default: a
+    `joblib`/`loky` pool over every core on the host.
+
+    Set it to `1` whenever this stage runs inside a process pool of your own. The nesting is not
+    visible from either side and none of the `OMP_NUM_THREADS`/`MKL`/`OpenBLAS` pinning applies —
+    those cap threads within a process, while this spawns processes. Measured on a multi-city
+    driver: 8 workers against a stated 16-core budget produced **2 923 processes and ~70 cores**
+    on a 256-core shared node.
+    """
 
     building_neighborhood_distances_m: list[float] = Field(
         default_factory=lambda: [20.0, 100.0, 200.0]

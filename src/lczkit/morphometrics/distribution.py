@@ -21,6 +21,7 @@ def distribution_metrics(
     streets: gpd.GeoDataFrame,
     *,
     building_contiguity: Graph,
+    building_tessellation_adjacency: Graph,
     building_adjacency_neighborhood: Graph,
     building_w100m: Graph,
     building_w200m: Graph,
@@ -31,7 +32,10 @@ def distribution_metrics(
     """The 23 Spatial Distribution & Intensity columns, indexed like `buildings`/`etc` (`unit_id`).
 
     `building_adjacency_neighborhood` is the 200 m distance-band graph both `building_adjacency`
-    and `mean_interbuilding_distance` read as their neighbourhood extent.
+    and `mean_interbuilding_distance` read as their neighbourhood extent. The two differ in what
+    they take as *adjacency*: `building_contiguity` for the first, as its docstring asks, and
+    `building_tessellation_adjacency` for the second, which momepy documents as tessellation-cell
+    contiguity and which is the difference between a real distance and a column of zeros.
     `building_distance_bands` and `building_knn` key on the paper's own labels (`"20m"`, `"100m"`,
     `"200m"`, `"knn10"`, `"knn20"`, `"knn30"`); `etc_higher_order` keys on the step count
     (`1`, `2`, `3`), already expanded via `lczkit.morphometrics.graphs.etc_higher_order`.
@@ -42,8 +46,14 @@ def distribution_metrics(
         "building_adjacency_200m": momepy.building_adjacency(
             building_contiguity, building_adjacency_neighborhood
         ),
+        # `building_tessellation_adjacency`, not `building_contiguity`. momepy documents this
+        # argument as tessellation-cell contiguity linked to buildings, and the distinction is not
+        # cosmetic: footprints in the area-preserving layer mostly do not touch, so passing their
+        # queen contiguity leaves 55% of buildings isolated and the metric identically 0.0 on
+        # every input. `building_adjacency` above keeps the building graph, which is what *its*
+        # docstring asks for — one graph, two metrics, and only one of them wanted it.
         "mean_interbuilding_distance_200m": momepy.mean_interbuilding_distance(
-            buildings, building_contiguity, building_adjacency_neighborhood
+            buildings, building_tessellation_adjacency, building_adjacency_neighborhood
         ),
         "shared_walls_building": momepy.shared_walls(buildings),
     }

@@ -243,3 +243,29 @@ def test_water_excludes_configured_subtypes(tmp_path: Path) -> None:
     assert not (seen_subtypes & excluded)
     assert (waterlines.geometry.geom_type.isin(["LineString", "MultiLineString"])).all()
     assert (waterbodies.geometry.geom_type.isin(["Polygon", "MultiPolygon"])).all()
+
+
+def test_duckdb_threads_defaults_to_duckdbs_own_choice(tmp_path: Path) -> None:
+    """Unset means "leave DuckDB alone", so no existing run's behaviour moves."""
+    settings = _settings(tmp_path)
+    assert settings.overture.duckdb_threads is None
+    source = OvertureSource(settings)
+    default = source._con.execute("SELECT current_setting('threads')").fetchone()
+    assert default is not None
+    assert int(default[0]) >= 1
+
+
+def test_duckdb_threads_caps_the_connections_pool(tmp_path: Path) -> None:
+    """The one CPU knob a worker pool does not already control.
+
+    `OMP_NUM_THREADS=1` is pinned in every pooled worker and DuckDB reads none of those
+    variables — it sizes its pool from the host — so without this a worker count is not a CPU
+    budget. Asserted against a value below any plausible host core count, so the test cannot
+    pass by coincidence on a small machine.
+    """
+    settings = _settings(tmp_path)
+    settings.overture.duckdb_threads = 2
+    source = OvertureSource(settings)
+    row = source._con.execute("SELECT current_setting('threads')").fetchone()
+    assert row is not None
+    assert int(row[0]) == 2

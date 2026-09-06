@@ -80,3 +80,35 @@ def test_duplicate_building_identifiers_still_yield_unique_unit_ids(
 
     check_units(units)
     assert units.index.is_unique
+
+
+def test_a_non_areal_building_is_filtered_consistently(cleaned: CleanedVectors) -> None:
+    """`generate` and `buildings_for_etc` must drop the same rows, or the reindex raises.
+
+    Adding the areal filter to `buildings_for_etc` alone produced
+    `KeyError: ['etc_bld_15343', ...] not in index` on real Overture data over Salvador: the
+    tessellation had made cells for buildings the reindex then refused to look up. One filter,
+    used by both.
+    """
+    import geopandas as gpd
+    import pandas as pd
+    from shapely.geometry import Point
+
+    from lczkit.units.tessellation import buildings_for_etc, usable_buildings
+
+    buildings = cleaned.buildings_area
+    stray = buildings.iloc[:1].copy()
+    stray = stray.set_geometry([Point(*buildings.geometry.iloc[0].centroid.coords[0])])
+    polluted = gpd.GeoDataFrame(
+        pd.concat([buildings, stray]), geometry="geometry", crs=buildings.crs
+    )
+
+    assert len(usable_buildings(polluted)) == len(usable_buildings(buildings))
+
+    strategy = TessellationUnits(buildings=polluted)
+    etc = strategy.generate(
+        HONGKONG_SMALL_BBOX, assemble_barriers(cleaned.streets, cleaned.waterbodies)
+    )
+    # The reindex is what the KeyError came out of; it must simply work.
+    matched = buildings_for_etc(polluted, etc)
+    assert len(matched) == len(etc)

@@ -90,6 +90,29 @@ def building_ids(buildings: gpd.GeoDataFrame) -> pd.Series:
     return base.where(order == 0, base + "_" + order.astype(str))
 
 
+def usable_buildings(buildings: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """`buildings` restricted to the rows the morphometrics stage can actually compute on.
+
+    **One definition, used by both `TessellationUnits.generate` and `buildings_for_etc`, because
+    the two must agree exactly.** `generate` decides which buildings get a tessellation cell and
+    `buildings_for_etc` reindexes buildings onto those cells, so a row either passes both filters
+    or neither. Filtering in only one of them raises
+    `KeyError: [...] not in index` from the reindex — met on real Overture data over Salvador,
+    when the areal filter below was added to `buildings_for_etc` alone.
+
+    Areal geometries only, beyond the ordinary null/empty check.
+    `libpysal.graph.Graph.build_contiguity` refuses anything outside
+    {LineString, Polygon, MultiLineString, MultiPolygon} outright, so one stray point or
+    GeometryCollection surviving cleaning takes the whole stage down with `ValueError: This Graph
+    type is only well-defined for geom_types: ...`. Dropped here rather than guarded at each graph
+    call site, since every building-level metric in `lczkit.morphometrics` reads this frame and
+    none of them is defined on a point either.
+    """
+    geometry = buildings.geometry
+    areal = geometry.geom_type.isin(("Polygon", "MultiPolygon"))
+    return buildings.loc[geometry.notna() & ~geometry.is_empty & areal]
+
+
 def buildings_for_etc(buildings: gpd.GeoDataFrame, etc: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """`buildings`, filtered to those with a matching ETC and reindexed onto `etc`'s `unit_id`.
 
@@ -100,7 +123,7 @@ def buildings_for_etc(buildings: gpd.GeoDataFrame, etc: gpd.GeoDataFrame) -> gpd
     """
     assert_projected_crs(buildings, "buildings")
     assert_projected_crs(etc, "etc")
-    valid = buildings.loc[buildings.geometry.notna() & ~buildings.geometry.is_empty]
+    valid = usable_buildings(buildings)
     keyed = valid.set_axis(pd.Index("etc_" + building_ids(valid).to_numpy(), name="unit_id"))
     # `etc.index` may hold repeats where `TessellationUnits` disambiguated a duplicate parent id
     # (`etc_<id>_1`, ...); `keyed`'s own duplicate suffixes were built the same way from the same
@@ -127,6 +150,7 @@ class TessellationUnits:
         shrink: float = DEFAULT_SHRINK,
         segment: float = DEFAULT_SEGMENT,
         threshold: float | None = DEFAULT_THRESHOLD,
+        n_jobs: int = -1,
     ) -> None:
         """Set the building layer tessellation is generated from, and momepy's own tuning knobs.
 
@@ -134,11 +158,22 @@ class TessellationUnits:
         the area-preserving layer, matching every other area statistic in this package.
         `shrink`/`segment`/`threshold` are passed straight through to
         `momepy.enclosed_tessellation`; the defaults are momepy's own.
+
+        **`n_jobs` matters far more than its momepy default suggests, and it is the one knob a
+        caller running its own process pool must set.** `momepy.enclosed_tessellation` defaults
+        to `n_jobs=-1` and starts a `joblib`/`loky` pool over *every core on the host* — right
+        for a single run that owns the machine, and catastrophic one level down. A multi-city
+        driver with 8 worker processes measured **2 923 processes and ~70 cores against a
+        16-core budget**, on a 256-core shared node whose load average reached 428. None of the
+        `OMP_NUM_THREADS`/`MKL`/`OpenBLAS` pinning touches it: those cap *threads* inside a
+        process, and this is a nested pool of *processes*. Pass `n_jobs=1` when calling from
+        inside a pool of your own; the default is left at momepy's so no existing run changes.
         """
         assert_projected_crs(buildings, "buildings")
         self.buildings = buildings
         self.shrink = shrink
         self.segment = segment
+        self.n_jobs = n_jobs
         self.threshold = threshold
         self.report: TessellationReport | None = None
 
@@ -159,9 +194,7 @@ class TessellationUnits:
         """
         enclosures = EnclosureUnits().generate(bbox, barriers)
 
-        buildings = self.buildings.loc[
-            self.buildings.geometry.notna() & ~self.buildings.geometry.is_empty
-        ]
+        buildings = usable_buildings(self.buildings)
         source_ids = building_ids(buildings)
         # Positional reset: `enclosed_tessellation` requires a unique non-negative integer index,
         # and its result is indexed by that same integer — `source_ids` stays aligned to it by
@@ -179,6 +212,7 @@ class TessellationUnits:
             shrink=self.shrink,
             segment=self.segment,
             threshold=self.threshold,
+            n_jobs=self.n_jobs,
         )
         matched = tess.loc[tess.index >= 0]
         n_excluded = len(tess) - len(matched)
