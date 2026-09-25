@@ -92,8 +92,11 @@ def test_known_limitations_reach_the_manifest_as_data() -> None:
     manifest. A docstring satisfies the first and not the second."""
     limitations = dict(LIMITATIONS)
 
-    assert "industrial_fraction" in limitations
-    assert "warehouse" in limitations["industrial_fraction"]
+    assert "industrial_fraction_of_building_area, industrial_fraction_of_unit_area" in limitations
+    assert (
+        "warehouse"
+        in limitations["industrial_fraction_of_building_area, industrial_fraction_of_unit_area"]
+    )
     assert any(name in key for key in limitations for name in SECONDARY)
     for name, text in limitations.items():
         assert len(text) > 120, name

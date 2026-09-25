@@ -241,7 +241,7 @@ class OvertureSource:
         """Land-use polygons intersecting `bbox`. Columns: `id`, `subtype`, `class`.
 
         Functional semantics only — this layer exists to supply the industrial share of a unit's
-        area, which is `industrial_fraction` and which the LCZ 8/10 rule reads.
+        area, which is the industrial shares the LCZ 10 rule reads.
         It is **not** a barrier for spatial-unit generation and **not** a land-cover source;
         rasters own land cover.
 

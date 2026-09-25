@@ -46,11 +46,8 @@ MANIFEST_FILE = "manifest.json"
 LAYERS_DIR = "layers"
 
 MORPHOMETRICS_FILE = "morphometrics.parquet"
-"""The Phase 29 morphometrics vector output — ETC geometry plus attributes, keyed by its own
-`unit_id` scheme (`etc_<building id>`). Never merged into `units.parquet`: ETCs are a finer,
-differently-indexed unit set than whatever the run's classification units are, and morphometrics
-is a descriptive output, not classifier input. Written beside `units.parquet` the same way
-`layers/buildings.parquet` sits beside it without being joined into the classification table."""
+"""The morphometrics output: tessellation cells and their attributes, keyed by their own
+`unit_id`. Never merged into `units.parquet`; it is descriptive, not classifier input."""
 
 GPKG_FILE = "units.gpkg"
 GPKG_LAYER = "units"

@@ -1,39 +1,22 @@
-"""The two rules that sit outside the distance metric, and why each has to.
+"""The rules that sit outside the distance metric.
 
-Both exist because a dimension the LCZ scheme depends on is not in the parameter vector.
+Each exists because a dimension the LCZ scheme needs is not in the parameter vector.
 
-**The family gate.** Stewart & Oke separate LCZ A, B, C and D by sky view factor, aspect ratio and
-height of roughness elements alone - all three building-derived, all three null or zero in open
-ground - so once a unit has no buildings the natural classes collapse onto one point and the
-built ones are the only thing left with any spread. Bernard et al. (2024) avoid this by deciding
-land cover first and running the closest-distance approach only over the built types (Sect. 2.3,
-Figs. 2-3). The gate is the same idea in one threshold: below a building surface fraction the
-published table itself treats as the built/natural boundary, a unit is compared against the
-natural prototypes and never against the built ones.
+**The family gate.** Where nothing is built, Stewart & Oke's natural classes differ only by
+building-derived properties, so the built and natural types are compared in separate families. A
+unit below the building surface fraction the published table itself uses as the built/natural
+boundary is compared against the natural prototypes only (Bernard et al. 2024, Sect. 2.3).
 
-**LCZ 10.** Large low-rise and heavy industry are geometrically near-identical - large footprint,
-low, sparse - and the only published property separating them is anthropogenic heat output, at 300+
-W m-2 against at most 50, which nothing in open vector or raster data measures. So a functional
-attribute has to break the tie. It is applied *after* the distance and never folded into the
-metric, where a functional attribute would silently distort every other class.
+**Functional assignment.** LCZ 10 and LCZ 8 are geometrically near-identical; only anthropogenic
+heat separates them, which open data does not measure. Following Bernard et al. (2024), LCZ 10
+leaves the distance metric and is assigned from the industrial share instead. A pair-gated
+morphological rule was measured inert on Rotterdam at every threshold from 0.05 to 0.5: port plots
+are sparsely built and land on LCZ 9. The semantic rules (`SemanticRuleConfig`) use the same
+mechanism. LCZ 8 stays in the metric, a deliberate divergence from Bernard, because its large, low,
+sparse form is genuinely morphological.
 
-**The rule is functional, not a pair gate, and the difference was measured.** The original design
-swapped LCZ 10 in only where it was already the runner-up behind LCZ 8. That was **measured inert
-on the Rotterdam fixture at every threshold from 0.05 to 0.5**: 671 cells of working port, 254
-industrial buildings, three quarters of cells over 90% industrial by area, 88 placed in LCZ 10 by
-the reference - and the pair never opened once. Port plots are large and sparsely built, so
-building surface fraction lands them on LCZ 9 and LCZ 10 is nowhere near second. The threshold was
-never the binding constraint, so no amount of tuning it could have helped.
-
-Following Bernard et al. (2024), LCZ 10 is therefore **removed from the distance metric entirely**
-and assigned functionally. Its distance is still computed and reported in the seventeen-way vector
-- the vector is always complete, and a class that is unreachable *by selection* is exactly what
-the manifest's `unreachable_classes` field exists to record - but it can no longer win an
-argmin, so the only route to LCZ 10 is the industrial evidence.
-
-Note the asymmetry with LCZ 8, which is a deliberate divergence from Bernard, who excludes both.
-LCZ 8's defining character - large, low, sparse buildings - is genuinely morphological, so it stays
-in the metric. Excluding it would leave it assignable only functionally, which is worse.
+A functionally assigned unit keeps the displaced label as `lcz_secondary` and a null
+`min_distance`, since the assigned class was not reached by distance.
 """
 
 from __future__ import annotations
@@ -45,9 +28,6 @@ import numpy as np
 import pandas as pd
 
 from lczkit.config import SemanticRuleConfig
-
-Family = str
-"""`"built"` or `"natural"`."""
 
 BUILT = "built"
 NATURAL = "natural"
@@ -110,6 +90,21 @@ class Ranked:
     runner_up: pd.Series
 
 
+def _relabel(ranked: Ranked, fires: pd.Series, code: int) -> Ranked:
+    """Assign `code` where `fires`, keeping the displaced label as `secondary`.
+
+    `runner_up` moves with the displaced label so it stays the distance to `secondary`, and
+    `closest` goes null: the assigned class was not reached by distance, so no distance to it is
+    defined.
+    """
+    return Ranked(
+        primary=ranked.primary.where(~fires, code),
+        secondary=ranked.secondary.where(~fires, ranked.primary),
+        closest=ranked.closest.where(~fires),
+        runner_up=ranked.runner_up.where(~fires, ranked.closest),
+    )
+
+
 def apply_lcz10_rule(
     ranked: Ranked,
     industrial_fraction: pd.Series,
@@ -117,40 +112,13 @@ def apply_lcz10_rule(
     *,
     lcz10: int = 10,
 ) -> tuple[Ranked, pd.Series]:
-    """Assign LCZ 10 wherever the industrial evidence exceeds `threshold`, whatever the morphology.
+    """Assign LCZ 10 wherever the industrial share exceeds `threshold`, whatever the morphology.
 
-    Functional assignment, not a swap between two candidates the metric already liked. LCZ 10 is
-    not in the built prototype set at all, so this is the only thing that can produce it: a unit
-    over the threshold becomes LCZ 10 regardless of where the distance placed it, which is the
-    point - the measured failure of the previous rule was that the port cells it was meant to
-    catch were nowhere near LCZ 10 in the metric.
-
-    The displaced morphological answer is preserved as `secondary`, so the output still says
-    precisely what would have been emitted without the industrial evidence, and `runner_up` moves
-    with it - it becomes the distance to that displaced class, keeping the invariant that
-    `runner_up` is the distance to `secondary`.
-
-    `closest` becomes null for a fired unit. LCZ 10 is outside the metric, so no distance to it is
-    defined, and carrying the displaced class's distance under a column called `min_distance` would
-    be a quiet lie about a label that was never measured by distance at all. `uniqueness` follows
-    the same null: a margin between the two nearest prototypes is a property of the metric, and a
-    functional assignment did not come from it.
-
-    A null `industrial_fraction` never fires the rule. The unit-area share is 0.0 rather than null
-    where there is no evidence, so a null means either that the layer was missing entirely or -
-    for the building-area share, which is the default column - that the unit holds no buildings to
-    judge. Neither is grounds for calling it heavy industry.
+    LCZ 10 is not in the built prototype set, so this is its only route. A null share never fires:
+    it means the unit holds no buildings to judge, which is not evidence of heavy industry.
     """
     fired = (industrial_fraction > threshold).fillna(False)
-    return (
-        Ranked(
-            primary=ranked.primary.where(~fired, lcz10),
-            secondary=ranked.secondary.where(~fired, ranked.primary),
-            closest=ranked.closest.where(~fired),
-            runner_up=ranked.runner_up.where(~fired, ranked.closest),
-        ),
-        fired,
-    )
+    return _relabel(ranked, fired, lcz10), fired
 
 
 def apply_semantic_rules(
@@ -160,34 +128,17 @@ def apply_semantic_rules(
 ) -> tuple[Ranked, pd.Series, dict[str, int]]:
     """Apply the configured functional rules in order, returning what each one fired on.
 
-    Mechanically identical to `apply_lcz10_rule` — a unit over the threshold takes the rule's class
-    whatever the morphology said, the displaced answer is kept as `secondary`, and `closest` goes
-    null because the assigned class was not reached by distance. Generalised rather than copied so
-    there is one definition of what a functional assignment does to a `Ranked`.
-
-    **Order matters and is the config's order.** A later rule overrides an earlier one on a unit
-    both would fire on, so the list reads most-general to most-specific. The per-rule counts are of
-    units where that rule fired *and survived*, so they sum to the number of relabelled units and a
-    rule shadowed by a later one is visible as a count of zero rather than by inference.
-
-    **A rule that never fires must be distinguishable from one never configured**, which is why
-    every configured rule appears in the returned mapping whether or not it fired.
-
-    **A rule is enabled only once its threshold has been swept**, and the two shipped rules were
-    swept together against eight cities. `large_lowrise` is enabled at 0.70 with no size gate;
-    `lightweight` is disabled because the sweep refused it, which is a result rather than a
-    placeholder — Overture's lightweight vocabulary is outbuildings, and the tags sit in the
-    cities that have no LCZ 7. A threshold is chosen at an operating point, never picked.
+    A later rule overrides an earlier one on a unit both fire on, and each rule's count is of units
+    where it fired *and survived*, so a shadowed rule shows as zero. Every configured rule appears
+    in the counts, enabled or not, so "never fired" stays distinguishable from "never configured".
     """
-    # Which rule *last* fired on each unit. Counting from this rather than from the resulting
-    # labels is the difference between "this rule placed 40 units" and "40 units carry LCZ 8",
-    # which are the same number only for a class the metric can never assign — true of LCZ 10 and
-    # false of LCZ 7 and 8, both of which are in the prototype set.
+    # Which rule *last* fired on each unit. LCZ 7 and 8 are also reachable by distance, so counting
+    # labels would conflate the rule's work with the metric's.
     winner = pd.Series("", index=ranked.primary.index, dtype="object")
     counts: dict[str, int] = {}
     for rule in rules:
+        counts[rule.name] = 0
         if not rule.enabled:
-            counts[rule.name] = 0
             continue
         if rule.column not in parameters.columns:
             raise ValueError(
@@ -197,20 +148,12 @@ def apply_semantic_rules(
             )
         fires = (parameters[rule.column] > rule.min_fraction).fillna(False)
         if rule.max_mean_building_area_m2 is not None:
-            fires &= (parameters["mean_building_area_m2"] <= rule.max_mean_building_area_m2).fillna(
-                False
-            )
+            area = parameters["mean_building_area_m2"]
+            fires &= (area <= rule.max_mean_building_area_m2).fillna(False)
         if rule.min_mean_building_area_m2 is not None:
-            fires &= (parameters["mean_building_area_m2"] >= rule.min_mean_building_area_m2).fillna(
-                False
-            )
-        ranked = Ranked(
-            primary=ranked.primary.where(~fires, rule.lcz),
-            secondary=ranked.secondary.where(~fires, ranked.primary),
-            closest=ranked.closest.where(~fires),
-            runner_up=ranked.runner_up.where(~fires, ranked.closest),
-        )
-        counts[rule.name] = 0
+            area = parameters["mean_building_area_m2"]
+            fires &= (area >= rule.min_mean_building_area_m2).fillna(False)
+        ranked = _relabel(ranked, fires, rule.lcz)
         winner = winner.where(~fires, rule.name)
 
     for name in counts:

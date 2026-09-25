@@ -95,7 +95,12 @@ def test_the_deferrals_and_limitations_reach_the_manifest_as_data(settings: Sett
 
     assert manifest.not_computed == dict(NOT_COMPUTED)
     assert manifest.limitations == dict(LIMITATIONS)
-    assert "warehouse" in manifest.limitations["industrial_fraction"]
+    assert (
+        "warehouse"
+        in manifest.limitations[
+            "industrial_fraction_of_building_area, industrial_fraction_of_unit_area"
+        ]
+    )
 
 
 def test_the_five_unused_prototype_properties_are_recorded_too(settings: Settings) -> None:

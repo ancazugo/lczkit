@@ -138,7 +138,7 @@ class CleanedVectors:
 
     buildings_area: gpd.GeoDataFrame
     """Area-preserving. Building surface fraction, `Hr`, building count, mean building area and
-    `industrial_fraction` all read this, and the height cascade runs on it."""
+    the industrial shares all read this, and the height cascade runs on it."""
 
     buildings_topo: gpd.GeoDataFrame
     """Planar and non-overlapping. The `neatnet` exclusion mask and `momepy.street_profile` read

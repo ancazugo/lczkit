@@ -22,6 +22,19 @@ from lczkit.protocols import BBox
 from lczkit.units.enclosures import assemble_barriers
 from lczkit.units.tessellation import TessellationUnits, buildings_for_etc
 
+BUILDING_DISTANCE_BANDS_M = (20.0, 100.0, 200.0)
+"""Distance-band neighbourhoods for building-scale metrics: the paper's scales."""
+
+BUILDING_KNN = (10, 20, 30)
+"""Nearest-neighbour counts for the mean-distance metrics: the paper's scales."""
+
+ETC_TOPOLOGICAL_STEPS = (1, 2, 3)
+"""Contiguity depths for cell-scale metrics: the paper's scales.
+
+Fixed rather than configurable because the registry names every column after them
+(`..._w100m`, `..._knn20`, `..._w3steps`); a different scale would be a different menu.
+"""
+
 
 def compute_morphometrics(
     bbox: BBox,
@@ -64,15 +77,12 @@ def compute_morphometrics(
     )
     building_distance_bands = {
         f"{int(distance)}m": graphs.building_distance_band(matched_buildings, distance)
-        for distance in config.building_neighborhood_distances_m
+        for distance in BUILDING_DISTANCE_BANDS_M
     }
-    building_knn = {
-        f"knn{k}": graphs.building_knn(matched_buildings, k) for k in config.building_knn_values
-    }
+    building_knn = {f"knn{k}": graphs.building_knn(matched_buildings, k) for k in BUILDING_KNN}
     etc_contiguity = graphs.etc_contiguity(etc)
     etc_higher_order = {
-        steps: graphs.etc_higher_order(etc_contiguity, steps)
-        for steps in config.etc_topological_steps
+        steps: graphs.etc_higher_order(etc_contiguity, steps) for steps in ETC_TOPOLOGICAL_STEPS
     }
 
     dimensional = dimensional_metrics(
@@ -102,7 +112,6 @@ def compute_morphometrics(
         buildings,
         profile_distance_m=config.street_profile_distance_m,
         profile_tick_length_m=config.street_profile_tick_length_m,
-        node_radii_m=tuple(config.street_node_radii_m),
     )
 
     primary = pd.concat([dimensional, distribution, street], axis=1)

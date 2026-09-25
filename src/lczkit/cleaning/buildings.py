@@ -12,7 +12,7 @@ destroyed the numerator — measured at 23.5% of Berlin's footprint area, worth 
 agreement. The answer is not weaker cleaning; it is two products with different contracts:
 
 - **`buildings_area`** — shared prefix plus overlap *trimming* only. Feeds building surface
-  fraction, `Hr`, building count, mean building area and `industrial_fraction`. Feature-preserving,
+  fraction, `Hr`, building count, mean building area and the industrial shares. Feature-preserving,
   so `building_id` is unique here and every area statistic has a complete population.
 - **`buildings_topo`** — planar and non-overlapping, whatever that costs. Feeds the `neatnet`
   exclusion mask and `momepy.street_profile`. Destructive operations permitted.

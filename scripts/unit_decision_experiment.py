@@ -348,7 +348,6 @@ def main() -> None:
         "config": {
             "cleaning": settings.cleaning.model_dump(mode="json"),
             "heights": HEIGHTS.model_dump(mode="json"),
-            "height_products": settings.height_products.model_dump(mode="json"),
             "ucp": UCP.model_dump(mode="json"),
             "validation": VALIDATION.model_dump(mode="json"),
             "classification": PrototypeClassifier().describe(),

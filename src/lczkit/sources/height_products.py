@@ -1,44 +1,15 @@
-"""Placing the areal height products that the cascade's tiers 2-4 read.
+"""Placing the areal height products the cascade's areal tiers read.
 
-A caller may place each product as a COG under `input/GOB25D/`, `input/WSF3D/` or `input/GHSL/`
-by hand. Across several cities and three products that is a lot of windows, so these fetchers do
-the placing instead, and they own those three
-directories the way `OvertureSource` owns `input/Overture_Maps/` — which is the rule the
-departure is made under rather than against.
+Each tier's `ArealTierConfig.product` says where its raster comes from; the fetchers here own
+`input/<source_dir_name>/` for their tier the way `OvertureSource` owns its directory. Every
+fetcher is cache-first: a file already on disk is the answer and nothing existing is rewritten.
+Downloads land on a `.partial` sibling and are renamed only once complete, so an interrupted fetch
+cannot be mistaken for a cache hit.
 
-Every fetcher is cache-first: a file already on disk *is* the answer, and nothing existing is
-rewritten, moved or removed. Downloads land on a `.partial` sibling and are renamed only once
-complete, so an interrupted fetch can never be mistaken for a cache hit.
-
-None of these classes implements `HeightSource`. They resolve a path; `ArealRasterTier` reads
-it. Keeping fetch and read apart is what lets the tier stay offline and testable, and what lets
-a user who *has* placed a product by hand skip these entirely.
-
-**Why these two fetch over HTTP while land cover can reduce inside Earth Engine.** The question is
-asked often enough to answer here with the measurement rather than leave it looking like an
-oversight, since `LandCoverConfig.source` does offer that choice:
-
-| product | in the Earth Engine public catalogue? |
-|---|---|
-| GHS-BUILT-H ANBH | **yes** — `JRC/GHSL/P2023A/GHS_BUILT_H/2018`, band `built_height`, 100 m |
-| WSF-3D building height | **no** — `DLR/WSF` holds only `WSF2015`, a 10 m settlement mask |
-
-So an Earth Engine route could serve at most one of the two default tiers, and not the one that
-matters: WSF-3D answers for 92-99% of building area in the cities measured, with GHS-BUILT-H the
-fallback beneath it. A backend switch that silently meant "the full cascade" in one place and "the
-fallback tier alone" in another is a configuration whose meaning changes with the city.
-
-And for GHS-BUILT-H it would be a second route to the same numbers. Sampled against the tiles this
-module downloads — 120 points over a low-rise window and 60 over the tallest cells of the same
-tile, 15.38-32.31 m — the Earth Engine band and the local ANBH raster agree to **0.000000 m**. That
-is worth stating precisely because the name alone could not settle it: GHSL publishes ANBH
-(`BUVOL / BUSURF`) beside the gross AGBH, the two differ by the built-up share, and this package
-reads ANBH deliberately. Neither the asset ID nor its Earth Engine metadata says which one the band
-carries; only sampling both did.
-
-There is therefore nothing to gain and a credential requirement to add, so both tiers stay on
-plain HTTP. Open Buildings 2.5D is the exception below and goes through Earth Engine because it
-has no public bucket at all.
+The fetchers resolve a path and `ArealRasterTier` reads it, so a raster placed by hand needs none
+of this. WSF-3D and GHS-BUILT-H come over plain HTTP: WSF-3D is not in the Earth Engine catalogue,
+and GHS-BUILT-H there is the same numbers (sampled against these tiles, |Δ| = 0.000000 m). Open
+Buildings 2.5D has no public bucket and is exported from Earth Engine.
 """
 
 from __future__ import annotations
@@ -49,18 +20,19 @@ import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any
 
 import numpy as np
 import rasterio
 from rasterio.merge import merge as merge_rasters
 
 from lczkit.config import (
-    GhslProductConfig,
+    ArealTierConfig,
+    GhslProduct,
     HeightConfig,
-    OpenBuildings25dConfig,
+    OpenBuildings25dProduct,
     Settings,
-    Wsf3dConfig,
+    Wsf3dProduct,
 )
 from lczkit.protocols import BBox
 from lczkit.sources.overture import bbox_key
@@ -86,28 +58,6 @@ whole tile would otherwise return heights from the wrong continent in silence.
 _DOWNLOAD_CHUNK = 1 << 22
 
 
-class HeightProductSource(Protocol):
-    """Resolves one areal height product to a local path, fetching it if it is not there.
-
-    `bbox` is lon/lat, matching every other ingestion boundary in the package. Implementations
-    return a path readable by `lczkit.heights.raster.zonal_mean`.
-
-    `None` means the product has no coverage over `bbox` and the tier should be left out of the
-    cascade — a shorter cascade with an honest `height_completeness`, not a failure. Only a
-    regional product can answer that way; the two global ones raise instead, because for them an
-    absent tile is a defect rather than a fact about the world.
-    """
-
-    @property
-    def name(self) -> str:
-        """The `height_source` tag of the tier this product backs."""
-        ...
-
-    def ensure(self, bbox: BBox) -> Path | None:
-        """Local path to a raster covering `bbox`, fetching only what is missing."""
-        ...
-
-
 def _download(url: str, destination: Path) -> Path:
     """Fetch `url` to `destination`, atomically, skipping the work if it is already there.
 
@@ -125,7 +75,48 @@ def _download(url: str, destination: Path) -> Path:
     return destination
 
 
-class Wsf3dSource:
+class _TierFetcher[P: (Wsf3dProduct, GhslProduct, OpenBuildings25dProduct)]:
+    """Resolves one tier's areal height product to a local path, fetching it if absent.
+
+    Bound to one tier and to the `input/` directory that tier owns; `tier` defaults to the
+    configured tier whose `product` is of this fetcher's kind. `ensure` returns `None` only where a
+    regional product has no coverage, which leaves the tier out of the cascade; the two global
+    products raise instead, since for them an absent tile is a defect.
+    """
+
+    product_type: type[P]
+
+    def __init__(self, settings: Settings, tier: ArealTierConfig | None = None) -> None:
+        """Bind the fetcher to `tier` and to `input/<tier.source_dir_name>/`."""
+        if tier is None:
+            tier = next(
+                (
+                    t
+                    for t in settings.heights.areal_tiers
+                    if isinstance(t.product, self.product_type)
+                ),
+                None,
+            )
+        if tier is None or not isinstance(tier.product, self.product_type):
+            raise ValueError(
+                f"{type(self).__name__} needs a tier whose product is a "
+                f"{self.product_type.__name__}"
+            )
+        self.tier = tier
+        self.config: P = tier.product
+        self.directory = settings.source_dir(tier.source_dir_name)
+
+    @property
+    def name(self) -> str:
+        """The `height_source` tag of the tier this product backs."""
+        return self.tier.name
+
+    def ensure(self, bbox: BBox) -> Path | None:
+        """Local path to a raster covering `bbox`, fetching only what is missing."""
+        raise NotImplementedError
+
+
+class Wsf3dSource(_TierFetcher[Wsf3dProduct]):
     """Tier 3: WSF-3D V02 building height, one global file.
 
     DLR publishes the global product as a tiled GeoTIFF with overviews, so there is nothing to
@@ -137,19 +128,7 @@ class Wsf3dSource:
     why `ArealTierConfig` for this tier carries `scale=0.1`.
     """
 
-    def __init__(self, settings: Settings, config: Wsf3dConfig | None = None) -> None:
-        """Bind the fetcher to `input/<source_dir_name>/`, the directory it owns.
-
-        `config` defaults to `settings.height_products.wsf3d`; passing one explicitly is how a
-        test points the fetcher at a fixture without a `Settings` carrying the real product.
-        """
-        self.config = config or settings.height_products.wsf3d
-        self.directory = settings.source_dir(self.config.source_dir_name)
-
-    @property
-    def name(self) -> str:
-        """The `height_source` tag this product writes onto every building it resolves."""
-        return self.config.tier_name
+    product_type = Wsf3dProduct
 
     def ensure(self, bbox: BBox) -> Path:
         """Local path to the global WSF-3D file, downloading it once if it is not there.
@@ -163,7 +142,7 @@ class Wsf3dSource:
         return _download(self.config.url, self.directory / self.config.filename)
 
 
-class GhslBuiltHSource:
+class GhslBuiltHSource(_TierFetcher[GhslProduct]):
     """Tier 4: GHS-BUILT-H ANBH R2023A, resolved to the Mollweide tiles covering a bbox.
 
     ANBH is `BUVOL / BUSURF` — building volume over *built-up* surface, so it is the mean height
@@ -176,19 +155,7 @@ class GhslBuiltHSource:
     instead — bbox-keyed, alongside the tiles it came from.
     """
 
-    def __init__(self, settings: Settings, config: GhslProductConfig | None = None) -> None:
-        """Bind the fetcher to `input/<source_dir_name>/`, the directory it owns.
-
-        `config` defaults to `settings.height_products.ghsl`; passing one explicitly is how a
-        test points the fetcher at a fixture without a `Settings` carrying the real product.
-        """
-        self.config = config or settings.height_products.ghsl
-        self.directory = settings.source_dir(self.config.source_dir_name)
-
-    @property
-    def name(self) -> str:
-        """The `height_source` tag this product writes onto every building it resolves."""
-        return self.config.tier_name
+    product_type = GhslProduct
 
     def tiles_for(self, bbox: BBox) -> list[tuple[int, int]]:
         """The `(row, col)` tiles covering `bbox`, in a stable order.
@@ -276,7 +243,7 @@ class GhslBuiltHSource:
             )
         if len(paths) == 1:
             return paths[0]
-        clip = self.directory / "clips" / f"{self.config.tier_name}_{bbox_key(bbox)}.tif"
+        clip = self.directory / "clips" / f"{self.name}_{bbox_key(bbox)}.tif"
         return _merge_windows(paths, clip, bounds=self._mollweide_bounds(bbox))
 
     def _mollweide_bounds(self, bbox: BBox) -> tuple[float, float, float, float]:
@@ -359,7 +326,7 @@ def _merge_windows(
     return destination
 
 
-class OpenBuildings25dSource:
+class OpenBuildings25dSource(_TierFetcher[OpenBuildings25dProduct]):
     """Tier 2: Google Open Buildings 2.5D Temporal, exported per window from Earth Engine.
 
     The only fine-resolution tier, and the only one distributed exclusively through Earth Engine
@@ -376,21 +343,12 @@ class OpenBuildings25dSource:
     leaves the tier out of that city's cascade rather than failing the city.
     """
 
-    def __init__(self, settings: Settings, config: OpenBuildings25dConfig | None = None) -> None:
-        """Bind the fetcher to `input/<source_dir_name>/` and to an Earth Engine project.
+    product_type = OpenBuildings25dProduct
 
-        `config` defaults to `settings.height_products.gob25d`. The project is read once here
-        rather than at download time, so a missing `GEE_PROJECT_NAME` surfaces as one clear
-        error from `ensure` instead of an Earth Engine authentication failure.
-        """
-        self.config = config or settings.height_products.gob25d
-        self.directory = settings.source_dir(self.config.source_dir_name)
+    def __init__(self, settings: Settings, tier: ArealTierConfig | None = None) -> None:
+        """Bind the fetcher to its tier and to the Earth Engine project it bills against."""
+        super().__init__(settings, tier)
         self.project = settings.land_cover.gee_project
-
-    @property
-    def name(self) -> str:
-        """The `height_source` tag this product writes onto every building it resolves."""
-        return self.config.tier_name
 
     def path_for(self, bbox: BBox) -> Path:
         """Where this window's export lives, keyed on tier, year and bbox.
@@ -399,7 +357,7 @@ class OpenBuildings25dSource:
         is in it because the collection is annual, and two years over one city are different
         rasters rather than the same one refetched.
         """
-        return self.directory / f"{self.config.tier_name}_{self.config.year}_{bbox_key(bbox)}.tif"
+        return self.directory / f"{self.name}_{self.config.year}_{bbox_key(bbox)}.tif"
 
     def sub_windows(self, bbox: BBox) -> list[BBox]:
         """`bbox` split into a grid small enough for one Earth Engine download each.
@@ -511,29 +469,19 @@ class OpenBuildings25dSource:
 def resolve_areal_tiers(
     settings: Settings, bbox: BBox, config: HeightConfig | None = None
 ) -> tuple[HeightConfig, dict[str, str | None]]:
-    """Place every enabled areal tier's product for `bbox` and return a ready `HeightConfig`.
+    """Place every enabled tier's raster for `bbox` and return a `HeightConfig` ready to read.
 
-    The missing half of `build_cascade`, which reads `filename` and never sets it. Without this
-    the only route from a configured tier to a raster on disk was a private helper in one
-    experiment script, so the package's own default cascade could not actually run — a shipped
-    default nothing exercises is a claim, not a behaviour.
-
-    Tiers run in `config.areal_tiers` order. A tier with `enabled=False` is left out, and so is
-    one whose product has no coverage here — Open Buildings stops at Europe — but for different
-    reasons that stay separable: the first shows as `enabled=False` in the serialised config, the
-    second as a `None` in the returned record. A tier configured to read a file that is not there
-    is neither, and still raises in `build_cascade`.
-
-    `confidence` is deliberately not filled in. It is an ordinal ranking of measurement quality
-    with no published value behind it, exactly like the two Overture confidences, and a default
-    cascade that invented one would write a quality claim nobody chose into every manifest. Set
-    it on the config and `build_cascade` accepts it; leave it unset and `build_cascade` says so.
+    A tier with a `product` is fetched and its `filename` filled in, relative to its own `input/`
+    directory; a tier without one was placed by hand and passes through unchanged. Disabled tiers
+    are left out, and so are tiers whose product has no coverage here (Open Buildings stops at
+    Europe), which the returned record shows as `None`. Confidences are not filled in: they have
+    no published value, and `build_cascade` says so if they are unset.
     """
     resolved = (config or settings.heights).model_copy(deep=True)
-    fetchers: dict[str, HeightProductSource] = {
-        settings.height_products.gob25d.tier_name: OpenBuildings25dSource(settings),
-        settings.height_products.wsf3d.tier_name: Wsf3dSource(settings),
-        settings.height_products.ghsl.tier_name: GhslBuiltHSource(settings),
+    fetchers: dict[str, type[_TierFetcher[Any]]] = {
+        "gob25d": OpenBuildings25dSource,
+        "wsf3d": Wsf3dSource,
+        "ghsl": GhslBuiltHSource,
     }
 
     placed: dict[str, str | None] = {}
@@ -541,13 +489,11 @@ def resolve_areal_tiers(
     for tier in resolved.areal_tiers:
         if not tier.enabled:
             continue
-        fetcher = fetchers.get(tier.name)
-        if fetcher is None:
-            raise KeyError(
-                f"height tier {tier.name!r} is enabled but no fetcher owns it; place its raster "
-                f"under input/{tier.source_dir_name}/ and set `filename` by hand instead."
-            )
-        path = fetcher.ensure(bbox)
+        if tier.product is None:
+            placed[tier.name] = tier.filename
+            tiers.append(tier)
+            continue
+        path = fetchers[tier.product.kind](settings, tier).ensure(bbox)
         placed[tier.name] = str(path) if path is not None else None
         if path is None:
             continue

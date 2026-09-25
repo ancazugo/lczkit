@@ -1,19 +1,9 @@
-"""`compute_parameters()` — the four parameter blocks joined into one table per `unit_id`.
+"""`compute_parameters()`: every parameter block joined into one table per `unit_id`.
 
-Pure transform. Every input is already in memory and already keyed on the unit of exchange, so
-this stage reads no raster, opens no file and touches no network; it turns the earlier stages'
-outputs into the vector the classifier measures against the LCZ prototypes.
-
-**Each vector layer is intersected with the units exactly once here.** Three blocks below need the
-building layer against the units and three need the land-use layer, and each used to perform its
-own overlay — `semantic_metrics` performed six of the land-use one, once for its coverage column
-and once per configured semantic group, so the count grew with the configuration. Measured on the
-Hong Kong fixture that was **seventeen overlays over 21 231 rows to answer questions about 7 203**.
-
-The overlays therefore happen here and the pieces are handed down, which is the move this function
-already made for `building_area_m2` and for the same reason: the intersection is the expensive
-half, and sharing it also guarantees every fraction divides by a denominator computed from the
-same pieces as its numerator.
+A pure transform over in-memory inputs: no raster, file or network access. Each vector layer is
+intersected with the units once here (`lczkit.units.overlay.unit_pieces`) and the pieces are handed
+to every block that needs them, so all area fractions share a denominator computed from the same
+pieces as their numerator.
 """
 
 from __future__ import annotations

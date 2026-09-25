@@ -1,4 +1,4 @@
-"""2D urban morphometrics — Majer & Fleischmann (2026), Phase 29.
+"""2D urban morphometrics after Majer & Fleischmann (2026).
 
 **A descriptive output, not classifier input.** `compute_morphometrics` returns 107 primary
 attributes (dimensional/shape, spatial distribution/intensity, street descriptors/connectivity),

@@ -65,7 +65,7 @@ def test_a_building_inside_a_parcel_is_counted_once() -> None:
 
     assert result.loc["both", "industrial_fraction_buildings"] == pytest.approx(0.25)
     assert result.loc["both", "industrial_fraction_land_use"] == pytest.approx(0.50)
-    assert result.loc["both", "industrial_fraction"] == pytest.approx(0.50)
+    assert result.loc["both", "industrial_fraction_of_unit_area"] == pytest.approx(0.50)
 
 
 def test_each_source_alone_carries_its_own_area() -> None:
@@ -73,9 +73,9 @@ def test_each_source_alone_carries_its_own_area() -> None:
 
     result = industrial_metrics(buildings, land_use, make_units(), CONFIG)
 
-    assert result.loc["buildings", "industrial_fraction"] == pytest.approx(0.25)
+    assert result.loc["buildings", "industrial_fraction_of_unit_area"] == pytest.approx(0.25)
     assert result.loc["buildings", "industrial_fraction_land_use"] == 0.0
-    assert result.loc["land_use", "industrial_fraction"] == pytest.approx(0.25)
+    assert result.loc["land_use", "industrial_fraction_of_unit_area"] == pytest.approx(0.25)
     assert result.loc["land_use", "industrial_fraction_buildings"] == 0.0
 
 
@@ -145,16 +145,6 @@ def test_the_two_denominators_diverge_on_a_sparsely_built_industrial_cell() -> N
     assert result.loc["both", "industrial_fraction_of_unit_area"] == pytest.approx(0.09)
 
 
-def test_the_bare_name_remains_an_alias_for_the_unit_area_column() -> None:
-    """Deprecated, not removed: anything still reading `industrial_fraction` gets the unit-area
-    answer it has always got, rather than silently switching denominator underneath it."""
-    buildings, land_use = scene()
-
-    result = industrial_metrics(buildings, land_use, make_units(), CONFIG)
-
-    assert result["industrial_fraction"].equals(result["industrial_fraction_of_unit_area"])
-
-
 def test_a_warehouse_is_not_industrial() -> None:
     """CLAUDE.md's own statement of the problem: a distribution warehouse and a refinery are
     geometrically identical, the warehouse being LCZ 8 and the refinery LCZ 10. Counting warehouses
@@ -164,7 +154,7 @@ def test_a_warehouse_is_not_industrial() -> None:
 
     result = industrial_metrics(buildings, empty, make_units(), CONFIG)
 
-    assert result["industrial_fraction"].to_list() == [0.0, 0.0, 0.0, 0.0]
+    assert result["industrial_fraction_of_unit_area"].to_list() == [0.0, 0.0, 0.0, 0.0]
 
 
 def test_either_attribute_alone_is_enough() -> None:
@@ -178,7 +168,9 @@ def test_either_attribute_alone_is_enough() -> None:
 
     result = industrial_metrics(buildings, empty, make_units(), CONFIG)
 
-    assert result["industrial_fraction"].to_list() == pytest.approx([0.25, 0.25, 0.0, 0.0])
+    assert result["industrial_fraction_of_unit_area"].to_list() == pytest.approx(
+        [0.25, 0.25, 0.0, 0.0]
+    )
 
 
 def test_empty_layers_give_a_table_of_zeros() -> None:
@@ -186,7 +178,7 @@ def test_empty_layers_give_a_table_of_zeros() -> None:
 
     result = industrial_metrics(empty, empty, make_units(), CONFIG)
 
-    assert result["industrial_fraction"].to_list() == [0.0] * 4
+    assert result["industrial_fraction_of_unit_area"].to_list() == [0.0] * 4
     assert set(result["industrial_evidence"]) == {"none"}
 
 
@@ -200,7 +192,7 @@ def test_one_empty_layer_still_lets_the_other_contribute(side: str) -> None:
 
     result = industrial_metrics(buildings, land_use, make_units(), CONFIG)
 
-    assert result.loc["both", "industrial_fraction"] == pytest.approx(0.25)
+    assert result.loc["both", "industrial_fraction_of_unit_area"] == pytest.approx(0.25)
     assert result.loc["both", "industrial_evidence"] == side
 
 
@@ -214,7 +206,7 @@ def test_land_use_selection_can_be_switched_off_entirely() -> None:
     result = industrial_metrics(buildings, land_use, make_units(), config)
 
     assert result["industrial_fraction_land_use"].to_list() == [0.0] * 4
-    assert result.loc["both", "industrial_fraction"] == pytest.approx(0.25)
+    assert result.loc["both", "industrial_fraction_of_unit_area"] == pytest.approx(0.25)
 
 
 def test_a_layer_missing_the_attribute_the_config_selects_on_is_refused() -> None:

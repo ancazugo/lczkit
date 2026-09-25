@@ -1796,6 +1796,8 @@ the change and none of them could show a picker until it was rebuilt.
 No dependency was added. The deprecated `online_basemap` singular is kept and folded into
 `basemap_keys`: pydantic ignores unknown fields, so dropping it would make an archived run's
 configured ground disappear on rebuild with nothing raised.
+*(Superseded in Phase 31: the field is removed and a `mode="before"` validator folds the singular
+key from an archived manifest into `online_basemaps`, which keeps the same guarantee.)*
 
 ---
 
@@ -3020,6 +3022,94 @@ pixel-for-pixel with no gap or overlap on an extent straddling a 0.1° tile boun
 filenames match `geotessera`'s `grid_{lon:.2f}_{lat:.2f}` convention; the byte ceiling refuses
 before allocating; `ruff`/`mypy` clean; full suite green with no regressions.
 
+### Phase 31 — audit and simplification — CONCLUDED
+
+**A second full audit, on explicit request, with the instruction to make the package less
+redundant and simpler.** Not a diagnostic phase: **no parameter value, label or stored figure
+moves.** The one change that could have moved numbers, the UCP evidence path, is still pinned to
+1e-9 by `test_ucp_evidence_equivalence.py`. `src/` is **1 018 lines shorter net** (−1 786 / +768);
+`config.py` went from 1 992 to 1 389 lines.
+
+Scope was put to the user before editing, because two of the changes contradict earlier rulings
+and three change an output schema. Chosen: remove the deprecated aliases, merge the two height
+configs, remove the fake morphometric knobs, trim docstrings to essentials. **Declined: retiring
+Open Buildings 2.5D** — Phase 11's "keep the code and the tier interface" stands.
+
+#### What shipped
+
+- **One config per height tier.** Each product was described twice: `ArealTierConfig` said how to
+  read it, and `HeightProductsConfig.{wsf3d,ghsl,gob25d}` said where it came from, repeating the
+  tier name (`tier_name`) and `source_dir_name` under a second key in `Settings`. The fetch details
+  are now `ArealTierConfig.product`, a discriminated union (`Wsf3dProduct | GhslProduct |
+  OpenBuildings25dProduct`, keyed on `kind`), and `product=None` means a hand-placed raster. The
+  three fetchers share `_TierFetcher`, which replaced a `HeightProductSource` protocol nothing else
+  implemented. `Settings.height_products` is gone.
+- **Four fake knobs removed.** `MorphometricsConfig.building_neighborhood_distances_m`,
+  `building_knn_values`, `etc_topological_steps` and `street_node_radii_m` looked configurable
+  and were not: the registry names every column after the paper's scales (`_w100m`, `_knn20`,
+  `_w3steps`), and `compute_morphometrics` indexed the resulting dicts by those literal keys. **Any
+  other value raised a `KeyError` or failed the registry check.** They are module constants in
+  `lczkit.morphometrics.compute` now. The validator that tied `contextual_steps` to them went with
+  them.
+- **Deprecated aliases removed.** The `industrial_fraction` column, "kept for one release" since
+  Phase 14 with no release in between, is gone from the parameter table and the registry; the
+  industrial limitation is now keyed on the two named columns. `VizConfig.online_basemap` and the
+  `basemap_keys` property that reconciled it are gone; a `mode="before"` validator folds the
+  singular key into `online_basemaps`, so an archived manifest still rebuilds its site with the
+  ground it recorded — the property the field was kept for, preserved without the field.
+- **`pypdf` removed from the runtime dependencies.** Declared since Phase 4, imported nowhere.
+  Removed from `pyproject.toml` and `uv.lock` with `uv lock`; the environment was not touched.
+- **One relabel.** `apply_lcz10_rule` and `apply_semantic_rules` each carried the same four-line
+  functional assignment; both call `rules._relabel` now.
+- **One raster manifest entry.** `refresh_raster` and `run_pipeline` both built the
+  `morphometrics_raster` dict field by field; `RasterExportReport.as_manifest()` is the one
+  definition.
+- **Dead code removed:** `pipeline.STAGES`, `prototypes._BY_PROPERTY`, `rules.Family`,
+  `labelled.SO2SAT_CITATION` (a copy of `ValidationConfig.ground_truth_citation`),
+  `wudapt.PRIORITY_COLUMNS` (documented as what `resolve_overlaps` reads; it reads none of it),
+  `site.distance_columns_present`.
+- **Docstrings trimmed to what a reader of the API needs**: the value, its default, and one line
+  of justification with the key number. The research narrative stays here and in `notes/`.
+  `config.py`, `pipeline.py`, `presets.py`, the manifest, and the UCP and overlay modules.
+  Phase 29 and 30 had reintroduced "Phase N" into three published docstrings, against Phase 26's
+  rule; removed. Two manifest field docstrings were stale — `reference_ceiling` still quoted the
+  53.2% ceiling Phase 9 retired, and `unapplied_weights` the `bernard2024` name Phase 14 renamed.
+
+**Schema consequences, stated because a reader of an old run will meet them:** `units.parquet`
+no longer carries `industrial_fraction`; a manifest's `config` has no `height_products` block and
+gains `heights.areal_tiers[].product`; `morphometrics` loses the four fields. Old manifests still
+validate — pydantic ignores the removed keys and the basemap singular is migrated.
+
+#### Findings recorded, not changed
+
+Each would move stored numbers or was out of the agreed scope.
+
+1. **`zonal_mean` burns one building per raster cell.** Its docstring claimed last-writer-wins
+   "does not arise" because footprints do not overlap. It arises constantly: at 90-100 m most
+   cells hold several buildings, so all but one burn nothing and take the representative-point
+   fallback, and a footprint spanning several cells averages only the cells it won. Every value is
+   still that neighbourhood's, which is what an areal product measures, so the bias is small and
+   unsigned. `exactextract` would give the exact area-weighted mean and would move every cascade
+   height. Docstring corrected; implementation left.
+2. **`units.aggregate` and `ucp.measure.transfer_parameters` are the same operation twice**, and
+   only the second weights each column over the pieces that carried a value (Phase 25). `aggregate`
+   is used by one research script and is what its stored arm-B projections were computed with.
+3. **The surface partition breaks where WorldCover under-detects buildings.** The building share is
+   subtracted from impervious only; where it exceeds it the clip fires and `impervious_clipped`
+   flags the unit, so building + impervious + pervious exceeds 1. Re-partitioning the excess out
+   of pervious would be a definitional change.
+4. **The manifest's `validation`, `validation_ground_truth` and `reference_ceiling` slots are
+   filled by no chain in the package**; `run_pipeline` deliberately does not validate. Kept as
+   the documented place a caller who does validate records it.
+5. Checked and **not** a problem: `PrototypeClassifier.describe()` recomputes the geometric prior
+   by 200 000-sample Monte Carlo on every run, ~1.2 s in total.
+
+**Verified:** `ruff check .`, `ruff format --check .`, `mypy src` and `mkdocs build --strict`
+clean; full suite **1 145 passed, 0 failed**. The UCP evidence pins still hold the retired
+`industrial_fraction` column, so the equivalence test checks it equalled
+`industrial_fraction_of_unit_area` and then compares everything else to 1e-9, rather than
+regenerating a pin.
+
 ### STOP RULE — applies after Phase 13
 
 **No further diagnostic phases.** Thirteen phases in, the finding rate remains high but the returns
@@ -3112,8 +3202,14 @@ Remaining work, in order:
     zero-new-dependency route tried first — writes the CRS only into a proprietary sidecar file
     invisible to a plain `zarr`/`xarray` reader, and that reprojecting and rounding each tile's
     geographic box independently leaves a real one-pixel gap between adjacent tiles.
-19. **The paper.**
-20. **Cleanup** — release. **The docs half landed as Phase 20, the notebook half as Phase 22, the
+19. ~~**Phase 31 — audit and simplification.**~~ **Concluded**, on explicit request. Not
+    measurement: no value moves. One config per height tier, four fake morphometric knobs and
+    two deprecated aliases removed, an unused runtime dependency dropped, docstrings trimmed;
+    `src/` 1 018 lines shorter. It found that the morphometric neighbourhood scales were
+    configurable in name only (any other value raised) and that `zonal_mean`'s one-building-per-
+    cell attribution fires constantly at 90-100 m, which its docstring had said could not happen.
+20. **The paper.**
+21. **Cleanup** — release. **The docs half landed as Phase 20, the notebook half as Phase 22, the
     README split as Phase 23 and the de-narrativising pass as Phase 26**; what is left here is the
     release itself.
 
@@ -3359,7 +3455,7 @@ reconcile silently.** That flagging behaviour is working; keep it.
 | `bernard2024` preset only partially applicable | Renamed `bernard2024_partial`. 17 of 21.5 weight units applied; SVF and z₀ deferred; `FB` carries ~47% of the metric. Unapplied dimensions recorded in the manifest. **The rename was ruled in Phase 6 and only applied in Phase 14** — the code shipped `bernard2024` for eight phases, and `output/manifest.py` keyed `unapplied_weights` off that literal, so renaming it anywhere but both places at once would have emitted `[]` in silence. The key now reads the preset constant. | 6, 14 |
 | LCZ 10 pair-gated rule measured inert on Rotterdam | Rule replaced. LCZ 10 removed from the distance metric per Bernard; assigned functionally with a threshold **calibrated by precision/recall against the Rotterdam reference**, not chosen a priori. **Ruled in Phase 6, implemented in Phase 14** — `rules.py` carried the pair gate verbatim for eight phases after the spec recorded it as superseded, with a threshold picked a priori at 0.50. | 6, 14 |
 | LCZ 8 — Bernard also excludes it from the distance approach | **Diverge from Bernard: keep LCZ 8 in the metric.** Ruling stands; **its stated reason was wrong and is corrected in Phase 14.** `mean_building_area_m2` is not a metric dimension and never has been, so it cannot be what captures LCZ 8. The real separator is `aspect_ratio` — 0.1–0.3 against LCZ 3's 0.75–1.5 and LCZ 6's 0.3–0.75 — since LCZ 8's BSF band overlaps both and its `Hr` band is identical to LCZ 3, 6 and 9. That is also why LCZ 8 scores 0.0% (n=224) on Rotterdam: `aspect_ratio` is null exactly where large setbacks stop streets reaching buildings. | 6, 14 |
-| `industrial_fraction` denominator | **Contradicted three ways at once, resolved in Phase 14 by emitting both.** This row said building area; `ucp/parameters.py`'s docstring said building area; the code, `config.py` and the registry said unit area and argued for it. Now `industrial_fraction_of_building_area` (Bernard's `FIND/B`) and `industrial_fraction_of_unit_area` ship as separate named columns, with the bare name a deprecated alias for the unit-area one. **The LCZ 10 rule reads `FIND/B`, and Bernard's 0.33 does transfer** — the shipped 0.45 is the sweep's own pick and the two perform comparably. An intermediate Phase 14 reading that `FIND/B` saturates at a 100 m cell was a numerator artefact and is retracted. | 5, 14 |
+| `industrial_fraction` denominator | **Contradicted three ways at once, resolved in Phase 14 by emitting both.** This row said building area; `ucp/parameters.py`'s docstring said building area; the code, `config.py` and the registry said unit area and argued for it. Now `industrial_fraction_of_building_area` (Bernard's `FIND/B`) and `industrial_fraction_of_unit_area` ship as separate named columns; the bare name was a deprecated alias for the unit-area one until Phase 31 removed it. **The LCZ 10 rule reads `FIND/B`, and Bernard's 0.33 does transfer** — the shipped 0.45 is the sweep's own pick and the two perform comparably. An intermediate Phase 14 reading that `FIND/B` saturates at a 100 m cell was a numerator artefact and is retracted. | 5, 14, 31 |
 | Davenport terrain roughness class in Phase 5 | **Spec bug, corrected.** Requires z₀, which is deferred. Moved to deferred alongside the roughness work. | 5 |
 | Anti-pattern "don't commit anything from `docs/references/`" contradicting Phase 0 | **Spec bug, corrected** (third occurrence). PDFs are ignored; `tables/`, `README.md`, `references.bib` are committed. | 0 |
 | Stewart & Oke cannot classify the natural family | **Accepted for MVP.** A–D separate only on building-derived parameters; F and G differ in no published dimension. lczkit-defined `tree_fraction`/`water_fraction` ranges tagged `source="lczkit"`; C and F recorded unreachable in the manifest. Reading Bernard's natural branch (Figs. 2–3) and feeding canopy height as the natural roughness element is **deferred**, not rejected. | 6 |
@@ -3539,6 +3635,8 @@ reconcile silently.** That flagging behaviour is working; keep it.
 | A guard that compared CRSes as strings | **The guard failed, not the thing it guarded.** The check added to catch the zone defect above compared `str(crs)` per part against `str(grid.crs)` — and a CRS round-tripped through GeoParquet stringifies as its full **2 433-character PROJJSON**, while one read from a GeoPackage stringifies as `EPSG:32650`. Same projection, different text, so the guard rejected Hong Kong *after* its 63 cores had computed correctly (61 with data, 2 genuinely empty, against 78 empty cells before the fix) and would have rejected every city in turn. Compared with `pyproj`'s own equality now, and reported through `to_string()`. **A guard is code too, and one written for a defect that had just cost 36 hours gets adopted with less scepticism than the code it watches.** | 29 |
 | A per-call positional id, assembled across calls | **The largest silent loss this project has measured: 84.9% of a city's cells, discarded by a `drop_duplicates`.** `TessellationUnits` numbers cells with a positional counter over the buildings it is handed, which is unique within one call and identical across calls — so all 61 of Hong Kong's cores produced `etc_bld_0, etc_bld_1, …` and the assembly's `~index.duplicated(keep="first")` kept roughly one core's worth of cells for the whole city: **138 022 computed, 20 870 kept**, the two largest cores sharing 362 ids, and the Tung Chung core contributing 43 of its 581. Ids are namespaced by their core now, and the dedup **counts and reports** what it drops instead of dropping it quietly. Two lessons, and the second is the one that generalises: a per-call identifier is not an identifier once results from several calls are concatenated — and **a de-duplication that does not report its count is indistinguishable from one with nothing to do**, which is why this survived a run, a fix, and a verification pass. Found only by asking whether a corrected number was *believable* rather than merely larger: 55 ETC/km² for Hong Kong is not, 366 is. | 29 |
 | `mean_interbuilding_distance` fed building contiguity instead of tessellation adjacency | **Identically 0.0 on every input since the metric shipped, and it is 1 of the 50 columns selected as CNN features.** momepy documents `adjacency_graph` as "a contiguity graph derived from tessellation cells linked to buildings" and its worked example passes a Delaunay triangulation; lczkit passed `Graph.build_contiguity(buildings, rook=False)`. Footprints in the **area-preserving** layer mostly do not touch, so that graph has no adjacent pair to measure between — Hong Kong fixture, 5 448 buildings: **4 242 edges and 2 975 isolates (55%), metric all zero**, against **23 128 edges, 12 isolates, median 10.06 m** from the documented graph. The same building graph is *correct* at its two other call sites (`perimeter_wall` groups joined structures, `building_adjacency` documents `contiguity_graph` as building-derived), which is how one wrong call site of three went unread. **The acceptance criterion was "every column numeric and not entirely null", and an identically-zero column is not null** — the guard tested a weaker property than the one that mattered. Replaced by asserting the column varies and is positive somewhere, plus a pinned edge-count comparison between the two graphs. | 29 |
+| Morphometric neighbourhood scales as config | **Configurable in name only, and removed.** `building_neighborhood_distances_m`, `building_knn_values`, `etc_topological_steps` and `street_node_radii_m` fed dicts that `compute_morphometrics` indexed by literal keys, and the registry names every column after the paper's scales, so any value but the default raised. A knob that can only hold one value is a constant. Module constants in `lczkit.morphometrics.compute`. | 29, 31 |
+| `zonal_mean`'s "last-writer-wins does not arise" | **Wrong, and it arises constantly.** Footprints not overlapping does not stop several of them sharing one 90-100 m cell; all but one burn nothing and take the representative-point fallback. Every value is still the neighbourhood's, so the effect is small and unsigned. Docstring corrected; switching to `exactextract` would be exact and would move every cascade height, so it is recorded rather than done. | 3, 10, 31 |
 
 ---
 

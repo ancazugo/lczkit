@@ -1,15 +1,9 @@
 """The whole chain, from a bbox to a run directory and optionally a map site.
 
-`run_pipeline` is the only place the stages are wired together. The command line calls it rather
-than restating any of it, so there is one definition of what a run does.
-
-**What is deliberately absent.** Validation. `write_run` takes a `validation=` report and the
-manifest has a slot for it, but the chain never populates them: agreement is measured separately,
-against reference datasets that are not always on disk. Wiring it in here would make every run
-depend on those datasets being present. Call `lczkit.validation` yourself when you have them.
-
-`StageObserver` is how a caller watches a long run without this module choosing a rendering. The
-command line passes one backed by `rich`; any object with the same two methods will do.
+`run_pipeline` is the only place the stages are wired together; the command line calls it. It does
+not validate: agreement needs reference data that is not always on disk, so call
+`lczkit.validation` yourself where you have it. `StageObserver` lets a caller watch the stages
+without this module choosing a rendering.
 """
 
 from __future__ import annotations
@@ -50,29 +44,9 @@ from lczkit.units.grid import GridUnits
 from lczkit.units.patches import PatchUnits, filter_street_barriers
 from lczkit.viz import SiteReport, TippecanoeMissingError, build_site
 
-STAGES = (
-    "clean_vectors",
-    "morphometrics",
-    "heights",
-    "units",
-    "land_cover",
-    "provenance",
-    "parameters",
-    "classify",
-    "write_run",
-    "morphometrics_raster",
-    "build_site",
-)
-"""Stage names, in order, so a caller can size a progress display before the run starts."""
-
 
 class StageObserver(Protocol):
-    """Something that watches each stage begin and end.
-
-    A `typing.Protocol` rather than a base class, following the same decision the five data-source
-    protocols were built under: the point is the seam, and a caller that already has a timer should
-    not have to inherit anything to use it.
-    """
+    """Something that watches each stage begin and end."""
 
     def stage(self, name: str) -> AbstractContextManager[None]:
         """A context manager wrapping one stage's work."""
@@ -97,10 +71,8 @@ def build_strategy(
 ) -> SpatialUnitStrategy:
     """The configured `SpatialUnitStrategy`.
 
-    `buildings` is only read by `patch`, and only when `patch_merge_on_morphology` is on. It is
-    passed at construction rather than to `generate` because the protocol's signature is
-    `(bbox, barriers)`, and widening that for one strategy would put a building layer into an
-    interface the other two have no use for.
+    `buildings` is read only by `patch` with `patch_merge_on_morphology` on; it goes to the
+    constructor because the protocol's `generate(bbox, barriers)` has no use for it elsewhere.
     """
     if config.strategy == "grid":
         return GridUnits(cell_size_m=config.cell_size_m)
@@ -114,23 +86,15 @@ def build_strategy(
 
 
 def land_cover_source(settings: Settings, bbox: BBox) -> RasterSource:
-    """The configured land-cover backend, with its window placed if it needs one.
+    """The configured land-cover backend (`LandCoverConfig.source`).
 
-    `LandCoverConfig.source` chooses between the two `RasterSource` implementations. They return
-    schema-identical tables, so everything downstream joins on `unit_id` either way and nothing
-    else in the chain has to know which one answered.
-
-    The local backend mosaics whichever ESA WorldCover tiles the extent spans into the run
-    directory, never into `input/`: a clip keyed to one run's bbox is not source data. The Earth
-    Engine backend writes nothing here at all — it caches its own reduction under `input/GEE/`,
-    keyed on the units, the asset, the date range, the reducer and the class mapping together.
+    The local backend mosaics the ESA WorldCover tiles the extent spans into the run directory; a
+    clip keyed to one run is not source data, so it never goes under `input/`. The Earth Engine
+    backend caches its own reductions under `input/GEE/`.
     """
     dataset = settings.land_cover.dataset(settings.ucp.land_cover_dataset)
     if settings.land_cover.source == "gee":
         return EarthEngineSource.from_settings(settings, dataset.name)
-    # `clip_worldcover` resolves the tiles the bbox actually spans and mosaics them. A single
-    # hardcoded tile is correct for one city and a 0x0 window — `RasterioIOError` — for the next
-    # one, or worse, a quarter of the map silently missing.
     return LocalRasterSource(
         dataset,
         clip_worldcover(bbox, settings.run_dir / "worldcover.tif"),
@@ -148,24 +112,15 @@ class PipelineResult:
     """`None` when the run was asked not to build one, or when tippecanoe is absent."""
 
     site_skipped: str | None = None
-    """Why no site was built, where one was asked for. `None` when one was built or not wanted.
-
-    The site is the **last** stage and everything else is already on disk by the time it runs, so
-    a missing tippecanoe must not cost a caller the run. It used to: the error propagated out of
-    `run_pipeline`, the command line turned it into an exit code, and the line naming the run
-    directory was never printed — a ten-minute city reported as a failure with no mention that its
-    output existed. `lczkit site build <run_dir>` completes it later.
-    """
+    """Why no site was built, where one was asked for. The site is the last stage, so a missing
+    tippecanoe costs only the site; `lczkit site build <run_dir>` completes it later."""
 
     stages: dict[str, float] = field(default_factory=dict)
     """Wall seconds per stage, in the order they ran."""
 
     height_products: dict[str, str | None] = field(default_factory=dict)
-    """Which areal height product file each enabled tier resolved to, by tier name.
-
-    `None` where the product has no coverage for this extent — Open Buildings stops at Europe —
-    which is a different state from a tier that was disabled, and stays separable here.
-    """
+    """The raster each enabled areal tier resolved to, by tier name; `None` where the product has
+    no coverage for this extent (a disabled tier is absent instead)."""
 
     @property
     def run_dir(self) -> Path:
@@ -188,17 +143,10 @@ def run_pipeline(
 ) -> PipelineResult:
     """Clean, fill heights, classify, write a run directory and optionally build its map site.
 
-    `settings` must already carry a runnable configuration — `CleaningConfig` and `HeightConfig`
-    both have fields that default to `None` and raise at call time. `lczkit.presets.apply_preset`
-    is what fills them.
-
-    Every path comes from `settings`: the run directory, the tile cache, and the `input/`
-    subdirectories the Overture and height-product fetchers own. Nothing existing under `input/`
-    is modified or removed.
-
-    `extent` records **how** `bbox` was chosen — a named place, a So2Sat window, or four numbers —
-    and goes into the manifest. It defaults to the bbox alone, which is all a library caller who
-    computed their own window can honestly claim.
+    `settings` must carry a runnable configuration; `lczkit.presets.apply_preset` fills the
+    thresholds that default to `None`. Nothing existing under `input/` is modified. `extent`
+    records how `bbox` was chosen (a named place, a So2Sat window, or the bbox alone) for the
+    manifest.
     """
     watch = observer if observer is not None else _NullObserver()
     covered = extent if extent is not None else ExtentRecord(kind="bbox", bbox=bbox)
@@ -212,10 +160,7 @@ def run_pipeline(
             yield
         stages[name] = time.perf_counter() - started
 
-    # Asked before anything is spent. Land cover is the fourth stage of nine and the two before it
-    # are the long ones, so a run that learns here that `GEE_PROJECT_NAME` is unset has already
-    # paid for a whole city's cleaning to be told about a one-line configuration fix. The local
-    # backend needs no equivalent: it reaches its tiles over plain HTTP with nothing to configure.
+    # Checked before the long cleaning stage rather than when land cover is reached.
     if settings.land_cover.source == "gee":
         check_asset(
             settings.land_cover.dataset(settings.ucp.land_cover_dataset),
@@ -232,9 +177,7 @@ def run_pipeline(
         )
 
     with timed("morphometrics"):
-        # 2D-only and independent of everything else in the chain: no height data, no unit
-        # strategy, no classification. Ships off by default (`MorphometricsConfig.enabled`), so
-        # this is a no-op for every run that does not ask for it.
+        # 2D and independent of the rest of the chain; off unless `morphometrics.enabled`.
         morphometrics_table = None
         morphometrics_report = None
         if settings.morphometrics.enabled:
@@ -247,10 +190,7 @@ def run_pipeline(
             )
 
     with timed("heights"):
-        # Places the products the configured cascade needs, and returns the config with each
-        # tier's file resolved. Without this step `build_cascade` finds every areal tier's
-        # `filename` unset and silently runs tier 1 alone, so the default cascade needs a step
-        # that actually fetches.
+        # Fetch each enabled tier's raster and fill in its `filename` for `build_cascade`.
         heights, placed = resolve_areal_tiers(settings, bbox)
         tiers = build_cascade(heights, settings.source_dir)
         buildings_area, height_fill = fill_heights(cleaned.buildings_area, tiers)
@@ -259,14 +199,11 @@ def run_pipeline(
         tags = tag_availability(cleaned.buildings_area, cleaned.land_use)
 
     with timed("units"):
-        # The strategy is config, so the chain has to assemble barriers for the two that need
-        # them rather than defaulting to the grid and being unable to reach anything else.
         strategy = build_strategy(settings.units, buildings=buildings_area)
         barriers = None
         measure_on_enclosures = settings.ucp.measure_on == "enclosures"
         if settings.units.strategy != "grid" or measure_on_enclosures:
-            # `clean_vectors` does not carry rail — it is a barrier layer, not something the
-            # cleaning pipeline has a rule for — so it comes straight off the source.
+            # Rail is a barrier only, so it comes straight off the source rather than cleaning.
             streets = (
                 filter_street_barriers(cleaned.streets)
                 if settings.units.drop_pedestrian_barriers
@@ -277,9 +214,7 @@ def run_pipeline(
             )
         units = strategy.generate(bbox, barriers)
 
-        # A street canyon has to be measured against streets, and a grid cell is not bounded by
-        # any. Off by default — see `UcpConfig.measure_on` — and where the target units *are* the
-        # enclosures there is nothing to transfer, so the extra partition is skipped.
+        # See `UcpConfig.measure_on`; nothing to transfer when the units are enclosures already.
         measurement_units = units
         if measure_on_enclosures and settings.units.strategy != "enclosure":
             measurement_units = EnclosureUnits().generate(bbox, barriers)
@@ -287,17 +222,13 @@ def run_pipeline(
     with timed("land_cover"):
         raster = land_cover_source(settings, bbox)
         fractions = raster.fractions(units)
-        # The surface fractions have to describe the units the parameters are measured on, or the
-        # building share and the impervious share it is subtracted from would come from different
-        # ground. A second zonal pass, and only when the two unit sets actually differ.
+        # The surface fractions must describe the units the parameters are measured on.
         measurement_fractions = (
             fractions if measurement_units is units else raster.fractions(measurement_units)
         )
 
     with timed("provenance"):
-        # The column set comes from the configured cascade, not from which tiers happened to fire,
-        # so a run with no areal product still reports its tier fractions as zeros rather than
-        # omitting the columns and changing the output schema.
+        # Columns follow the configured cascade, so the schema does not depend on what fired.
         provenance = height_metrics(buildings_area, units, cascade_height_sources(tiers))
 
     with timed("parameters"):
@@ -317,8 +248,7 @@ def run_pipeline(
     with timed("classify"):
         classifier = PrototypeClassifier(config=settings.classification)
         classification = classifier.classify(parameters)
-        # Off by default, so this is a no-op that still produces a report — a run has to be able to
-        # say the filter did not fire as distinct from never having been configured.
+        # Off by default; still reports, so "did not fire" differs from "not configured".
         classification, smoothing = modal_filter(
             units,
             classification,
@@ -341,8 +271,7 @@ def run_pipeline(
             height_source_availability=availability,
             tag_availability=tags,
             smoothing=smoothing,
-            # The site draws its basemap and its extrusions from these, so that an archived run
-            # directory rebuilds its own map with no access to `input/`.
+            # Persisted so an archived run rebuilds its own site without `input/`.
             layers={
                 "streets": cleaned.streets,
                 "water": cleaned.waterbodies,
@@ -355,11 +284,8 @@ def run_pipeline(
 
     if morphometrics_table is not None and settings.morphometrics.raster_resolution_m is not None:
         with timed("morphometrics_raster"):
-            # The same function `lczkit morphometrics raster` calls on an existing run — one
-            # code path whether the raster is produced now or requested later at a different
-            # resolution. It patches the manifest *file* as JSON (see its own docstring); mirrored
-            # onto the in-memory `outputs.manifest` here so a caller reading this call's return
-            # value sees the same thing a fresh read of the manifest would.
+            # The same call `lczkit morphometrics raster` makes later. It patches the manifest
+            # file; mirror that onto the in-memory manifest.
             raster_report = refresh_raster(
                 outputs.run_dir,
                 settings.morphometrics.raster_resolution_m,
@@ -368,15 +294,7 @@ def run_pipeline(
                 tile_deg=settings.morphometrics.raster_tile_deg,
                 max_bytes=settings.morphometrics.max_raster_bytes,
             )
-            outputs.manifest.morphometrics_raster = {
-                "resolution_m": raster_report.resolution_m,
-                "n_rows": raster_report.n_rows,
-                "n_cols": raster_report.n_cols,
-                "band_names": list(raster_report.band_names),
-                "format": raster_report.format,
-                "tile_deg": raster_report.tile_deg,
-                "tiles": list(raster_report.tiles),
-            }
+            outputs.manifest.morphometrics_raster = raster_report.as_manifest()
 
     site: SiteReport | None = None
     skipped: str | None = None
@@ -385,9 +303,7 @@ def run_pipeline(
             try:
                 site = build_site(outputs.run_dir, config=settings.viz)
             except TippecanoeMissingError as error:
-                # Caught rather than raised, and only this one: it is a statement about the
-                # machine rather than about the run, and everything the run produced is already
-                # written. Any other failure here is a defect and stays loud.
+                # A missing tool, not a defect in the run; everything else is already written.
                 skipped = str(error)
 
     return PipelineResult(

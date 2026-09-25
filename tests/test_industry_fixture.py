@@ -112,7 +112,7 @@ def test_both_evidence_sources_reach_the_same_units(parameters: pd.DataFrame) ->
     assert evidence.get("buildings", 0) > 0
     combined = parameters["industrial_evidence"] == "both"
     assert (
-        parameters.loc[combined, "industrial_fraction"]
+        parameters.loc[combined, "industrial_fraction_of_unit_area"]
         <= parameters.loc[combined, "industrial_fraction_buildings"]
         + parameters.loc[combined, "industrial_fraction_land_use"]
         + 1e-9
@@ -122,7 +122,7 @@ def test_both_evidence_sources_reach_the_same_units(parameters: pd.DataFrame) ->
 def test_the_port_is_overwhelmingly_industrial_by_area(parameters: pd.DataFrame) -> None:
     """Whatever the rule does with it, the input is unambiguous: over half these cells are more
     than 98% industrial land. If the rule cannot reach LCZ 10 here it cannot reach it anywhere."""
-    assert parameters["industrial_fraction"].quantile(0.75) > 0.9
+    assert parameters["industrial_fraction_of_unit_area"].quantile(0.75) > 0.9
 
 
 def test_the_metric_still_never_places_a_port_cell_near_lcz_10(

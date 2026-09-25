@@ -33,6 +33,7 @@ import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import geopandas as gpd
 import numpy as np
@@ -83,6 +84,18 @@ class RasterExportReport:
     tiles: tuple[str, ...] = ()
     """Filenames written under `out_path` when `tile_deg` is set; empty for a single-file write,
     where `out_path` itself (known to the caller) is the whole answer."""
+
+    def as_manifest(self) -> dict[str, Any]:
+        """The `manifest.morphometrics_raster` entry describing this raster."""
+        return {
+            "resolution_m": self.resolution_m,
+            "n_rows": self.n_rows,
+            "n_cols": self.n_cols,
+            "band_names": list(self.band_names),
+            "format": self.format,
+            "tile_deg": self.tile_deg,
+            "tiles": list(self.tiles),
+        }
 
 
 def _snap(
@@ -488,15 +501,7 @@ def refresh_raster(
     manifest_path = run_dir / MANIFEST_FILE
     if manifest_path.exists():
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        manifest["morphometrics_raster"] = {
-            "resolution_m": report.resolution_m,
-            "n_rows": report.n_rows,
-            "n_cols": report.n_cols,
-            "band_names": list(report.band_names),
-            "format": report.format,
-            "tile_deg": report.tile_deg,
-            "tiles": list(report.tiles),
-        }
+        manifest["morphometrics_raster"] = report.as_manifest()
         outputs = list(manifest.get("outputs", []))
         output_entry = RASTER_TILE_DIR if tile_deg is not None else raster_filename(format)
         if output_entry not in outputs:

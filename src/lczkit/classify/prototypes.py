@@ -117,8 +117,6 @@ PROPERTIES: tuple[PropertySpec, ...] = (
 
 PROPERTY_NAMES: tuple[str, ...] = tuple(spec.name for spec in PROPERTIES)
 
-_BY_PROPERTY = {spec.name: spec for spec in PROPERTIES}
-
 #: `label -> property -> (min, max)`, verbatim from the transcribed tables. `None` is a blank
 #: cell, meaning the class is unbounded on that side. A property absent from a class's dict is
 #: unbounded on *both* sides — LCZ G has no published height range at all, and the ten built types

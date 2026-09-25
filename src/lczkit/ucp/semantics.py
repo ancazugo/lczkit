@@ -1,40 +1,18 @@
 """Functional evidence from Overture's own attributes, and how much of it there is.
 
-The package computes twenty parameters and exactly one of them reads a semantic attribute:
-`industrial_fraction`, a literal `isin(["industrial"])`. Overture ingests and cleaning retains
-`subtype` and `class` on every building and every land-use parcel, so the vocabulary was there and
-unread. This module generalises the industrial machinery — `ucp.attributes` holds the one
-definition of "which features match" and `lczkit.units.overlay` the one definition of "how much of
-a unit they cover" — and adds the two columns that make the result honest.
+Per configured `SemanticGroupConfig`, the share of building area and of unit area whose Overture
+`subtype` or `class` places it in the group, plus two coverage columns that make those shares
+readable: `building_tag_coverage` and `land_use_coverage`.
 
-**It used to intersect the land-use layer six times**, once for its coverage column and once per
-configured semantic group, plus once per group for the buildings: twelve overlays whose count grew
-with the configuration rather than with the city. The layers are intersected once by
-`ucp.parameters` and selecting a group is now a mask over pieces that already exist.
+**The coverage columns are the point.** Tagged building area is 48.6% across Europe and North
+America against 13.6% elsewhere (Rio 3.1%), because ML-derived footprints carry no attributes and
+Overture's conflation is winner-takes-all per building. A `lightweight` share of 0.0 where 97% of
+building area is untagged is not evidence of absence. Land-use parcels generalise better (30-65%
+coverage where building tags are near-absent), so the two are reported separately.
 
-**The two coverage columns are the point, not a diagnostic.** Measured over the sixteen study
-cities the registry held at the time - the four added afterwards have no Overture extract on disk
-and are **not** in this figure - **48.6% of building area carries an attribute across Europe and
-North America against 13.6% elsewhere** — the same collapse tier-1 height coverage shows, on
-a second and independent attribute. Rio is at 3.1%, so a `lightweight` fraction of 0.0 there is not
-evidence that there is no informal settlement; it is 97% of building area carrying no tag. Without
-`building_tag_coverage` beside it the two states are indistinguishable, exactly as "90% real
-heights" and "90% coarse raster fallback" are without `height_tier_fractions`.
-
-**Land-use parcels are the evidence that generalises.** They cover 30-65% of the same cities where
-building tags are near-absent (Rio 64.5%, Jakarta 55.8%, Cairo 37.6%, Nairobi 35.6%, Mumbai 30.5%),
-and 79-107% in Europe. That is why the two are reported as separate
-columns with their denominators in their names rather than fused into one number: they have
-different availability, different meanings and different failure modes, and a single blended
-fraction would hide all three.
-
-**Scope: built types only.** Land use supplies functional semantics and never land cover — rasters
-own that. `park`, `forest`, `grass` and `farmland` are all
-present in the vocabulary and all deliberately unmapped, so nothing here can reach LCZ A-G.
-
-The vocabulary is transcribed from `docs/references/tables/overture_lcz_semantic_mapping.md`, which
-`tests/test_ucp_semantics.py` parses and asserts against, and every value in it was taken from what
-is present in the pinned release rather than from the schema documentation.
+Built types only: `park`, `forest`, `grass` and `farmland` are deliberately unmapped, because
+rasters own land cover. The vocabulary is `docs/references/tables/overture_lcz_semantic_mapping.md`,
+which a test parses and asserts against.
 """
 
 from __future__ import annotations
@@ -53,10 +31,8 @@ BUILDING_SUFFIX = "_buildings_of_building_area"
 PARCEL_SUFFIX = "_parcels_of_unit_area"
 """Both a numerator and a denominator in every column name.
 
-A column whose name states neither cannot be read correctly, as `industrial_fraction` showed.
-These columns are not comparable to each other and must not look as though they are: one divides
-tagged building area by
-*all* building area, the other divides dissolved parcel area by *unit* area.
+The two are not comparable: one divides tagged building area by all building area, the other
+dissolved parcel area by unit area.
 """
 
 COVERAGE_COLUMNS = ("building_tag_coverage", "land_use_coverage")
@@ -107,13 +83,8 @@ def semantic_metrics(
     evidence for both large-low-rise form and commercial function, and `retail` appears in both
     groups deliberately.
 
-    **Each layer is intersected with the units once.** `building_pieces` and `land_use_pieces` come
-    from `lczkit.ucp.parameters`, which overlays each layer once for every consumer of it; passing
-    `None` overlays here instead. Selecting a group is then a mask over pieces that already exist,
-    which is what stops the cost growing with the number of configured groups — this function used
-    to run one intersection per group per layer, so five groups meant twelve overlays.
-
-    `building_area_m2` is the denominator for the building columns, handed down for the same reason.
+    `building_pieces`, `land_use_pieces` and `building_area_m2` are handed down by
+    `lczkit.ucp.parameters`, which intersects each layer once; passing `None` computes them here.
 
     No input is mutated.
     """

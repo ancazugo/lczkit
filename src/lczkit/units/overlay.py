@@ -1,29 +1,13 @@
-"""Overlaying a layer against the units, once — the operation five helpers each had a copy of.
+"""Overlaying a layer against the units: the one definition every per-unit area statistic uses.
 
-Every per-unit area statistic in this package is the same three steps: intersect a layer with the
-units, measure each piece, and sum by `unit_id`. `ucp.industrial` had three copies of it and
-`ucp.semantics` two, and between them they ran **seventeen** overlays over a parameter stage that
-needs two — `semantic_metrics` alone overlaid the land-use layer six times, once for its coverage
-column and once per configured semantic group.
+Intersect once with `unit_pieces`, then select, sum and share over the pieces. A footprint
+straddling a unit boundary contributes its share to each side, the same rule the height provenance
+uses, so every fraction built here shares a denominator with `building_surface_fraction`.
 
-Three things follow from having one definition rather than five.
-
-**The pieces are reusable.** `unit_pieces` carries the attributes through, so selecting industrial
-buildings, or a semantic group's parcels, is a filter on a frame that already exists rather than
-another intersection. `ucp.parameters` overlays each layer once and hands the result down, which is
-the same move it already made for `building_area_m2`.
-
-**There is one answer to "does this need dissolving".** `covered_fraction(dissolve=True)` clips
-first and dissolves per unit, which is what `semantics` did; `industrial` reached the same quantity
-through a whole-layer `union_all`, which is superlinear and — measured on real Overture land use —
-raises `GEOSException: side location conflict` even after `make_valid`. That call site was safe
-only because it ran on a few dozen industrial parcels, and nothing about its name said so. The
-union of the clipped pieces inside a unit is the clip of the global union, so the safe form is not
-an approximation of the unsafe one.
-
-**Splitting at unit boundaries stays the rule.** A footprint straddling a boundary contributes its
-share to each side rather than landing wholly in one, matching the rule the height cascade uses, so
-every fraction built here shares a denominator with `building_surface_fraction` exactly.
+`covered_fraction(dissolve=True)` clips first and dissolves per unit. A whole-layer `union_all` is
+superlinear and raises `GEOSException: side location conflict` on real Overture land use even after
+`make_valid`; the union of clipped pieces within a unit equals the clip of the global union, so the
+bounded form is exact.
 """
 
 from __future__ import annotations

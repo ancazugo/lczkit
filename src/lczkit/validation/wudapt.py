@@ -88,9 +88,6 @@ _FALSE = frozenset({"False", "false", "F", "f", "FALSE", "0"})
 """The flags are not consistently encoded - both `'True'`/`'False'` and `'T'`/`'F'` occur across
 the file. Parsing only one spelling would read the other as null and silently gate on it."""
 
-PRIORITY_COLUMNS: tuple[str, ...] = ("representative_date", "oa", "submission_date")
-"""Columns `resolve_overlaps` reads to rank contested ground. Absent columns are skipped."""
-
 READ_COLUMNS: tuple[str, ...] = (
     CLASS_COLUMN,
     *QC_COLUMNS,

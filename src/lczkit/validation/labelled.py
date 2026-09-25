@@ -50,9 +50,6 @@ LABEL_COLUMN = "LCZ_class"
 """So2Sat LCZ42's own class column. Integer 1-17, matching Demuzere's coding for 1-10 and A-G, so
 no translation is needed - asserted by `tests/test_validation_labelled.py`."""
 
-SO2SAT_CITATION = "10.1109/MGRS.2020.2964708"
-"""Zhu et al. (2020), *IEEE GRSM* 8(3), 76-89. So2Sat LCZ42."""
-
 COLUMNS = ("reference_lcz", "reference_coverage", "reference_majority_fraction")
 
 

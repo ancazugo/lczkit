@@ -90,9 +90,21 @@ def city(request: pytest.FixtureRequest) -> str:
     return str(request.param)
 
 
+RETIRED_COLUMNS = {"industrial_fraction": "industrial_fraction_of_unit_area"}
+"""Columns the pins recorded that have since been removed, and the column each duplicated.
+
+The pins are not regenerated when a column is retired, so the retirement is checked against them:
+the removed column must have equalled the one that remains, which shows nothing was lost.
+"""
+
+
 def test_every_evidence_column_reproduces_its_recorded_value(city: str) -> None:
     recorded = pd.read_parquet(EVIDENCE_DIR / f"{city}_evidence.parquet")
     computed = evidence_table(*CASES[city])
+
+    for retired, kept in RETIRED_COLUMNS.items():
+        assert_series_equal(recorded[retired], recorded[kept], check_names=False)
+    recorded = recorded.drop(columns=list(RETIRED_COLUMNS))
 
     assert list(computed.columns) == list(recorded.columns)
     assert computed.index.equals(recorded.index)

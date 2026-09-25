@@ -262,17 +262,6 @@ PARAMETERS: tuple[ParameterSpec, ...] = (
         reference=COMPUTED_HERE,
     ),
     ParameterSpec(
-        name="industrial_fraction",
-        label="Industrial share (deprecated alias)",
-        unit="fraction",
-        description=(
-            "DEPRECATED alias for `industrial_fraction_of_unit_area`, kept for one release. The "
-            "bare name is the one whose denominator this repository contradicted itself about in "
-            "three places at once; read one of the two named columns instead."
-        ),
-        reference=COMPUTED_HERE,
-    ),
-    ParameterSpec(
         name="industrial_fraction_buildings",
         label="Industrial share, from building class",
         unit="fraction",
@@ -291,7 +280,8 @@ PARAMETERS: tuple[ParameterSpec, ...] = (
         label="Industrial evidence source",
         unit="category",
         description=(
-            "Which sources contributed area to `industrial_fraction`: 'none', 'buildings', "
+            "Which sources contributed area to `industrial_fraction_of_unit_area`: 'none', "
+            "'buildings', "
             "'land_use' or 'both'. Recorded because the two sources are very differently "
             "reliable."
         ),
@@ -417,7 +407,7 @@ NOT_COMPUTED: tuple[tuple[str, str], ...] = (
         "their scheme — deferring it costs the classification little.",
     ),
 )
-"""Stewart & Oke properties this phase does not compute, and why.
+"""Stewart & Oke properties this package does not compute, and why.
 
 Recorded here rather than only in the README so the omission reaches the run manifest: a consumer
 reading the parameter table needs to know that two dimensions of the LCZ definition are absent, not
@@ -427,7 +417,7 @@ zero.
 
 LIMITATIONS: tuple[tuple[str, str], ...] = (
     (
-        "industrial_fraction",
+        "industrial_fraction_of_building_area, industrial_fraction_of_unit_area",
         "Overture exposes a single 'industrial' value with no heavy/light split. GeoClimate keys "
         "LCZ 10 on OSM's HEAVY INDUSTRY against light industry and commercial, and that "
         "distinction does not survive Overture's schema normalisation — the same normalisation "

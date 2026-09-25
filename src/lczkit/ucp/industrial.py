@@ -1,44 +1,19 @@
-"""`industrial_fraction` — the one functional attribute in the parameter table.
+"""The industrial shares that drive the LCZ 10 rule.
 
-It exists because LCZ 8 (large low-rise) and LCZ 10 (heavy industry) are geometrically
-near-identical: large footprint, low, sparse. Nothing in morphology or land cover separates a
-distribution warehouse from a refinery, so without a functional signal LCZ 10 is unreachable and
-the package would silently never emit it. The classifier applies this *after* the prototype
-distance, as an explicit rule — it is deliberately not folded into the morphological metric, where
-it would distort every other class.
+LCZ 8 (large low-rise) and LCZ 10 (heavy industry) are geometrically near-identical, so LCZ 10 needs
+a functional signal; the classifier applies it after the prototype distance, never inside it.
+Industrial buildings and industrial land-use parcels are combined by union, so a factory standing
+inside an industrial parcel counts once.
 
-Two evidence sources, combined by union: industrial building footprints are dissolved together
-with industrial land-use parcels before the area is measured, so a factory standing inside an
-industrial parcel counts once rather than twice. The two sources therefore reinforce each other's
-*coverage* without inflating the magnitude. Each source's own fraction ships alongside the
-combined one, together with `industrial_evidence` naming which contributed, because the two are
-very differently reliable.
+Both denominators are emitted, each named for what it divides by:
 
-**Two denominators, both emitted, each named for what it divides by.** A single column called
-`industrial_fraction` cannot be read correctly when it is unclear whether it divides by building
-area or by unit area, and that is not resolvable by
-picking, because the two quantities answer different questions:
+- `industrial_fraction_of_building_area`: industrial building area over all building area, Bernard
+  et al. (2024)'s `FIND/B`, so their 0.33 threshold transfers. Null where nothing is built.
+- `industrial_fraction_of_unit_area`: industrial ground (buildings or parcels) over unit area.
 
-- `industrial_fraction_of_building_area` — of what is *built* here, how much is industrial. This
-  is Bernard et al. (2024)'s `FIND/B`, so their published 0.33 threshold transfers to it directly.
-  Null where nothing is built, because "what share of no buildings is industrial" has no answer.
-- `industrial_fraction_of_unit_area` — of this cell's *ground*, how much is industrial. Sensitive
-  to how much of the cell is built at all, which is why Bernard's threshold does not transfer.
-
-A working port plot is a case where they diverge sharply: sparsely built, so a low unit-area share
-and a high building-area one. That is exactly the fabric the LCZ 10 rule has to catch, which is why
-the rule reads the building-area column by default.
-
-`industrial_fraction` is retained as a deprecated alias for the unit-area column, so no stored
-figure changes meaning underneath a reader.
-
-**The geometry is `lczkit.units.overlay`'s, not this module's.** Three private helpers here each
-carried a copy of "intersect a layer with the units, measure the pieces, sum by `unit_id`", and
-two more sat in `ucp.semantics`. One of the five reached its dissolved coverage through a
-whole-layer `union_all`, which is safe on the industrial subset and is the operation this file's
-own anti-pattern list warns about on a whole layer — a distinction nothing in the helper's name
-carried. `ucp.parameters` now intersects each layer once and hands the pieces down, and the
-recorded values for all three fixtures reproduce to 1e-9.
+A working port plot is sparsely built, so the two diverge sharply there; the LCZ 10 rule reads the
+building-area share. Each source's own unit-area share ships too, with `industrial_evidence` naming
+which contributed.
 """
 
 from __future__ import annotations
@@ -61,19 +36,10 @@ from lczkit.units.overlay import (
 COLUMNS = (
     "industrial_fraction_of_building_area",
     "industrial_fraction_of_unit_area",
-    "industrial_fraction",
     "industrial_fraction_buildings",
     "industrial_fraction_land_use",
     "industrial_evidence",
 )
-
-DEPRECATED_ALIAS = "industrial_fraction"
-"""Alias for `industrial_fraction_of_unit_area`, kept for one release.
-
-Named rather than merely left in place: a bare `industrial_fraction` is precisely the column whose
-denominator nobody could agree on, and anything still reading it is reading the unit-area answer
-whether or not it meant to.
-"""
 
 EVIDENCE = ("none", "buildings", "land_use", "both")
 """Fixed category set for `industrial_evidence`, so the output schema does not depend on which
@@ -176,7 +142,6 @@ def industrial_metrics(
         {
             "industrial_fraction_of_building_area": of_building_area,
             "industrial_fraction_of_unit_area": union_share,
-            "industrial_fraction": union_share,
             "industrial_fraction_buildings": building_share,
             "industrial_fraction_land_use": land_use_share,
             "industrial_evidence": pd.Categorical(evidence, categories=EVIDENCE),

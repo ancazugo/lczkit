@@ -62,10 +62,9 @@ class VectorSource(Protocol):
     def land_use(self, bbox: BBox) -> gpd.GeoDataFrame:
         """Return land-use polygons intersecting `bbox`, retaining `subtype` and `class`.
 
-        Functional semantics only. This layer supplies the industrial share of a unit's area —
-        `industrial_fraction`, which the LCZ 8/10 rule reads — and nothing else. It is **not** a
-        barrier for spatial-unit generation and **not** a
-        land-cover source — rasters own land cover.
+        Functional semantics only: it feeds the industrial and semantic shares. It is **not** a
+        barrier for spatial-unit generation and **not** a land-cover source; rasters own land
+        cover.
         """
         ...
 

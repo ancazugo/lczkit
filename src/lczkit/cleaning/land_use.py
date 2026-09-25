@@ -1,9 +1,9 @@
 """Land-use cleaning — deliberately minimal.
 
-Land use is functional metadata passed through to `industrial_fraction`, not a morphological
-layer. It gets no thresholded cleaning of any kind: no size filter, no overlap resolution, no
-absorption of small parcels. The one operation applied is geometry repair, so that an area overlay
-cannot die on an invalid upstream polygon.
+Land use is functional metadata passed through to the industrial and semantic shares, not a
+morphological layer. It gets no thresholded cleaning of any kind: no size filter, no overlap
+resolution, no absorption of small parcels. The one operation applied is geometry repair, so that
+an area overlay cannot die on an invalid upstream polygon.
 
 MultiPolygons are kept rather than exploded — a land-use parcel is legitimately multipart, and
 area overlays handle multipart geometry without help.

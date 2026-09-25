@@ -1,15 +1,8 @@
 """`TessellationUnits`: building-level enclosed tessellation cells (ETCs).
 
-Built for `lczkit.morphometrics` (Phase 29), which ports the 2D morphometric attributes of
-Majer & Fleischmann (2026) — computed over `momepy.enclosed_tessellation`, not over
-`EnclosureUnits`'s coarser street-bounded blocks. This is the "tessellation-based building-level
-units" strategy the project's deferred list named since Phase 0.
-
-**Deliberately not exposed via `UnitsConfig.strategy`.** Adding `"tessellation"` there would let
-ETCs become the pipeline's main classification unit, coupling a purpose-built morphometrics
-strategy to classification and validation — a materially larger scope than what this module
-exists for. `TessellationUnits` satisfies `SpatialUnitStrategy` structurally and can be wired in
-later if that is asked for deliberately; nothing here assumes it is the only caller.
+The units `lczkit.morphometrics` computes the 2D attributes of Majer & Fleischmann (2026) on,
+built with `momepy.enclosed_tessellation` inside the street-bounded enclosures. Not offered as a
+classification unit through `UnitsConfig.strategy`.
 
 **Tessellation does not partition `bbox`, unlike `GridUnits`/`EnclosureUnits`.**
 `momepy.enclosed_tessellation` assigns a negative index to any tessellation cell with no parent

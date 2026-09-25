@@ -212,8 +212,8 @@ def test_industrial_evidence_is_present_but_finds_almost_nothing_in_mitte(
     1559, so this fixture exercises the plumbing and cannot exercise the rule. Asserting the
     smallness keeps that limitation visible rather than letting a future reader mistake a passing
     test for evidence that LCZ 10 discrimination works."""
-    assert grid_parameters["industrial_fraction"].notna().all()
-    assert grid_parameters["industrial_fraction"].max() < 0.1
+    assert grid_parameters["industrial_fraction_of_unit_area"].notna().all()
+    assert grid_parameters["industrial_fraction_of_unit_area"].max() < 0.1
     assert set(grid_parameters["industrial_evidence"]) <= {"none", "buildings"}
 
 

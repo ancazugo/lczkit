@@ -90,10 +90,8 @@ def apply_basemaps(config: VizConfig, keys: list[str] | None) -> None:
     """
     explicit = keys is not None
     if keys is None:
-        keys = list(config.basemap_keys) or list(DEFAULT_BASEMAP_KEYS)
+        keys = list(config.online_basemaps) or list(DEFAULT_BASEMAP_KEYS)
     config.online_basemaps = keys
-    # The deprecated singular would otherwise survive alongside the list and reappear in the picker.
-    config.online_basemap = None
 
     if not keys:
         console.print("  base maps: [bold]none[/bold] — this site will reach no network")

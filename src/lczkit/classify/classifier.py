@@ -93,7 +93,7 @@ class PrototypeClassifier:
     def classify(self, parameters: pd.DataFrame) -> pd.DataFrame:
         """Classify an urban canopy parameter table, returning one row per `unit_id`.
 
-        `parameters` must carry every prototype dimension plus `industrial_fraction`; the table
+        `parameters` must carry every prototype dimension plus `lcz10_industrial_column`; the table
         `lczkit.ucp.compute_parameters()` returns does. Neither input nor index is mutated, and
         the result is indexed identically so it joins straight onto the units.
         """

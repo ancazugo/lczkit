@@ -55,7 +55,7 @@ and the paper it comes from.
 
 ## Functional evidence
 
-`industrial_fraction` exists because LCZ 8 and LCZ 10 are geometrically near-identical, and
+The industrial shares exist because LCZ 8 and LCZ 10 are geometrically near-identical, and
 because anthropogenic heat output — the only published Stewart & Oke property separating them
 directly, at 300+ against ≤50 W m⁻² — is not something this package can measure.
 

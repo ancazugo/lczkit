@@ -30,7 +30,6 @@ from typing import Any
 import geopandas as gpd
 import pandas as pd
 
-from lczkit.classify.classifier import DISTANCE_COLUMNS
 from lczkit.config import VizConfig, maptiler_key
 from lczkit.output.writer import LAYERS_DIR, MANIFEST_FILE, UNITS_FILE, VIZ_FILE
 from lczkit.viz import basemaps
@@ -197,7 +196,7 @@ def build_site(run_dir: Path | str, *, config: VizConfig | None = None) -> SiteR
         has_detail=has_detail,
         basemap_layers=tuple(basemap),
         has_buildings=has_buildings,
-        online_basemaps=config.basemap_keys,
+        online_basemaps=config.online_basemaps,
         maptiler_key=_resolve_api_key(config),
     )
 
@@ -241,7 +240,7 @@ def _resolve_api_key(config: VizConfig) -> str | None:
     """
     if config.maptiler_key:
         return config.maptiler_key
-    if any(basemaps.provider(key).requires_key for key in config.basemap_keys):
+    if any(basemaps.provider(key).requires_key for key in config.online_basemaps):
         return maptiler_key()
     return None
 
@@ -287,12 +286,3 @@ def _building_columns(buildings: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         column for column in ("height", "height_source", "height_confidence") if column in buildings
     ]
     return buildings[[*wanted, "geometry"]]
-
-
-def distance_columns_present(columns: list[str]) -> list[str]:
-    """The 17-way distance columns among `columns`, in prototype order.
-
-    Exposed so the sidebar's bar chart and the tests agree on the ordering without either
-    re-deriving it from a column name pattern.
-    """
-    return [column for column in DISTANCE_COLUMNS if column in columns]

@@ -79,27 +79,28 @@ def test_the_esri_endpoint_keeps_its_transposed_axis_order() -> None:
 
 def test_no_basemap_is_the_default() -> None:
     """The default the whole offline guarantee rests on."""
-    assert VizConfig().basemap_keys == []
+    assert VizConfig().online_basemaps == []
 
 
-def test_basemap_keys_keeps_the_configured_order() -> None:
+def test_online_basemaps_keeps_the_configured_order() -> None:
     keys = ["carto-dark", "osm", "maptiler-topo"]
 
-    assert VizConfig(online_basemaps=keys).basemap_keys == keys
+    assert VizConfig(online_basemaps=keys).online_basemaps == keys
 
 
 def test_the_deprecated_singular_is_folded_in_rather_than_ignored() -> None:
-    """It is what runs built before the list existed recorded in their manifests, and `build_site`
-    re-validates an archived manifest to rebuild a site. Pydantic ignores unknown fields, so
-    dropping the field would make an archived run's ground disappear on rebuild with nothing said.
+    """The singular field is gone, but it is what runs built before the list existed recorded in
+    their manifests, and `build_site` re-validates an archived manifest to rebuild a site. Pydantic
+    ignores unknown fields, so without the migration an archived run's ground would disappear on
+    rebuild with nothing said.
     """
-    assert VizConfig(online_basemap="osm").basemap_keys == ["osm"]
-    assert VizConfig(online_basemap="osm", online_basemaps=["carto-dark"]).basemap_keys == [
+    assert VizConfig(online_basemap="osm").online_basemaps == ["osm"]
+    assert VizConfig(online_basemap="osm", online_basemaps=["carto-dark"]).online_basemaps == [
         "osm",
         "carto-dark",
     ]
     # Naming the same provider both ways is one entry, not a duplicated dropdown row.
-    assert VizConfig(online_basemap="osm", online_basemaps=["osm"]).basemap_keys == ["osm"]
+    assert VizConfig(online_basemap="osm", online_basemaps=["osm"]).online_basemaps == ["osm"]
 
 
 def test_an_unknown_basemap_is_refused_at_config_time() -> None:

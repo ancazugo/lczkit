@@ -42,9 +42,10 @@ def zonal_mean(
     value at their representative point.
 
     `geoms` is reprojected to the raster's CRS internally; it must have a CRS set, and so must
-    the raster. Overlapping geometries are resolved last-writer-wins by `rasterio.features`;
-    planar enforcement in cleaning means building footprints do not overlap, so this does not
-    arise for the cascade's own use.
+    the raster. Each cell is burnt with a single label, the last geometry touching it, so at a
+    90-100 m resolution most footprints sharing a cell burn nothing and take the fallback: the
+    value at their representative point. A footprint spanning several cells averages only the
+    cells it won. Both are that neighbourhood's value, which is what these products measure.
     """
     n = len(geoms)
     empty = np.full(n, np.nan, dtype="float64")

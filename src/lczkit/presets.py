@@ -1,15 +1,9 @@
-"""Named, complete run configurations — the settings a run needs that have no safe default.
+"""Named, complete run configurations: the measured values that have no safe default.
 
-`Settings.load()` cannot produce a runnable configuration on its own, and that is deliberate.
-`CleaningConfig`'s eight numeric fields and `HeightConfig`'s two confidences all default to `None`
-and raise at call time, because each is a threshold someone measured and an invented default would
-travel into every run's manifest looking like a measurement. See those models for the argument.
-
-A preset is where those values live, so that `lczkit run` and the published sites cannot drift
-apart. Modelled on `lczkit.classify.weights`, which has the same shape for the weight vectors.
-
-**One preset, and that is the honest number.** `published` is what the three published sites were
-built with. A second name would imply a second measured configuration exists.
+`CleaningConfig`'s thresholds and the height confidences default to `None` in `lczkit.config` and
+raise when used, because an invented default would enter every manifest looking like a
+measurement. A preset supplies them, so `lczkit run` and the published sites cannot drift apart.
+There is one preset, `published`, because only one configuration has been measured.
 """
 
 from __future__ import annotations
@@ -30,24 +24,14 @@ here and the offline numbers. Never `"latest"`: a floating release is not reprod
 
 AREAL_CONFIDENCE = {"gob25d": 0.5, "wsf3d": 0.35, "ghsl": 0.25}
 """`height_confidence` per areal tier, descending with coarseness below tier 1's 0.9 / 0.6.
-
-Ordinal, with no published number behind it — the same standing as the two Overture confidences
-beside them, and set here rather than defaulted in `lczkit.config` for exactly the reason
-`HeightConfig` gives: an invented default would travel into every run's manifest as if it were
-measured. The choice is recorded in the manifest where it is visible.
-"""
+Ordinal, with no published number behind it; recorded in the manifest."""
 
 
 def _published_cleaning() -> CleaningConfig:
-    """The fixture-derived working values for a metropolitan extent, including the street tiling.
+    """The fixture-derived values the published sites were built with, street tiling included.
 
-    These are the thresholds the published sites were built with. A smaller extent can afford a
-    smaller `building_max_area_m2` and no tiling, but changing them here changes what `lczkit run`
-    produces relative to every published figure.
-
-    2000 m tiles keep the largest face-artifact component tractable; the 600 m buffer is where seam
-    agreement stops improving — measured on 16 km2 of Berlin at 99.77% (300 m), 99.97% (600 m) and
-    99.95% (900 m).
+    The 600 m tile buffer is where seam agreement stops improving: 99.77% (300 m), 99.97% (600 m)
+    and 99.95% (900 m) on 16 km² of Berlin.
     """
     return CleaningConfig(
         building_max_area_m2=100_000.0,
@@ -62,11 +46,9 @@ def _published_cleaning() -> CleaningConfig:
 
 
 def _published_heights() -> HeightConfig:
-    """Tier 1 plus the `coarse` cascade, with a confidence set on every areal tier.
+    """Tier 1 plus the `coarse` cascade, with a confidence on every areal tier.
 
-    Without the confidences `build_cascade` raises; without the tiers `fill_heights` runs tier 1
-    alone. `gob25d` keeps its confidence and stays `enabled=False` — measured harmful, so it is
-    switched off rather than deleted.
+    Open Buildings 2.5D keeps its confidence and stays disabled.
     """
     config = HeightConfig(overture_height_confidence=0.9, overture_num_floors_confidence=0.6)
     for tier in config.areal_tiers:
@@ -95,25 +77,9 @@ class RunPreset:
     def apply(self, settings: Settings) -> Settings:
         """Write this preset over `settings`, in place, and return it.
 
-        Each section is copied rather than shared, so two runs configured from one preset cannot
-        mutate each other's settings through it.
-
-        **`gee_project` survives the copy.** It is resolved from `GEE_PROJECT_NAME` by
-        `Settings.load`, so it is a credential and not a measured configuration, and replacing the
-        whole `land_cover` section discarded it — every `lczkit run` cleared the variable moments
-        after reading it. That was invisible while nothing downstream read the field, and it is
-        exactly the silent-discard failure `Settings.load` documents in the other direction: an
-        absent value must leave what is already there alone. A preset that names a project itself
-        still wins, so the precedence is preset, then environment.
-
-        A consequence worth naming, because the field now reaches places it never did: every
-        manifest on disk before this fix recorded `gee_project: null`, and every one after it
-        records the project the environment supplied, whichever backend answered. The manifest is
-        `settings.model_dump()` verbatim and `build_site` copies it into the site, so the project
-        ID is published with any site built from such a run. That is the designed behaviour rather
-        than a leak — a Google Cloud project ID names a tenancy and is not a credential, unlike
-        `VizConfig.maptiler_key`, which is `exclude=True` precisely because it is one — but it is
-        the same three-files-deep path, so it is stated rather than left to be discovered.
+        Sections are copied, not shared, so two runs from one preset cannot mutate each other. An
+        environment-supplied `gee_project` survives unless the preset names one itself: replacing
+        the whole `land_cover` section used to discard it.
         """
         settings.overture.release = self.overture_release
         settings.cleaning = self.cleaning.model_copy(deep=True)

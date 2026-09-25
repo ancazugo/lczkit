@@ -17,7 +17,13 @@ import pytest
 import rasterio
 from conftest import write_height_raster
 
-from lczkit.config import ArealTierConfig, HeightConfig, Settings
+from lczkit.config import (
+    ArealTierConfig,
+    GhslProduct,
+    HeightConfig,
+    OpenBuildings25dProduct,
+    Settings,
+)
 from lczkit.heights.tiers import build_cascade
 from lczkit.sources.height_products import (
     MOLLWEIDE_ORIGIN_X,
@@ -324,7 +330,7 @@ def _stub_fetchers(
     ):
         monkeypatch.setattr(
             "lczkit.sources.height_products." + attribute,
-            lambda settings, stub=stubs[name]: stub,
+            lambda settings, tier, stub=stubs[name]: stub,
         )
     return stubs
 
@@ -361,8 +367,15 @@ def test_a_product_with_no_coverage_shortens_the_cascade_rather_than_failing(
         overture_height_confidence=0.9,
         overture_num_floors_confidence=0.6,
         areal_tiers=[
-            ArealTierConfig(name="gob25d", source_dir_name="GOB25D", confidence=0.5),
-            ArealTierConfig(name="ghsl", source_dir_name="GHSL", confidence=0.25),
+            ArealTierConfig(
+                name="gob25d",
+                source_dir_name="GOB25D",
+                confidence=0.5,
+                product=OpenBuildings25dProduct(),
+            ),
+            ArealTierConfig(
+                name="ghsl", source_dir_name="GHSL", confidence=0.25, product=GhslProduct()
+            ),
         ],
     )
     stubs = _stub_fetchers(settings, monkeypatch, gob25d=False)
