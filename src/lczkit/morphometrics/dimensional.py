@@ -80,9 +80,9 @@ def dimensional_metrics(
     # `momepy.courtyard_area` calls `shapely.get_exterior_ring`, which is defined only for a
     # single `Polygon` — on a `MultiPolygon` it returns `None`, silently making the "filled"
     # term of the courtyard-area formula 0 and the result `-area` instead of a real value.
-    # `buildings_area` can legitimately hold MultiPolygons (small-building absorption dissolves
-    # two non-adjacent footprints without erasing either), so this is nulled explicitly rather
-    # than reported as a nonsensical negative — found on real Nairobi data, 3 of 7 214 buildings.
+    # `buildings_area` can legitimately hold MultiPolygons (`trim_overlaps` can cut a footprint in
+    # two when it subtracts a neighbour crossing it), so this is nulled explicitly rather than
+    # reported as a nonsensical negative — found on real Nairobi data, 3 of 7 214 buildings.
     multipart = buildings.geometry.geom_type == "MultiPolygon"
     courtyard_area = courtyard_area.mask(multipart)
     courtyard_index = courtyard_index.mask(multipart)

@@ -36,7 +36,10 @@ Two differences from `overture/`, both recorded in `TARGETS` in the build script
   is `trim_overlaps`. Hong Kong's raw Overture footprints **double-count 7.52% of their own summed
   area** (2 113 744 m² summed against 1 954 770 m² of ground) versus Berlin's 0.61% —
   podium-and-tower stacks and conflated duplicates — and building surface fraction sums overlay
-  pieces, so leaving that in would inflate the numerator.
+  pieces, so leaving that in would inflate the numerator. **Trimming removes only 1.5 of the 7.52
+  points**: geoplanar's `overlaps` predicate is false for a footprint wholly inside another, so
+  nested footprints survive and 6.0% of `buildings_area`'s summed area is still double-counted
+  (274 of the 287 residual pairs are containment).
 
   This fixture is why the retention criterion is stated against the **union** of raw footprints: a
   city whose sources overlap themselves by more than 1% cannot meet a ≥99%-of-sum bar without

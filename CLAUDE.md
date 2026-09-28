@@ -2822,8 +2822,9 @@ across four scaling extents did:
 - `momepy.courtyard_area` calls `shapely.get_exterior_ring`, defined only for a single `Polygon`.
   On a `MultiPolygon` it returns `None`, and the courtyard-area formula silently computes
   `0 - area = -area` instead of raising. `buildings_area` legitimately holds MultiPolygons — small-
-  building absorption (Phase 1) dissolves two non-adjacent footprints without erasing either — so
-  this is a real input, not a data-quality problem to clean away. Found on 3 of 7 214 real Nairobi
+  building absorption (Phase 1) dissolves two non-adjacent footprints without erasing either
+  *(corrected in Phase 31: absorption runs on `buildings_topo` only; the MultiPolygons come from
+  `trim_overlaps` cutting a footprint in two)* — so this is a real input, not a data-quality problem to clean away. Found on 3 of 7 214 real Nairobi
   buildings (0.04%), `courtyard_index_building` reading exactly -1.0. Fixed by nulling both
   `courtyard_area_building`/`courtyard_index_building` for a `MultiPolygon` row rather than
   reporting the negative.
@@ -3024,8 +3025,13 @@ before allocating; `ruff`/`mypy` clean; full suite green with no regressions.
 
 ### Phase 31 — audit and simplification — CONCLUDED
 
-**A second full audit, on explicit request, with the instruction to make the package less
-redundant and simpler.** Not a diagnostic phase: **no parameter value, label or stored figure
+**A second audit, on explicit request, with the instruction to make the package less redundant
+and simpler.** It ran in two passes. The first read the config, pipeline, height, classify, UCP,
+units, output and validation-agreement code and made the simplifications below; it was recorded
+here as a "full" audit, which it was not. The second pass read the rest (`cleaning/`, the
+sources, the prototype table, smoothing, the reference loaders, patch and tessellation units,
+the morphometric metrics, `viz/`, `places`, `cities`) and checked the constants no test pins
+against the papers. Its findings are listed separately below. Not a diagnostic phase: **no parameter value, label or stored figure
 moves.** The one change that could have moved numbers, the UCP evidence path, is still pinned to
 1e-9 by `test_ucp_evidence_equivalence.py`. `src/` is **1 018 lines shorter net** (−1 786 / +768);
 `config.py` went from 1 992 to 1 389 lines.
@@ -3103,6 +3109,65 @@ Each would move stored numbers or was out of the agreed scope.
    the documented place a caller who does validate records it.
 5. Checked and **not** a problem: `PrototypeClassifier.describe()` recomputes the geometric prior
    by 200 000-sample Monte Carlo on every run, ~1.2 s in total.
+
+#### Second pass: findings recorded, not changed
+
+Same rule as above: each would move stored numbers, so it is recorded with its measurement and left
+for a decision. Docstrings that stated the opposite of the measurement were corrected.
+
+6. **`trim_overlaps` does not trim nested footprints, and on the primary fixture that leaves 6% of
+   building area double-counted.** `geoplanar.trim_overlaps` pairs footprints with the `overlaps`
+   predicate, which is false for containment and for equality, so a tower drawn inside its podium
+   survives whole. Hong Kong fixture: raw self-overlap 7.52%, residual after cleaning **6.02%**;
+   274 of the 287 residual pairs are containment (122 862 m²), 13 are partial overlaps left by
+   stacks (10 161 m²). Berlin fixture 0.61% → 0.10%, all containment. Across the runs on disk the
+   residual is 0.04% (Nairobi) to 0.68% (Cambridge). BSF sums overlay pieces, so Kowloon's BSF is
+   inflated by ~6% relative, in the dimension carrying 8 of 17 weight units. The fixtures README
+   and `FootprintCoverage` said trimming removed the double count; both now say what it removes.
+   Phase 1's "genuine duplicate removal" on `buildings_area` was never implemented either. Fix
+   shape: also trim pairs that intersect with positive area, larger loses, and move the pin.
+7. **Patch units lose their merge features wherever a seed is split.** `PatchUnits.generate`
+   computes `seed_features` on the enclosure seeds, then `merge_to_patches` splits oversized seeds
+   into pieces named `<id>_sNNNN`. `features.reindex(seeds.index)` finds no row for them, so every
+   split piece is all-NaN, and `_distance` returns 0.0 when no dimension is shared, so **a split
+   piece is the most similar neighbour of everything around it**. Reproduced on a synthetic
+   three-seed scene. Where it bites is where splitting happens — Istanbul's oversized seeds held
+   72.7% of the extent. Patch units are not the default. Fix shape: split before computing
+   features.
+8. **Bernard's LCZ 10 and LCZ 8 rules carry conditions lczkit does not apply.** Sect. 2.3: LCZ 10
+   also requires the heavy-industry share to exceed the residential and large-low-rise shares; LCZ
+   8 requires large low-rise to exceed industrial and residential, fewer than three storeys, SVF
+   above 0.7 and vegetation below 0.2. lczkit applies a threshold only, and both sweeps were run
+   that way, so the calibrated operating points stand; the divergence was simply unrecorded. Now
+   in the config docstrings.
+9. **The functional rules override the built/natural gate.** `FIND/B` divides by building area, so a
+   cell holding a sliver of one industrial building reads 1.0. Of the LCZ 10 firings in the stored
+   post-Phase-14 runs, **14% in Istanbul (371 of 2 594), 18% in Bogotá (61 of 341) and 4% in
+   Nairobi (10 of 270)** land on cells with BSF below 0.10, which the gate had classified as
+   natural; 74 Istanbul cells are below 0.02. The Rotterdam sweep scored these cells too, so the
+   operating point already reflects them.
+10. **WorldCover mangroves (95) and herbaceous wetland (90) are mapped to water.** A choice with no
+    stated reason: mangroves are tree cover by WorldCover's definition, so a mangrove coast leans
+    toward LCZ G rather than A. Comment added; mapping unchanged.
+11. **Aspect ratio is measured over footways, paths and cycleways too.** `OvertureSource` keeps every
+    road class but `service`, and `ucp.streets` hands them all to `momepy.street_profile`, while
+    `PatchUnits` drops the same classes as barriers because they are 72.7% of Berlin's segments.
+    Spec-conformant (Phase 1 names only `service`) and unmeasured; since pedestrian mapping density
+    varies by city, it is worth one A/B before any regional reading of `aspect_ratio`.
+
+Checked against the papers and **correct**: the `bernard2024_partial` weights (4 / 3 / 8 / 0 / 0 /
+6 / 0.5, built types only, p. 2085); normalisation by the mean and standard deviation of all LCZ
+boundary values (Sect. 2.3); the WorldCover value set; the 3 m canopy threshold and the 10%
+built/natural line against the Stewart & Oke rows; the pervious fraction folding trees and water
+back in. Streets, tiling, Overture ingestion, Earth Engine, smoothing, WUDAPT overlap resolution,
+the block bootstrap, tessellation, the morphometric metrics, the raster aggregation, GUPPD lookup
+(no row crosses the antimeridian) and the viz expressions read clean.
+
+Also corrected, docstrings only: Phase 29 attributed `buildings_area`'s MultiPolygons to
+small-building absorption, which runs on `buildings_topo` only — they come from `trim_overlaps`
+cutting a footprint in two. `LabelMatch` said So2Sat centres share the UTM origin, which the module
+docstring above it measures to be false. `WudaptMatch.mean_coverage` said area-weighted and is an
+unweighted mean.
 
 **Verified:** `ruff check .`, `ruff format --check .`, `mypy src` and `mkdocs build --strict`
 clean; full suite **1 145 passed, 0 failed**. The UCP evidence pins still hold the retired
@@ -3208,6 +3273,9 @@ Remaining work, in order:
     `src/` 1 018 lines shorter. It found that the morphometric neighbourhood scales were
     configurable in name only (any other value raised) and that `zonal_mean`'s one-building-per-
     cell attribution fires constantly at 90-100 m, which its docstring had said could not happen.
+    A second pass found that overlap trimming skips nested footprints — **6% of the Hong Kong
+    fixture's building area stays double-counted** — and that split patch seeds lose their merge
+    features; both recorded, not fixed.
 20. **The paper.**
 21. **Cleanup** — release. **The docs half landed as Phase 20, the notebook half as Phase 22, the
     README split as Phase 23 and the de-narrativising pass as Phase 26**; what is left here is the
@@ -3637,6 +3705,8 @@ reconcile silently.** That flagging behaviour is working; keep it.
 | `mean_interbuilding_distance` fed building contiguity instead of tessellation adjacency | **Identically 0.0 on every input since the metric shipped, and it is 1 of the 50 columns selected as CNN features.** momepy documents `adjacency_graph` as "a contiguity graph derived from tessellation cells linked to buildings" and its worked example passes a Delaunay triangulation; lczkit passed `Graph.build_contiguity(buildings, rook=False)`. Footprints in the **area-preserving** layer mostly do not touch, so that graph has no adjacent pair to measure between — Hong Kong fixture, 5 448 buildings: **4 242 edges and 2 975 isolates (55%), metric all zero**, against **23 128 edges, 12 isolates, median 10.06 m** from the documented graph. The same building graph is *correct* at its two other call sites (`perimeter_wall` groups joined structures, `building_adjacency` documents `contiguity_graph` as building-derived), which is how one wrong call site of three went unread. **The acceptance criterion was "every column numeric and not entirely null", and an identically-zero column is not null** — the guard tested a weaker property than the one that mattered. Replaced by asserting the column varies and is positive somewhere, plus a pinned edge-count comparison between the two graphs. | 29 |
 | Morphometric neighbourhood scales as config | **Configurable in name only, and removed.** `building_neighborhood_distances_m`, `building_knn_values`, `etc_topological_steps` and `street_node_radii_m` fed dicts that `compute_morphometrics` indexed by literal keys, and the registry names every column after the paper's scales, so any value but the default raised. A knob that can only hold one value is a constant. Module constants in `lczkit.morphometrics.compute`. | 29, 31 |
 | `zonal_mean`'s "last-writer-wins does not arise" | **Wrong, and it arises constantly.** Footprints not overlapping does not stop several of them sharing one 90-100 m cell; all but one burn nothing and take the representative-point fallback. Every value is still the neighbourhood's, so the effect is small and unsigned. Docstring corrected; switching to `exactextract` would be exact and would move every cascade height, so it is recorded rather than done. | 3, 10, 31 |
+| `trim_overlaps` as the fix for self-overlapping footprints | **Partial.** geoplanar pairs by `overlaps`, which excludes containment and equality, so nested footprints survive: Hong Kong fixture 7.52% raw → **6.02%** residual, 274 of 287 residual pairs containment. BSF is inflated by the residual. Phase 1's "genuine duplicate removal" was never built. Recorded; fixing moves every BSF and the UCP pins. | 1, 11, 31 |
+| Bernard's LCZ 8 / LCZ 10 rules reduced to a threshold | Their dominance conditions (the use share exceeds the competing uses) and LCZ 8's morphology guards (< 3 storeys, SVF > 0.7, vegetation < 0.2) are not applied. Both sweeps ran without them, so the operating points stand; the divergence is now documented in config. | 14, 28, 31 |
 
 ---
 

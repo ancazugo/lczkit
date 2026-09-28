@@ -57,8 +57,9 @@ COLUMNS = ("reference_lcz", "reference_coverage", "reference_majority_fraction")
 class LabelMatch:
     """How the patch centres landed on the units, so a misaligned city is visible in the output.
 
-    The 1:1 mapping above holds because a So2Sat patch grid and a 100 m `GridUnits` grid share the
-    UTM origin. Nothing guarantees that for every city or every unit strategy, and a silent
+    The 1:1 mapping above holds because the patch centres sit on the 100 m stride at a phase offset
+    far from a cell boundary. Nothing guarantees that for every city or every unit strategy, and a
+    silent
     degradation - centres falling on cell boundaries, or several centres per unit disagreeing -
     would look exactly like a well-measured run. These counts make it look like what it is.
     """

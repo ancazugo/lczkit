@@ -408,8 +408,11 @@ class LandCoverDatasetConfig(BaseModel):
 #:
 #: Only class 50 (built up) is impervious; bare and sparse ground (60) reads as pervious, following
 #: Stewart & Oke's LCZ F. Class 60 also covers bare rock (LCZ E, impervious) and is the first value
-#: to revisit in an arid city. Tree cover is carved out of pervious so the classes stay disjoint: a
-#: consumer wanting Stewart & Oke's pervious fraction adds `frac_tree` back.
+#: to revisit in an arid city. Herbaceous wetland (90) and mangroves (95) read as water, which is a
+#: choice rather than a transcription: mangroves are tree cover by WorldCover's own definition, so
+#: a mangrove coast pushes toward LCZ G rather than A. Tree cover is carved out of pervious so the
+#: classes stay disjoint: a consumer wanting Stewart & Oke's pervious fraction adds `frac_tree`
+#: back.
 _WORLDCOVER_CLASSES = {
     10: "tree",  # Tree cover
     20: "pervious",  # Shrubland
@@ -697,7 +700,10 @@ class SemanticRuleConfig(BaseModel):
 def _default_semantic_rules() -> list[SemanticRuleConfig]:
     """LCZ 8 enabled at 0.70 and LCZ 7 refused, both swept over eight cities.
 
-    Most general first: a later rule overrides an earlier one on a unit both fire on.
+    Most general first: a later rule overrides an earlier one on a unit both fire on. Bernard et al.
+    (2024) guard their LCZ 8 rule with fewer than three storeys, SVF above 0.7 and vegetation below
+    0.2, and require large low-rise to exceed the industrial and residential shares; none of those
+    conditions is applied here, and the sweep was run without them.
     """
     return [
         SemanticRuleConfig(
@@ -784,6 +790,11 @@ class ClassificationConfig(BaseModel):
     Bernard's 0.33 performs comparably. Precision is roughly flat (16.7-23.2%) across the range, so
     this sets how much of the map carries LCZ 10 more than how often the label is right: Overture
     cannot tell heavy from light industry.
+
+    A threshold only. Bernard et al. (2024) Sect. 2.3 also require the industrial share to exceed
+    the residential and large-low-rise shares; that condition is not applied, and the sweep was run
+    without it. The rule also fires whatever the family gate decided, so a nearly unbuilt cell
+    holding one industrial building reads 1.0 and becomes LCZ 10.
     """
 
     lcz1_min_height_m: float | None = None

@@ -194,7 +194,7 @@ class WudaptMatch:
     the reference extends past the study window, which it usually does."""
 
     mean_coverage: float
-    """Area-weighted mean `reference_coverage` over the labelled units."""
+    """Unweighted mean `reference_coverage` over the labelled units."""
 
     class_counts: dict[int, int] = field(default_factory=dict)
     """Units per assigned reference class, so a window carrying two classes is visible as such."""

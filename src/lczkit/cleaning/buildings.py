@@ -216,7 +216,10 @@ def trim_overlaps(buildings: gpd.GeoDataFrame) -> tuple[gpd.GeoDataFrame, Cleani
     This is the *only* overlap operation `buildings_area` gets, and it is there for correctness
     rather than topology: `lczkit.ucp.buildings` sums overlay pieces per unit, so two footprints
     overlapping by 50 m² contribute that area twice and building surface fraction can exceed 1.0.
-    Trimming removes exactly the double count. Merging, which would also dissolve the pair into one
+    Trimming removes the double count **for partial overlaps only**: geoplanar pairs footprints
+    with the `overlaps` predicate, which excludes containment and equality, so a footprint nested
+    inside another is left as it is. `FootprintCoverage.residual_self_overlap_fraction` reports
+    what survives. Merging, which would also dissolve the pair into one
     feature and corrupt `building_count` and `mean_building_area_m2`, is topology work and stays on
     `buildings_topo`.
     """
