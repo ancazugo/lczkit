@@ -172,6 +172,47 @@ def test_a_seed_already_over_the_ceiling_is_split_rather_than_surviving_it() -> 
     assert patches.union_all().area == pytest.approx(seeds.geometry.area.sum())
 
 
+def test_split_pieces_carry_their_own_features_so_the_merge_still_reads_the_buildings() -> None:
+    """Features are computed on the seeds the merge runs on, *after* the oversized one is split.
+
+    Computed before the split, the pieces had no row, reindexed to all-NaN, and `_distance` scores
+    a pair sharing no dimension as 0.0 — so a split piece was the most similar neighbour of
+    everything beside it. Here the small seed is low-rise like its left neighbour and the split seed
+    on its right is 30 m high-rise: it must join the low-rise side.
+    """
+    seeds = strip((0, 0, 60, 100), (60, 0, 70, 100), (70, 0, 370, 100))
+    buildings = gpd.GeoDataFrame(
+        {"height": [3.0, 4.0, 30.0, 30.0, 30.0]},
+        geometry=[
+            box(10, 10, 50, 90),
+            box(62, 10, 68, 90),
+            box(80, 10, 160, 90),
+            box(190, 10, 270, 90),
+            box(300, 10, 360, 90),
+        ],
+        crs=CRS,
+    )
+
+    patches, report = merge_to_patches(
+        seeds, min_area_m2=5_000.0, max_area_m2=12_000.0, buildings=buildings
+    )
+
+    assert report.n_seeds_split == 1
+    small = gpd.points_from_xy([65.0], [50.0], crs=CRS)[0]
+    lowrise = gpd.points_from_xy([30.0], [50.0], crs=CRS)[0]
+    home = patches.geometry[patches.geometry.contains(small)]
+    assert len(home) == 1
+    assert home.iloc[0].contains(lowrise)
+
+
+def test_features_computed_before_a_split_are_refused_rather_than_read_as_missing() -> None:
+    seeds = strip((0, 0, 1000, 100), (1000, 0, 1010, 100))
+    stale = features_for(seeds, building_surface_fraction=[0.2, 0.3])
+
+    with pytest.raises(ValueError, match="buildings="):
+        merge_to_patches(seeds, stale, min_area_m2=500.0, max_area_m2=10_000.0)
+
+
 def test_splitting_is_off_when_no_ceiling_is_asked_for() -> None:
     """`max_area_m2=None` means "no ceiling", and a caller who says so gets the faces they gave."""
     seeds = strip((0, 0, 1000, 100), (1000, 0, 1010, 100))

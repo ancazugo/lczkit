@@ -335,6 +335,7 @@ def merge_to_patches(
     *,
     min_area_m2: float = DEFAULT_MIN_AREA_M2,
     max_area_m2: float | None = DEFAULT_MAX_AREA_M2,
+    buildings: gpd.GeoDataFrame | None = None,
 ) -> tuple[gpd.GeoDataFrame, PatchReport]:
     """Merge contiguous `seeds` until each reaches `min_area_m2`, most similar neighbour first.
 
@@ -353,6 +354,12 @@ def merge_to_patches(
 
     `features` may be `None`, in which case every neighbour is equally similar and the merge runs on
     size alone. That is a worse unit and it is offered because it needs no building layer.
+
+    Pass `buildings` instead of `features` whenever seeds may exceed `max_area_m2`: oversized seeds
+    are split first, and features are then computed on the pieces. A precomputed `features` frame
+    cannot describe pieces that did not exist when it was built, so one that lacks a row for any
+    seed the merge runs on is refused rather than read as all-missing, which `_distance` would
+    score as identical to every neighbour.
     """
     assert_projected_crs(seeds, "seeds")
     if seeds.index.name != "unit_id":
@@ -366,10 +373,22 @@ def merge_to_patches(
             f"max_area_m2 ({max_area_m2}) must be at least min_area_m2 ({min_area_m2}); "
             "a ceiling below the target would block every merge"
         )
+    if features is not None and buildings is not None:
+        raise ValueError("pass either features or buildings, not both")
 
     # Before anything else, and before the seed quantiles are taken, so those describe the seeds
     # the merge actually ran on rather than the faces the barrier set happened to produce.
     seeds, n_split = split_oversized(seeds, max_area_m2)
+    if buildings is not None:
+        features = seed_features(seeds, buildings)
+    elif features is not None:
+        missing = seeds.index.difference(features.index)
+        if len(missing):
+            raise ValueError(
+                f"features has no row for {len(missing)} seed(s), e.g. {missing[0]!r}: they were "
+                "split from an oversized seed after the features were computed. Pass buildings= "
+                "so features are computed on the split seeds."
+            )
 
     seed_area = seeds.geometry.area
     quantiles = {
@@ -583,12 +602,11 @@ class PatchUnits:
         the interface growing a second return value for one strategy.
         """
         seeds = EnclosureUnits().generate(bbox, barriers)
-        features = None if self.buildings is None else seed_features(seeds, self.buildings)
         patches, report = merge_to_patches(
             seeds,
-            features,
             min_area_m2=self.min_area_m2,
             max_area_m2=self.max_area_m2,
+            buildings=self.buildings,
         )
         self.report = report
         return patches

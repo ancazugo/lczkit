@@ -3132,8 +3132,11 @@ for a decision. Docstrings that stated the opposite of the measurement were corr
    split piece is all-NaN, and `_distance` returns 0.0 when no dimension is shared, so **a split
    piece is the most similar neighbour of everything around it**. Reproduced on a synthetic
    three-seed scene. Where it bites is where splitting happens — Istanbul's oversized seeds held
-   72.7% of the extent. Patch units are not the default. Fix shape: split before computing
-   features.
+   72.7% of the extent. Patch units are not the default. **Fixed afterwards, on request:**
+   `merge_to_patches(..., buildings=)` computes features on the split seeds, `PatchUnits` passes
+   its buildings, and a precomputed `features` frame lacking a row for a split piece is refused
+   instead of read as all-NaN. A test on the three-seed scene fails under the old behaviour. The
+   patch runs on disk (Istanbul, the Bogotá demo) predate the fix and are not re-run.
 8. **Bernard's LCZ 10 and LCZ 8 rules carry conditions lczkit does not apply.** Sect. 2.3: LCZ 10
    also requires the heavy-industry share to exceed the residential and large-low-rise shares; LCZ
    8 requires large low-rise to exceed industrial and residential, fewer than three storeys, SVF
@@ -3274,8 +3277,8 @@ Remaining work, in order:
     configurable in name only (any other value raised) and that `zonal_mean`'s one-building-per-
     cell attribution fires constantly at 90-100 m, which its docstring had said could not happen.
     A second pass found that overlap trimming skips nested footprints — **6% of the Hong Kong
-    fixture's building area stays double-counted** — and that split patch seeds lose their merge
-    features; both recorded, not fixed.
+    fixture's building area stays double-counted** (recorded, not fixed) — and that split patch
+    seeds lost their merge features (fixed).
 20. **The paper.**
 21. **Cleanup** — release. **The docs half landed as Phase 20, the notebook half as Phase 22, the
     README split as Phase 23 and the de-narrativising pass as Phase 26**; what is left here is the
