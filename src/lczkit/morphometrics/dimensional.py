@@ -20,6 +20,8 @@ import momepy
 import pandas as pd
 from libpysal.graph import Graph
 
+from lczkit.cleaning.buildings import NESTED_FLAG
+
 #: Shape/dimension metrics computed identically for buildings and ETCs, each carrying the same
 #: three weighted variants (buildings 100 m, buildings 200 m, ETC 3 topological steps). One
 #: signature (`geometry -> Series`) per metric, so adding a twelfth momepy call is one tuple entry
@@ -84,6 +86,10 @@ def dimensional_metrics(
     # two when it subtracts a neighbour crossing it), so this is nulled explicitly rather than
     # reported as a nonsensical negative — found on real Nairobi data, 3 of 7 214 buildings.
     multipart = buildings.geometry.geom_type == "MultiPolygon"
+    # A hole cut by a footprint nested inside this one is ground another building covers, not a
+    # courtyard; `cleaning.buildings.trim_overlaps` flags those footprints.
+    if NESTED_FLAG in buildings.columns:
+        multipart |= buildings[NESTED_FLAG].fillna(False).astype(bool)
     courtyard_area = courtyard_area.mask(multipart)
     courtyard_index = courtyard_index.mask(multipart)
     columns["courtyard_area_building"] = courtyard_area

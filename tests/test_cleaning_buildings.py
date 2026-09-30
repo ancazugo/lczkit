@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import geopandas as gpd
 import geoplanar
+import numpy as np
 import pytest
 from shapely.geometry import LineString, MultiPolygon, Polygon, box
 
 from lczkit.cleaning.buildings import (
     BUILDING_ID,
     MAX_PLANARITY_EPS_M,
+    NESTED_FLAG,
     absorb_small_buildings,
     clean_buildings,
+    drop_duplicate_footprints,
     drop_non_polygons,
     drop_oversized,
     enforce_planarity,
@@ -108,6 +111,52 @@ def test_trim_overlaps_removes_the_double_count_without_losing_a_feature() -> No
     assert step.stage == "buildings_area"
     assert step.area_in_m2 == pytest.approx(200.0)
     assert step.area_out_m2 == pytest.approx(190.0)
+
+
+def test_a_nested_footprint_is_cut_out_of_the_one_around_it() -> None:
+    """A tower drawn inside its podium. `geoplanar.trim_overlaps` pairs by `overlaps`, which is
+    false for containment, so the pair survived whole and its ground was counted twice. Both
+    buildings and both heights must survive; the podium gets a hole where the tower stands, and is
+    flagged so a courtyard metric does not read that hole as open ground."""
+    podium, tower = box(0, 0, 40, 40), box(10, 10, 20, 20)
+    gdf = _gdf([podium, tower], height=[9.0, 81.0])
+
+    trimmed, step = trim_overlaps(gdf)
+
+    assert len(trimmed) == 2
+    assert trimmed.geometry.area.sum() == pytest.approx(1600.0)
+    assert trimmed.geometry.iloc[0].area == pytest.approx(1500.0)
+    assert len(trimmed.geometry.iloc[0].interiors) == 1
+    assert trimmed.geometry.iloc[1].equals(tower)
+    assert list(trimmed["height"]) == [9.0, 81.0]
+    assert list(trimmed[NESTED_FLAG]) == [True, False]
+    assert step.detail["n_nested"] == 1
+
+
+def test_a_footprint_its_parts_cover_entirely_is_dropped_and_counted() -> None:
+    """An outline drawn over two halves that were also mapped. Trimming the larger empties it; the
+    halves keep the ground, and the emptied row is reported rather than left as an empty
+    geometry."""
+    gdf = _gdf([box(0, 0, 20, 10), box(0, 0, 10, 10), box(10, 0, 20, 10)])
+
+    trimmed, step = trim_overlaps(gdf)
+
+    assert len(trimmed) == 2
+    assert trimmed.geometry.area.sum() == pytest.approx(200.0)
+    assert step.detail["n_emptied_dropped"] == 1
+
+
+def test_identical_footprints_keep_the_copy_with_the_most_attributes() -> None:
+    """Trimming cannot resolve two copies of one footprint: subtracting one empties the other,
+    and which one lost would decide whether the building keeps its height."""
+    gdf = _gdf([box(0, 0, 10, 10), box(0, 0, 10, 10), box(20, 0, 30, 10)])
+    gdf["height"] = [np.nan, 12.0, np.nan]
+
+    kept, step = drop_duplicate_footprints(gdf)
+
+    assert len(kept) == 2
+    assert kept["height"].iloc[0] == 12.0
+    assert step.detail["n_duplicates_dropped"] == 1
 
 
 def _zero_area_overlap() -> gpd.GeoDataFrame:
@@ -279,6 +328,7 @@ def test_clean_buildings_forks_into_two_layers_sharing_a_building_id() -> None:
         "drop_non_polygons",
         "drop_oversized",
         "assign_building_id",
+        "drop_duplicate_footprints",
         "trim_overlaps",
         "resolve_overlaps",
         "absorb_small_buildings",
@@ -288,8 +338,8 @@ def test_clean_buildings_forks_into_two_layers_sharing_a_building_id() -> None:
     # The shared prefix is stage "buildings"; after the fork each step names the layer it built,
     # so `CleaningReport.area_retention` can be asked about either one.
     assert [s.stage for s in steps[:6]] == ["buildings"] * 6
-    assert steps[6].stage == "buildings_area"
-    assert {s.stage for s in steps[7:]} == {"buildings_topo"}
+    assert {s.stage for s in steps[6:8]} == {"buildings_area"}
+    assert {s.stage for s in steps[8:]} == {"buildings_topo"}
 
     # Area preserves both features; topo merges them into one.
     assert len(layers.area) == 2

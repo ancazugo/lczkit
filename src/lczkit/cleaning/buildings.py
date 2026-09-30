@@ -27,6 +27,7 @@ from dataclasses import dataclass
 import geopandas as gpd
 import geoplanar
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 import shapely
 from scipy.sparse import csr_matrix
@@ -210,22 +211,124 @@ def assign_building_id(buildings: gpd.GeoDataFrame) -> tuple[gpd.GeoDataFrame, C
     return stamped, _step("assign_building_id", buildings, stamped)
 
 
+NESTED_FLAG = "holds_nested_footprint"
+"""Set on a `buildings_area` footprint that had another footprint cut out of its interior.
+
+A tower drawn inside its podium leaves the podium with a hole where the tower stands. The hole is
+ground another building covers, not an open courtyard, so shape metrics that read interior rings as
+courtyards (`lczkit.morphometrics.dimensional`) must not count it.
+"""
+
+RICHNESS_COLUMNS: tuple[str, ...] = ("height", "num_floors", "class", "subtype")
+"""Attributes that decide which of several identical footprints survives, most important first."""
+
+
+def _positive_overlap_pairs(geometry: npt.NDArray[np.object_]) -> npt.NDArray[np.int64]:
+    """Every unordered pair `(i, j)`, `i < j`, whose footprints share positive area, sorted.
+
+    Queried with `intersects` and filtered on intersection area, the same way `union_area` does:
+    `overlaps` would miss containment and equality, and `intersects` alone would pair every
+    terrace wall.
+    """
+    if len(geometry) < 2:
+        return np.empty((0, 2), dtype=np.int64)
+    left, right = shapely.STRtree(geometry).query(geometry, predicate="intersects")
+    keep = left < right
+    left, right = left[keep], right[keep]
+    if left.size:
+        shared = shapely.area(shapely.intersection(geometry[left], geometry[right]))
+        left, right = left[shared > 0.0], right[shared > 0.0]
+    pairs = np.column_stack([left, right]).astype(np.int64)
+    return pairs[np.lexsort((pairs[:, 1], pairs[:, 0]))] if len(pairs) else pairs
+
+
+def drop_duplicate_footprints(
+    buildings: gpd.GeoDataFrame,
+) -> tuple[gpd.GeoDataFrame, CleaningStep]:
+    """Keep one of each set of identical footprints: the one carrying the most attributes.
+
+    Identical means topologically equal. Two copies of one footprint count its ground twice in
+    building surface fraction and the building twice in `building_count`; trimming cannot resolve
+    them, since subtracting one from the other empties it. The survivor is chosen on
+    `RICHNESS_COLUMNS` in order, so a copy with a height beats one without, and ties keep the first
+    row. `buildings_area` only.
+    """
+    assert_projected_crs(buildings, "buildings")
+    working = buildings.reset_index(drop=True)
+    geometry = working.geometry.to_numpy()
+    pairs = _positive_overlap_pairs(geometry)
+    drop: set[int] = set()
+    if len(pairs):
+        equal = pairs[shapely.equals(geometry[pairs[:, 0]], geometry[pairs[:, 1]])]
+        if len(equal):
+            present = [c for c in RICHNESS_COLUMNS if c in working.columns]
+            rank = [tuple(bool(pd.notna(v)) for v in row) for row in working[present].to_numpy()]
+            graph = csr_matrix(
+                (np.ones(len(equal), dtype=np.int8), (equal[:, 0], equal[:, 1])),
+                shape=(len(working), len(working)),
+            )
+            _, labels = connected_components(graph, directed=False)
+            members = np.unique(equal)
+            for label in np.unique(labels[members]):
+                group = sorted(int(i) for i in members[labels[members] == label])
+                keep = max(group, key=lambda i: (rank[i], -i))
+                drop.update(i for i in group if i != keep)
+    kept = working.drop(index=sorted(drop)).reset_index(drop=True)
+    return kept, _step(
+        "drop_duplicate_footprints",
+        working,
+        kept,
+        stage="buildings_area",
+        n_duplicates_dropped=len(drop),
+    )
+
+
 def trim_overlaps(buildings: gpd.GeoDataFrame) -> tuple[gpd.GeoDataFrame, CleaningStep]:
     """Remove the shared part of every pair of overlapping footprints, keeping both features.
 
     This is the *only* overlap operation `buildings_area` gets, and it is there for correctness
     rather than topology: `lczkit.ucp.buildings` sums overlay pieces per unit, so two footprints
     overlapping by 50 m² contribute that area twice and building surface fraction can exceed 1.0.
-    Trimming removes the double count **for partial overlaps only**: geoplanar pairs footprints
-    with the `overlaps` predicate, which excludes containment and equality, so a footprint nested
-    inside another is left as it is. `FootprintCoverage.residual_self_overlap_fraction` reports
-    what survives. Merging, which would also dissolve the pair into one
-    feature and corrupt `building_count` and `mean_building_area_m2`, is topology work and stays on
+    The larger footprint of each pair loses the shared part, so both buildings and their heights
+    survive and the ground is counted once. Merging, which would dissolve the pair into one feature
+    and corrupt `building_count` and `mean_building_area_m2`, is topology work and stays on
     `buildings_topo`.
+
+    **Nested footprints are trimmed too.** `geoplanar.trim_overlaps` pairs by the `overlaps`
+    predicate, which is false for containment, so a tower drawn inside its podium survived whole:
+    6.0% of the Hong Kong fixture's building area stayed double-counted. Pairs are found here by
+    positive intersection area instead. A nested footprint leaves a hole in the one around it,
+    which is flagged in `NESTED_FLAG`; a footprint emptied entirely by the ones inside it is dropped
+    and counted. Pairs are processed in a fixed order and re-checked as they go, so a stack of three
+    resolves the same way on every run.
     """
     assert_projected_crs(buildings, "buildings")
-    trimmed = geoplanar.trim_overlaps(buildings, strategy="largest")
-    return trimmed, _step("trim_overlaps", buildings, trimmed, stage="buildings_area")
+    working = buildings.reset_index(drop=True)
+    geometry = working.geometry.to_numpy().copy()
+    nested = np.zeros(len(working), dtype=bool)
+    n_trimmed = 0
+    for first, second in _positive_overlap_pairs(geometry):
+        a, b = geometry[first], geometry[second]
+        if shapely.area(shapely.intersection(a, b)) <= 0.0:
+            continue
+        larger, smaller = (first, second) if a.area >= b.area else (second, first)
+        if geometry[larger].covers(geometry[smaller]):
+            nested[larger] = True
+        geometry[larger] = geometry[larger].difference(geometry[smaller])
+        n_trimmed += 1
+    trimmed = working.set_geometry(gpd.GeoSeries(geometry, index=working.index, crs=working.crs))
+    trimmed[NESTED_FLAG] = nested
+    emptied = trimmed.geometry.isna() | trimmed.geometry.is_empty
+    trimmed = trimmed.loc[~emptied].reset_index(drop=True)
+    return trimmed, _step(
+        "trim_overlaps",
+        buildings,
+        trimmed,
+        stage="buildings_area",
+        n_pairs_trimmed=n_trimmed,
+        n_nested=int(nested.sum()),
+        n_emptied_dropped=int(emptied.sum()),
+    )
 
 
 def resolve_overlaps(
@@ -492,7 +595,9 @@ def clean_buildings(
     base, step = assign_building_id(base)
     steps.append(step)
 
-    area, step = trim_overlaps(base)
+    area, step = drop_duplicate_footprints(base)
+    steps.append(step)
+    area, step = trim_overlaps(area)
     steps.append(step)
 
     # Measured on `base`, i.e. after the validity fixes and before the fork, which is how the

@@ -31,15 +31,18 @@ Two differences from `overture/`, both recorded in `TARGETS` in the build script
   Nineteen unclipped sea polygons carried 237k vertices and 3.7 MB — 62% of the fixture — for
   ground that is almost entirely outside it. Which layers are clipped is a property of each
   fixture, so rebuilding Berlin still reproduces Berlin.
-- **`buildings_area` retains 98.40% of the *summed* raw footprint area here, against Berlin's
-  99.49%**, and that is not attrition: no feature is dropped (5449 → 5449) and the whole difference
-  is `trim_overlaps`. Hong Kong's raw Overture footprints **double-count 7.52% of their own summed
+- **`buildings_area` retains 92.48% of the *summed* raw footprint area here, and 100% of the
+  ground**: the summed area after cleaning is exactly the union of the raw footprints. That is not
+  attrition — the whole difference is `trim_overlaps` removing double-counted ground, and the only
+  features lost are 3 of 5 451 outlines covered entirely by footprints drawn inside them. Hong
+  Kong's raw Overture footprints **double-count 7.52% of their own summed
   area** (2 113 744 m² summed against 1 954 770 m² of ground) versus Berlin's 0.61% —
   podium-and-tower stacks and conflated duplicates — and building surface fraction sums overlay
-  pieces, so leaving that in would inflate the numerator. **Trimming removes only 1.5 of the 7.52
-  points**: geoplanar's `overlaps` predicate is false for a footprint wholly inside another, so
-  nested footprints survive and 6.0% of `buildings_area`'s summed area is still double-counted
-  (274 of the 287 residual pairs are containment).
+  pieces, so leaving that in would inflate the numerator. Most of it is towers drawn inside their
+  podiums: geoplanar's `overlaps` predicate is false for containment, so its trim removed only 1.5
+  of the 7.52 points and left 6.0% double-counted. `trim_overlaps` now cuts nested footprints out
+  of the ones around them too, and the residual is zero; 236 podiums carry the hole, and 3
+  outlines covered entirely by footprints drawn inside them are dropped.
 
   This fixture is why the retention criterion is stated against the **union** of raw footprints: a
   city whose sources overlap themselves by more than 1% cannot meet a ≥99%-of-sum bar without

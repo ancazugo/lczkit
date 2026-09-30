@@ -106,11 +106,10 @@ class FootprintCoverage(BaseModel):
         """The same measure on `buildings_area`, after cleaning.
 
         **Non-zero means the BSF numerator still double-counts**, because building surface fraction
-        sums overlay pieces. `geoplanar.trim_overlaps` finds pairs with the `overlaps` predicate,
-        which is false for a footprint lying wholly inside another and for two identical ones, so
-        nested footprints (a tower drawn inside its podium) survive untrimmed. Measured: 0.10% on
-        the Berlin fixture, **6.0% on the Hong Kong fixture** (274 of 287 residual pairs are
-        containment), 0.04-0.7% across the runs on disk.
+        sums overlay pieces. `trim_overlaps` and `drop_duplicate_footprints` bring it to floating-
+        point zero on both fixtures. Runs written before they handled nested and identical
+        footprints read 0.04-0.7%, and the Hong Kong fixture read 6.0%, nearly all of it towers
+        drawn inside their podiums.
         """
         if self.area_summed_m2 <= 0.0:
             return None

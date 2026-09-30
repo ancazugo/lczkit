@@ -15,7 +15,11 @@ seventeen unit-vs-layer intersections to two. Two of those changes are not merel
 So the answer is pinned rather than reasoned about. The parquet files beside this test were written
 from the implementation as it stood before the rewrite, on the three committed fixtures, and are
 regenerated only by `scripts/build_ucp_evidence_fixture.py` — deliberately a separate step, so a
-change to the code cannot quietly move the thing that is supposed to be checking it.
+change to the code cannot quietly move the thing that is supposed to be checking it. They were
+regenerated once since, on purpose, when `trim_overlaps` began cutting nested footprints out of the
+ones around them: that removed a double count from the building-area denominator, and moved Hong
+Kong's mean building surface fraction by -6.06%, Berlin's by -0.10% and Rotterdam's by less than
+0.01%.
 
 `atol` is 1e-9 on quantities that are areas in square metres divided by areas in square metres. A
 real difference in any of these is a fraction moving in its third decimal at least, so this
@@ -90,21 +94,9 @@ def city(request: pytest.FixtureRequest) -> str:
     return str(request.param)
 
 
-RETIRED_COLUMNS = {"industrial_fraction": "industrial_fraction_of_unit_area"}
-"""Columns the pins recorded that have since been removed, and the column each duplicated.
-
-The pins are not regenerated when a column is retired, so the retirement is checked against them:
-the removed column must have equalled the one that remains, which shows nothing was lost.
-"""
-
-
 def test_every_evidence_column_reproduces_its_recorded_value(city: str) -> None:
     recorded = pd.read_parquet(EVIDENCE_DIR / f"{city}_evidence.parquet")
     computed = evidence_table(*CASES[city])
-
-    for retired, kept in RETIRED_COLUMNS.items():
-        assert_series_equal(recorded[retired], recorded[kept], check_names=False)
-    recorded = recorded.drop(columns=list(RETIRED_COLUMNS))
 
     assert list(computed.columns) == list(recorded.columns)
     assert computed.index.equals(recorded.index)
