@@ -1,0 +1,126 @@
+<!doctype html>
+<!--
+  lczkit static map site.
+
+  Everything this page loads is a sibling file. There is no CDN link, no analytics, and no font
+  endpoint — a test asserts that this file, app.js, app.css and serve.py name no remote host at all,
+  and no API key appears in any of them.
+
+  The one exception a run can opt into is one or more online raster basemaps, which reach a tile
+  server and therefore appear only in style.json, never here — including the API key two of the
+  providers need. They are off by default, the picker is hidden when there are none, and the run's
+  own Overture linework is drawn either way, so an archived copy opened offline still shows the
+  geometry the classification was computed from.
+
+  Serve it with the bundled server (`python serve.py`) and open the address it prints.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>lczkit — Local Climate Zones</title>
+    <link rel="stylesheet" href="assets/vendor/maplibre-gl.css" />
+    <link rel="stylesheet" href="assets/app.css" />
+  </head>
+  <body>
+    <div id="map"></div>
+
+    <aside id="panel">
+      <header>
+        <h1>Local Climate Zones</h1>
+        <p id="run-id" class="muted"></p>
+      </header>
+
+      <section id="view-section">
+        <label for="view">Layer</label>
+        <select id="view"></select>
+        <p id="view-description" class="muted"></p>
+        <p id="hover-readout" class="readout" aria-live="polite"></p>
+        <div id="legend"></div>
+      </section>
+
+      <section id="base-section">
+        <div id="base-picker" hidden>
+          <label for="base-select">Base map</label>
+          <select id="base-select"></select>
+        </div>
+        <label class="checkbox">
+          <input type="checkbox" id="base-linework" checked />
+          Run's own linework
+        </label>
+        <p id="base-note" class="muted" hidden></p>
+        <label for="opacity">Layer opacity <span id="opacity-value" class="mono">82%</span></label>
+        <input type="range" id="opacity" min="20" max="100" step="2" value="82" />
+      </section>
+
+      <section id="buildings-section" hidden>
+        <label class="checkbox">
+          <input type="checkbox" id="buildings-toggle" />
+          Buildings (extruded, zoom 14+)
+        </label>
+        <label for="buildings-colour">Colour by</label>
+        <select id="buildings-colour">
+          <option value="uniform">uniform</option>
+          <option value="height_source">height source</option>
+        </select>
+        <div id="buildings-legend"></div>
+      </section>
+
+      <section id="unit-section">
+        <h2>Unit</h2>
+        <p id="unit-empty" class="muted">Click a cell to inspect it.</p>
+        <div id="unit-detail" hidden>
+          <p id="unit-id" class="mono"></p>
+          <p id="unit-confidence" class="badge" hidden></p>
+          <dl id="unit-summary"></dl>
+          <details>
+            <summary>Distance to each prototype</summary>
+            <p class="muted note">
+              The classification is the nearest prototype. A cell whose two nearest are close
+              together is a weak assignment — that is what <em>uniqueness</em> measures.
+            </p>
+            <div id="distance-chart"></div>
+          </details>
+          <details open>
+            <summary>Height provenance</summary>
+            <p class="muted note">
+              Which source each building's height came from, by share of building area. A measured
+              height and a 90 m raster mean produce the same LCZ label with very different
+              trustworthiness.
+            </p>
+            <dl id="unit-heights"></dl>
+          </details>
+          <details>
+            <summary>Urban canopy parameters</summary>
+            <dl id="unit-parameters"></dl>
+          </details>
+        </div>
+      </section>
+
+      <section id="about-section">
+        <details>
+          <summary>About this map</summary>
+          <dl id="about"></dl>
+          <p class="muted note">
+            Every value here was computed by the run and read from its manifest — this page
+            calculates nothing. <a href="manifest.json">manifest.json</a> is the provenance record;
+            a figure taken from this map should cite it.
+          </p>
+        </details>
+      </section>
+
+      <footer>
+        <p class="muted">
+          Vector data © OpenStreetMap contributors and Overture Maps Foundation contributors,
+          ODbL. LCZ classes and colours after Stewart &amp; Oke (2012) and Demuzere et al. (2022).
+          Rendered with MapLibre GL JS and PMTiles, both BSD-3-Clause — see
+          <span class="mono">assets/vendor/</span>.
+        </p>
+      </footer>
+    </aside>
+
+    <script src="assets/vendor/maplibre-gl.js"></script>
+    <script src="assets/vendor/pmtiles.js"></script>
+    <script src="assets/app.js"></script>
+  </body>
+</html>

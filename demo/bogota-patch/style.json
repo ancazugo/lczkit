@@ -1,0 +1,1410 @@
+{
+  "version": 8,
+  "name": "lczkit docs-bogota-patch",
+  "sources": {
+    "units": {
+      "type": "vector",
+      "url": "pmtiles://./tiles/units.pmtiles",
+      "promoteId": "unit_id"
+    },
+    "units_detail": {
+      "type": "vector",
+      "url": "pmtiles://./tiles/units_detail.pmtiles"
+    },
+    "basemap": {
+      "type": "vector",
+      "url": "pmtiles://./tiles/basemap.pmtiles"
+    }
+  },
+  "layers": [
+    {
+      "id": "background",
+      "type": "background",
+      "paint": {
+        "background-color": "#111418"
+      }
+    },
+    {
+      "id": "basemap-water",
+      "type": "fill",
+      "source": "basemap",
+      "source-layer": "water",
+      "paint": {
+        "fill-color": "#1b2a3a"
+      }
+    },
+    {
+      "id": "units-fill",
+      "type": "fill",
+      "source": "units",
+      "source-layer": "units",
+      "paint": {
+        "fill-color": [
+          "match",
+          [
+            "to-number",
+            [
+              "get",
+              "lcz_primary"
+            ]
+          ],
+          1,
+          "#8c0000",
+          2,
+          "#d10000",
+          3,
+          "#ff0000",
+          4,
+          "#bf4d00",
+          5,
+          "#ff6600",
+          6,
+          "#ff9955",
+          7,
+          "#faee05",
+          8,
+          "#bcbcbc",
+          9,
+          "#ffccaa",
+          10,
+          "#555555",
+          11,
+          "#006a00",
+          12,
+          "#00aa00",
+          13,
+          "#648525",
+          14,
+          "#b9db79",
+          15,
+          "#000000",
+          16,
+          "#fbf7ae",
+          17,
+          "#6a6aff",
+          "#3a3a3a"
+        ],
+        "fill-opacity": 0.82
+      }
+    },
+    {
+      "id": "units-outline",
+      "type": "line",
+      "source": "units",
+      "source-layer": "units",
+      "minzoom": 13,
+      "paint": {
+        "line-color": "#000000",
+        "line-opacity": 0.25,
+        "line-width": 0.5
+      }
+    },
+    {
+      "id": "basemap-streets",
+      "type": "line",
+      "source": "basemap",
+      "source-layer": "streets",
+      "paint": {
+        "line-color": "#39414d",
+        "line-opacity": 0.75,
+        "line-width": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          10,
+          0.3,
+          16,
+          1.8
+        ]
+      }
+    },
+    {
+      "id": "units-selected",
+      "type": "line",
+      "source": "units",
+      "source-layer": "units",
+      "paint": {
+        "line-color": "#ffffff",
+        "line-width": [
+          "case",
+          [
+            "boolean",
+            [
+              "feature-state",
+              "selected"
+            ],
+            false
+          ],
+          3,
+          0
+        ]
+      }
+    }
+  ],
+  "metadata": {
+    "lczkit": {
+      "run_id": "docs-bogota-patch",
+      "views": [
+        {
+          "id": "lcz",
+          "column": "lcz_primary",
+          "label": "LCZ class",
+          "group": "Classification",
+          "unit": "",
+          "description": "Primary Local Climate Zone, Demuzere et al. (2022) colours",
+          "kind": "categorical",
+          "paint": [
+            "match",
+            [
+              "to-number",
+              [
+                "get",
+                "lcz_primary"
+              ]
+            ],
+            1,
+            "#8c0000",
+            2,
+            "#d10000",
+            3,
+            "#ff0000",
+            4,
+            "#bf4d00",
+            5,
+            "#ff6600",
+            6,
+            "#ff9955",
+            7,
+            "#faee05",
+            8,
+            "#bcbcbc",
+            9,
+            "#ffccaa",
+            10,
+            "#555555",
+            11,
+            "#006a00",
+            12,
+            "#00aa00",
+            13,
+            "#648525",
+            14,
+            "#b9db79",
+            15,
+            "#000000",
+            16,
+            "#fbf7ae",
+            17,
+            "#6a6aff",
+            "#3a3a3a"
+          ],
+          "legend": [
+            {
+              "colour": "#8c0000",
+              "label": "1 \u2014 Compact high-rise"
+            },
+            {
+              "colour": "#d10000",
+              "label": "2 \u2014 Compact midrise"
+            },
+            {
+              "colour": "#ff0000",
+              "label": "3 \u2014 Compact low-rise"
+            },
+            {
+              "colour": "#bf4d00",
+              "label": "4 \u2014 Open high-rise"
+            },
+            {
+              "colour": "#ff6600",
+              "label": "5 \u2014 Open midrise"
+            },
+            {
+              "colour": "#ff9955",
+              "label": "6 \u2014 Open low-rise"
+            },
+            {
+              "colour": "#faee05",
+              "label": "7 \u2014 Lightweight low-rise"
+            },
+            {
+              "colour": "#bcbcbc",
+              "label": "8 \u2014 Large low-rise"
+            },
+            {
+              "colour": "#ffccaa",
+              "label": "9 \u2014 Sparsely built"
+            },
+            {
+              "colour": "#555555",
+              "label": "10 \u2014 Heavy industry"
+            },
+            {
+              "colour": "#006a00",
+              "label": "A \u2014 Dense trees"
+            },
+            {
+              "colour": "#00aa00",
+              "label": "B \u2014 Scattered trees"
+            },
+            {
+              "colour": "#648525",
+              "label": "C \u2014 Bush, scrub"
+            },
+            {
+              "colour": "#b9db79",
+              "label": "D \u2014 Low plants"
+            },
+            {
+              "colour": "#000000",
+              "label": "E \u2014 Bare rock or paved"
+            },
+            {
+              "colour": "#fbf7ae",
+              "label": "F \u2014 Bare soil or sand"
+            },
+            {
+              "colour": "#6a6aff",
+              "label": "G \u2014 Water"
+            }
+          ]
+        },
+        {
+          "id": "height_completeness",
+          "column": "height_completeness",
+          "label": "Height completeness (tier 1)",
+          "group": "Height provenance",
+          "unit": "",
+          "description": "",
+          "kind": "continuous",
+          "method": "quantile",
+          "paint": [
+            "case",
+            [
+              "has",
+              "height_completeness"
+            ],
+            [
+              "step",
+              [
+                "to-number",
+                [
+                  "get",
+                  "height_completeness"
+                ]
+              ],
+              "#440154",
+              0.0006725093120526025,
+              "#2c728e",
+              0.011334029992325446,
+              "#28ae80",
+              0.10170578000688339,
+              "#fde725"
+            ],
+            "#3a3a3a"
+          ],
+          "legend": [
+            {
+              "colour": "#440154",
+              "label": "0 \u2013 0.000673"
+            },
+            {
+              "colour": "#2c728e",
+              "label": "0.000673 \u2013 0.0113"
+            },
+            {
+              "colour": "#28ae80",
+              "label": "0.0113 \u2013 0.102"
+            },
+            {
+              "colour": "#fde725",
+              "label": "0.102 \u2013 0.933"
+            },
+            {
+              "colour": "#3a3a3a",
+              "label": "no value",
+              "nodata": true
+            }
+          ]
+        },
+        {
+          "id": "height_frac_overture_height",
+          "column": "height_frac_overture_height",
+          "label": "Overture height, measured",
+          "group": "Height provenance",
+          "unit": "",
+          "description": "",
+          "kind": "continuous",
+          "method": "quantile",
+          "paint": [
+            "case",
+            [
+              "has",
+              "height_frac_overture_height"
+            ],
+            [
+              "step",
+              [
+                "to-number",
+                [
+                  "get",
+                  "height_frac_overture_height"
+                ]
+              ],
+              "#fde725"
+            ],
+            "#3a3a3a"
+          ],
+          "legend": [
+            {
+              "colour": "#fde725",
+              "label": "0 \u2013 0.221"
+            },
+            {
+              "colour": "#3a3a3a",
+              "label": "no value",
+              "nodata": true
+            }
+          ]
+        },
+        {
+          "id": "height_frac_overture_num_floors",
+          "column": "height_frac_overture_num_floors",
+          "label": "Overture storeys \u00d7 storey height",
+          "group": "Height provenance",
+          "unit": "",
+          "description": "",
+          "kind": "continuous",
+          "method": "quantile",
+          "paint": [
+            "case",
+            [
+              "has",
+              "height_frac_overture_num_floors"
+            ],
+            [
+              "step",
+              [
+                "to-number",
+                [
+                  "get",
+                  "height_frac_overture_num_floors"
+                ]
+              ],
+              "#440154",
+              0.010631437076966656,
+              "#21918c",
+              0.09773393194667174,
+              "#fde725"
+            ],
+            "#3a3a3a"
+          ],
+          "legend": [
+            {
+              "colour": "#440154",
+              "label": "0 \u2013 0.0106"
+            },
+            {
+              "colour": "#21918c",
+              "label": "0.0106 \u2013 0.0977"
+            },
+            {
+              "colour": "#fde725",
+              "label": "0.0977 \u2013 0.904"
+            },
+            {
+              "colour": "#3a3a3a",
+              "label": "no value",
+              "nodata": true
+            }
+          ]
+        },
+        {
+          "id": "height_frac_wsf3d",
+          "column": "height_frac_wsf3d",
+          "label": "WSF-3D, 90 m raster",
+          "group": "Height provenance",
+          "unit": "",
+          "description": "",
+          "kind": "continuous",
+          "method": "quantile",
+          "paint": [
+            "case",
+            [
+              "has",
+              "height_frac_wsf3d"
+            ],
+            [
+              "step",
+              [
+                "to-number",
+                [
+                  "get",
+                  "height_frac_wsf3d"
+                ]
+              ],
+              "#440154",
+              0.8880658960820309,
+              "#2c728e",
+              0.9824134601679999,
+              "#28ae80",
+              0.9979842456034352,
+              "#fde725"
+            ],
+            "#3a3a3a"
+          ],
+          "legend": [
+            {
+              "colour": "#440154",
+              "label": "0.0667 \u2013 0.888"
+            },
+            {
+              "colour": "#2c728e",
+              "label": "0.888 \u2013 0.982"
+            },
+            {
+              "colour": "#28ae80",
+              "label": "0.982 \u2013 0.998"
+            },
+            {
+              "colour": "#fde725",
+              "label": "0.998 \u2013 1"
+            },
+            {
+              "colour": "#3a3a3a",
+              "label": "no value",
+              "nodata": true
+            }
+          ]
+        },
+        {
+          "id": "height_frac_ghsl",
+          "column": "height_frac_ghsl",
+          "label": "GHS-BUILT-H, 100 m raster",
+          "group": "Height provenance",
+          "unit": "",
+          "description": "",
+          "kind": "continuous",
+          "method": "quantile",
+          "paint": [
+            "case",
+            [
+              "has",
+              "height_frac_ghsl"
+            ],
+            [
+              "step",
+              [
+                "to-number",
+                [
+                  "get",
+                  "height_frac_ghsl"
+                ]
+              ],
+              "#fde725"
+            ],
+            "#3a3a3a"
+          ],
+          "legend": [
+            {
+              "colour": "#fde725",
+              "label": "0 \u2013 0.52"
+            },
+            {
+              "colour": "#3a3a3a",
+              "label": "no value",
+              "nodata": true
+            }
+          ]
+        },
+        {
+          "id": "height_frac_unresolved",
+          "column": "height_frac_unresolved",
+          "label": "No height resolved",
+          "group": "Height provenance",
+          "unit": "",
+          "description": "",
+          "kind": "continuous",
+          "method": "quantile",
+          "paint": [
+            "case",
+            [
+              "has",
+              "height_frac_unresolved"
+            ],
+            [
+              "step",
+              [
+                "to-number",
+                [
+                  "get",
+                  "height_frac_unresolved"
+                ]
+              ],
+              "#fde725"
+            ],
+            "#3a3a3a"
+          ],
+          "legend": [
+            {
+              "colour": "#fde725",
+              "label": "0 \u2013 0.00262"
+            },
+            {
+              "colour": "#3a3a3a",
+              "label": "no value",
+              "nodata": true
+            }
+          ]
+        },
+        {
+          "id": "building_surface_fraction",
+          "column": "building_surface_fraction",
+          "label": "Building surface fraction",
+          "group": "Urban canopy parameters",
+          "unit": "fraction",
+          "description": "Building footprint area within the unit, over unit area. Footprints are split at unit boundaries, so a building straddling two units contributes to both in proportion. Zero \u2014 not null \u2014 for a unit holding no buildings.",
+          "kind": "continuous",
+          "method": "quantile",
+          "paint": [
+            "case",
+            [
+              "has",
+              "building_surface_fraction"
+            ],
+            [
+              "step",
+              [
+                "to-number",
+                [
+                  "get",
+                  "building_surface_fraction"
+                ]
+              ],
+              "#440154",
+              0.2601989488928285,
+              "#472d7b",
+              0.3541272291984299,
+              "#2c728e",
+              0.43602305526263546,
+              "#21918c",
+              0.4984140679862165,
+              "#28ae80",
+              0.563366152071138,
+              "#addc30",
+              0.6193844235717044,
+              "#fde725"
+            ],
+            "#3a3a3a"
+          ],
+          "legend": [
+            {
+              "colour": "#440154",
+              "label": "0 \u2013 0.26"
+            },
+            {
+              "colour": "#472d7b",
+              "label": "0.26 \u2013 0.354"
+            },
+            {
+              "colour": "#2c728e",
+              "label": "0.354 \u2013 0.436"
+            },
+            {
+              "colour": "#21918c",
+              "label": "0.436 \u2013 0.498"
+            },
+            {
+              "colour": "#28ae80",
+              "label": "0.498 \u2013 0.563"
+            },
+            {
+              "colour": "#addc30",
+              "label": "0.563 \u2013 0.619"
+            },
+            {
+              "colour": "#fde725",
+              "label": "0.619 \u2013 0.754"
+            },
+            {
+              "colour": "#3a3a3a",
+              "label": "no value",
+              "nodata": true
+            }
+          ]
+        },
+        {
+          "id": "impervious_surface_fraction",
+          "column": "impervious_surface_fraction",
+          "label": "Impervious surface fraction",
+          "group": "Urban canopy parameters",
+          "unit": "fraction",
+          "description": "Impervious land-cover fraction with the building share removed, clipped at zero. A raster's built-up class contains the roofs, and Stewart & Oke's building, impervious and pervious fractions partition the surface between them.",
+          "kind": "continuous",
+          "method": "quantile",
+          "paint": [
+            "case",
+            [
+              "has",
+              "impervious_surface_fraction"
+            ],
+            [
+              "step",
+              [
+                "to-number",
+                [
+                  "get",
+                  "impervious_surface_fraction"
+                ]
+              ],
+              "#440154",
+              0.3707295918319829,
+              "#472d7b",
+              0.4246204743138459,
+              "#2c728e",
+              0.46522646095477554,
+              "#21918c",
+              0.5207229500633358,
+              "#28ae80",
+              0.5614637230183936,
+              "#addc30",
+              0.6454586180524117,
+              "#fde725"
+            ],
+            "#3a3a3a"
+          ],
+          "legend": [
+            {
+              "colour": "#440154",
+              "label": "0.152 \u2013 0.371"
+            },
+            {
+              "colour": "#472d7b",
+              "label": "0.371 \u2013 0.425"
+            },
+            {
+              "colour": "#2c728e",
+              "label": "0.425 \u2013 0.465"
+            },
+            {
+              "colour": "#21918c",
+              "label": "0.465 \u2013 0.521"
+            },
+            {
+              "colour": "#28ae80",
+              "label": "0.521 \u2013 0.561"
+            },
+            {
+              "colour": "#addc30",
+              "label": "0.561 \u2013 0.645"
+            },
+            {
+              "colour": "#fde725",
+              "label": "0.645 \u2013 0.927"
+            },
+            {
+              "colour": "#3a3a3a",
+              "label": "no value",
+              "nodata": true
+            }
+          ]
+        },
+        {
+          "id": "pervious_surface_fraction",
+          "column": "pervious_surface_fraction",
+          "label": "Pervious surface fraction",
+          "group": "Urban canopy parameters",
+          "unit": "fraction",
+          "description": "Pervious land-cover fraction with tree cover and water folded back in. Stewart & Oke put both LCZ A (dense trees) and LCZ G (water) at 90%+ pervious, so neither class is reachable unless both count here.",
+          "kind": "continuous",
+          "method": "quantile",
+          "paint": [
+            "case",
+            [
+              "has",
+              "pervious_surface_fraction"
+            ],
+            [
+              "step",
+              [
+                "to-number",
+                [
+                  "get",
+                  "pervious_surface_fraction"
+                ]
+              ],
+              "#440154",
+              0.0017034643914361396,
+              "#3b528b",
+              0.009126844796673906,
+              "#21918c",
+              0.03609498133947727,
+              "#5ec962",
+              0.12617730179661116,
+              "#fde725"
+            ],
+            "#3a3a3a"
+          ],
+          "legend": [
+            {
+              "colour": "#440154",
+              "label": "0 \u2013 0.0017"
+            },
+            {
+              "colour": "#3b528b",
+              "label": "0.0017 \u2013 0.00913"
+            },
+            {
+              "colour": "#21918c",
+              "label": "0.00913 \u2013 0.0361"
+            },
+            {
+              "colour": "#5ec962",
+              "label": "0.0361 \u2013 0.126"
+            },
+            {
+              "colour": "#fde725",
+              "label": "0.126 \u2013 0.727"
+            },
+            {
+              "colour": "#3a3a3a",
+              "label": "no value",
+              "nodata": true
+            }
+          ]
+        },
+        {
+          "id": "tree_fraction",
+          "column": "tree_fraction",
+          "label": "Tree cover fraction",
+          "group": "Urban canopy parameters",
+          "unit": "fraction",
+          "description": "Tree-covered fraction of the unit, from the land-cover table. Also counted inside `pervious_surface_fraction`; kept separately because it separates LCZ A and B from the other pervious classes.",
+          "kind": "continuous",
+          "method": "quantile",
+          "paint": [
+            "case",
+            [
+              "has",
+              "tree_fraction"
+            ],
+            [
+              "step",
+              [
+                "to-number",
+                [
+                  "get",
+                  "tree_fraction"
+                ]
+              ],
+              "#440154",
+              0.0026848333217657206,
+              "#2c728e",
+              0.012976260620406252,
+              "#28ae80",
+              0.06067979306339743,
+              "#fde725"
+            ],
+            "#3a3a3a"
+          ],
+          "legend": [
+            {
+              "colour": "#440154",
+              "label": "0 \u2013 0.00268"
+            },
+            {
+              "colour": "#2c728e",
+              "label": "0.00268 \u2013 0.013"
+            },
+            {
+              "colour": "#28ae80",
+              "label": "0.013 \u2013 0.0607"
+            },
+            {
+              "colour": "#fde725",
+              "label": "0.0607 \u2013 0.633"
+            },
+            {
+              "colour": "#3a3a3a",
+              "label": "no value",
+              "nodata": true
+            }
+          ]
+        },
+        {
+          "id": "water_fraction",
+          "column": "water_fraction",
+          "label": "Water fraction",
+          "group": "Urban canopy parameters",
+          "unit": "fraction",
+          "description": "Water-covered fraction of the unit, from the land-cover table. Also counted inside `pervious_surface_fraction`; kept separately because it is the only route to LCZ G.",
+          "kind": "continuous",
+          "method": "quantile",
+          "paint": [
+            "case",
+            [
+              "has",
+              "water_fraction"
+            ],
+            [
+              "step",
+              [
+                "to-number",
+                [
+                  "get",
+                  "water_fraction"
+                ]
+              ],
+              "#fde725"
+            ],
+            "#3a3a3a"
+          ],
+          "legend": [
+            {
+              "colour": "#fde725",
+              "label": "0 \u2013 0.00758"
+            },
+            {
+              "colour": "#3a3a3a",
+              "label": "no value",
+              "nodata": true
+            }
+          ]
+        },
+        {
+          "id": "height_of_roughness_elements_m",
+          "column": "height_of_roughness_elements_m",
+          "label": "Height of roughness elements",
+          "group": "Urban canopy parameters",
+          "unit": "m",
+          "description": "Stewart & Oke's Hr: the unweighted GEOMETRIC mean of building height, exp(mean(log h)), over every building with a resolved height intersecting the unit. Heights are floored at a small positive value before the log. Buildings the height cascade left unresolved are excluded. Null for a unit holding no building with a height.",
+          "kind": "continuous",
+          "method": "quantile",
+          "paint": [
+            "case",
+            [
+              "has",
+              "height_of_roughness_elements_m"
+            ],
+            [
+              "step",
+              [
+                "to-number",
+                [
+                  "get",
+                  "height_of_roughness_elements_m"
+                ]
+              ],
+              "#440154",
+              4.212654145727292,
+              "#472d7b",
+              4.954691501624225,
+              "#2c728e",
+              5.53880984328676,
+              "#21918c",
+              6.214419701184254,
+              "#28ae80",
+              7.377147867679414,
+              "#addc30",
+              10.509275405418467,
+              "#fde725"
+            ],
+            "#3a3a3a"
+          ],
+          "legend": [
+            {
+              "colour": "#440154",
+              "label": "3.38 \u2013 4.21"
+            },
+            {
+              "colour": "#472d7b",
+              "label": "4.21 \u2013 4.95"
+            },
+            {
+              "colour": "#2c728e",
+              "label": "4.95 \u2013 5.54"
+            },
+            {
+              "colour": "#21918c",
+              "label": "5.54 \u2013 6.21"
+            },
+            {
+              "colour": "#28ae80",
+              "label": "6.21 \u2013 7.38"
+            },
+            {
+              "colour": "#addc30",
+              "label": "7.38 \u2013 10.5"
+            },
+            {
+              "colour": "#fde725",
+              "label": "10.5 \u2013 55.8"
+            },
+            {
+              "colour": "#3a3a3a",
+              "label": "no value",
+              "nodata": true
+            }
+          ]
+        },
+        {
+          "id": "aspect_ratio",
+          "column": "aspect_ratio",
+          "label": "Aspect ratio (H/W)",
+          "group": "Urban canopy parameters",
+          "unit": "dimensionless",
+          "description": "Street canyon height-to-width ratio: the street-length-weighted mean of `momepy.street_profile()`'s `hw_ratio` over the segments crossing the unit. Null where no street segment reaching a building crosses it.",
+          "kind": "continuous",
+          "method": "quantile",
+          "paint": [
+            "case",
+            [
+              "has",
+              "aspect_ratio"
+            ],
+            [
+              "step",
+              [
+                "to-number",
+                [
+                  "get",
+                  "aspect_ratio"
+                ]
+              ],
+              "#440154",
+              0.23889674704044064,
+              "#472d7b",
+              0.28362232945097093,
+              "#2c728e",
+              0.3110327833653449,
+              "#21918c",
+              0.3595192770032939,
+              "#28ae80",
+              0.4214480814226151,
+              "#addc30",
+              0.6282503065537848,
+              "#fde725"
+            ],
+            "#3a3a3a"
+          ],
+          "legend": [
+            {
+              "colour": "#440154",
+              "label": "0.145 \u2013 0.239"
+            },
+            {
+              "colour": "#472d7b",
+              "label": "0.239 \u2013 0.284"
+            },
+            {
+              "colour": "#2c728e",
+              "label": "0.284 \u2013 0.311"
+            },
+            {
+              "colour": "#21918c",
+              "label": "0.311 \u2013 0.36"
+            },
+            {
+              "colour": "#28ae80",
+              "label": "0.36 \u2013 0.421"
+            },
+            {
+              "colour": "#addc30",
+              "label": "0.421 \u2013 0.628"
+            },
+            {
+              "colour": "#fde725",
+              "label": "0.628 \u2013 2.54"
+            },
+            {
+              "colour": "#3a3a3a",
+              "label": "no value",
+              "nodata": true
+            }
+          ]
+        },
+        {
+          "id": "street_openness",
+          "column": "street_openness",
+          "label": "Street openness",
+          "group": "Urban canopy parameters",
+          "unit": "fraction",
+          "description": "Street-length-weighted mean of `momepy.street_profile()`'s `openness` \u2014 the share of perpendicular ticks along a segment that reach no building within the tick length. 1.0 is a street with no built frontage.",
+          "kind": "continuous",
+          "method": "quantile",
+          "paint": [
+            "case",
+            [
+              "has",
+              "street_openness"
+            ],
+            [
+              "step",
+              [
+                "to-number",
+                [
+                  "get",
+                  "street_openness"
+                ]
+              ],
+              "#440154",
+              0.31156873096585735,
+              "#472d7b",
+              0.3460864811982871,
+              "#2c728e",
+              0.4011420712146702,
+              "#21918c",
+              0.444486406628751,
+              "#28ae80",
+              0.5235700230793673,
+              "#addc30",
+              0.6066592076259327,
+              "#fde725"
+            ],
+            "#3a3a3a"
+          ],
+          "legend": [
+            {
+              "colour": "#440154",
+              "label": "0.195 \u2013 0.312"
+            },
+            {
+              "colour": "#472d7b",
+              "label": "0.312 \u2013 0.346"
+            },
+            {
+              "colour": "#2c728e",
+              "label": "0.346 \u2013 0.401"
+            },
+            {
+              "colour": "#21918c",
+              "label": "0.401 \u2013 0.444"
+            },
+            {
+              "colour": "#28ae80",
+              "label": "0.444 \u2013 0.524"
+            },
+            {
+              "colour": "#addc30",
+              "label": "0.524 \u2013 0.607"
+            },
+            {
+              "colour": "#fde725",
+              "label": "0.607 \u2013 0.918"
+            },
+            {
+              "colour": "#3a3a3a",
+              "label": "no value",
+              "nodata": true
+            }
+          ]
+        },
+        {
+          "id": "mean_building_area_m2",
+          "column": "mean_building_area_m2",
+          "label": "Mean building area",
+          "group": "Urban canopy parameters",
+          "unit": "m2",
+          "description": "Mean footprint area of the buildings counted by `building_count`, measured over the whole footprint rather than the part inside the unit. Null for a unit holding none.",
+          "kind": "continuous",
+          "method": "quantile",
+          "paint": [
+            "case",
+            [
+              "has",
+              "mean_building_area_m2"
+            ],
+            [
+              "step",
+              [
+                "to-number",
+                [
+                  "get",
+                  "mean_building_area_m2"
+                ]
+              ],
+              "#440154",
+              48.85182245984644,
+              "#472d7b",
+              73.74719126650533,
+              "#2c728e",
+              96.83336972933397,
+              "#21918c",
+              150.6961656638575,
+              "#28ae80",
+              215.07500029471305,
+              "#addc30",
+              353.2147603668177,
+              "#fde725"
+            ],
+            "#3a3a3a"
+          ],
+          "legend": [
+            {
+              "colour": "#440154",
+              "label": "31.1 \u2013 48.9"
+            },
+            {
+              "colour": "#472d7b",
+              "label": "48.9 \u2013 73.7"
+            },
+            {
+              "colour": "#2c728e",
+              "label": "73.7 \u2013 96.8"
+            },
+            {
+              "colour": "#21918c",
+              "label": "96.8 \u2013 151"
+            },
+            {
+              "colour": "#28ae80",
+              "label": "151 \u2013 215"
+            },
+            {
+              "colour": "#addc30",
+              "label": "215 \u2013 353"
+            },
+            {
+              "colour": "#fde725",
+              "label": "353 \u2013 1.08e+04"
+            },
+            {
+              "colour": "#3a3a3a",
+              "label": "no value",
+              "nodata": true
+            }
+          ]
+        },
+        {
+          "id": "industrial_fraction_of_building_area",
+          "column": "industrial_fraction_of_building_area",
+          "label": "Industrial share of building area",
+          "group": "Urban canopy parameters",
+          "unit": "fraction",
+          "description": "Share of the unit's BUILDING area that is industrial \u2014 footprint falling inside the dissolved industrial evidence, over all footprint. Bernard et al. (2024)'s FIND/B, so their published 0.33 threshold transfers to this column and not to the unit-area one. Null where the unit holds no buildings: a share of nothing is undefined, not zero. Functional, not morphological \u2014 it is applied after the prototype distance.",
+          "kind": "continuous",
+          "method": "quantile",
+          "paint": [
+            "case",
+            [
+              "has",
+              "industrial_fraction_of_building_area"
+            ],
+            [
+              "step",
+              [
+                "to-number",
+                [
+                  "get",
+                  "industrial_fraction_of_building_area"
+                ]
+              ],
+              "#fde725"
+            ],
+            "#3a3a3a"
+          ],
+          "legend": [
+            {
+              "colour": "#fde725",
+              "label": "0 \u2013 0.275"
+            },
+            {
+              "colour": "#3a3a3a",
+              "label": "no value",
+              "nodata": true
+            }
+          ]
+        },
+        {
+          "id": "uniqueness",
+          "column": "uniqueness",
+          "label": "Uniqueness",
+          "group": "Confidence",
+          "unit": "",
+          "description": "",
+          "kind": "continuous",
+          "method": "quantile",
+          "paint": [
+            "case",
+            [
+              "has",
+              "uniqueness"
+            ],
+            [
+              "step",
+              [
+                "to-number",
+                [
+                  "get",
+                  "uniqueness"
+                ]
+              ],
+              "#440154",
+              0.1108802108205893,
+              "#3b528b",
+              0.21691429986488397,
+              "#21918c",
+              0.365429804150493,
+              "#5ec962",
+              0.6974318938793576,
+              "#fde725"
+            ],
+            "#3a3a3a"
+          ],
+          "legend": [
+            {
+              "colour": "#440154",
+              "label": "0.000318 \u2013 0.111"
+            },
+            {
+              "colour": "#3b528b",
+              "label": "0.111 \u2013 0.217"
+            },
+            {
+              "colour": "#21918c",
+              "label": "0.217 \u2013 0.365"
+            },
+            {
+              "colour": "#5ec962",
+              "label": "0.365 \u2013 0.697"
+            },
+            {
+              "colour": "#fde725",
+              "label": "0.697 \u2013 1"
+            },
+            {
+              "colour": "#3a3a3a",
+              "label": "no value",
+              "nodata": true
+            }
+          ]
+        }
+      ],
+      "fill_layer": "units-fill",
+      "units_source": "units",
+      "units_source_layer": "units",
+      "detail_source": "units_detail",
+      "distance_columns": [
+        "lcz_d1",
+        "lcz_d2",
+        "lcz_d3",
+        "lcz_d4",
+        "lcz_d5",
+        "lcz_d6",
+        "lcz_d7",
+        "lcz_d8",
+        "lcz_d9",
+        "lcz_d10",
+        "lcz_d11",
+        "lcz_d12",
+        "lcz_d13",
+        "lcz_d14",
+        "lcz_d15",
+        "lcz_d16",
+        "lcz_d17"
+      ],
+      "distance_labels": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "10",
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G"
+      ],
+      "height_prefixes": [
+        "height_completeness",
+        "height_frac_"
+      ],
+      "buildings_layer": null,
+      "building_colour_by": {},
+      "bounds": [
+        -74.1107295206116,
+        4.5832770872691055,
+        -74.0655384745929,
+        4.6283224925169195
+      ],
+      "centre": [
+        -74.08813399760226,
+        4.6057997898930125
+      ],
+      "nodata_code": 0,
+      "nodata_colour": "#3a3a3a",
+      "basemap": {
+        "run_layers": [
+          "basemap-water",
+          "basemap-streets"
+        ],
+        "rasters": []
+      },
+      "labels": {
+        "building_surface_fraction": "Building surface fraction",
+        "impervious_surface_fraction": "Impervious surface fraction",
+        "pervious_surface_fraction": "Pervious surface fraction",
+        "tree_fraction": "Tree cover fraction",
+        "water_fraction": "Water fraction",
+        "height_of_roughness_elements_m": "Height of roughness elements",
+        "h_geometric_area_weighted": "Height, geometric mean, area-weighted",
+        "h_mean_area_weighted": "Height, arithmetic mean, area-weighted",
+        "h_std": "Height, standard deviation",
+        "aspect_ratio": "Aspect ratio (H/W)",
+        "street_openness": "Street openness",
+        "street_width_m": "Street width",
+        "building_count": "Building count",
+        "mean_building_area_m2": "Mean building area",
+        "industrial_fraction_of_building_area": "Industrial share of building area",
+        "industrial_fraction_of_unit_area": "Industrial share of unit area",
+        "industrial_fraction": "Industrial share (deprecated alias)",
+        "industrial_fraction_buildings": "Industrial share, from building class",
+        "industrial_fraction_land_use": "Industrial share, from land use",
+        "industrial_evidence": "Industrial evidence source",
+        "sem_lightweight_buildings_of_building_area": "Lightweight share of building area",
+        "sem_large_lowrise_buildings_of_building_area": "Large lowrise share of building area",
+        "sem_heavy_industry_buildings_of_building_area": "Heavy industry share of building area",
+        "sem_residential_buildings_of_building_area": "Residential share of building area",
+        "sem_commercial_buildings_of_building_area": "Commercial share of building area",
+        "sem_lightweight_parcels_of_unit_area": "Lightweight share of unit area",
+        "sem_large_lowrise_parcels_of_unit_area": "Large lowrise share of unit area",
+        "sem_heavy_industry_parcels_of_unit_area": "Heavy industry share of unit area",
+        "sem_residential_parcels_of_unit_area": "Residential share of unit area",
+        "sem_commercial_parcels_of_unit_area": "Commercial share of unit area",
+        "building_tag_coverage": "Building attribute coverage",
+        "land_use_coverage": "Land-use parcel coverage",
+        "lcz_primary": "LCZ class",
+        "lcz_secondary": "LCZ class, second nearest",
+        "uniqueness": "Uniqueness",
+        "n_params_used": "Parameters used",
+        "label_route": "How the label was assigned",
+        "height_completeness": "Height completeness (tier 1)"
+      },
+      "height_source_labels": {
+        "overture_height": "Overture height, measured",
+        "overture_num_floors": "Overture storeys \u00d7 storey height",
+        "gob25d": "Open Buildings 2.5D, 4 m",
+        "wsf3d": "WSF-3D, 90 m raster",
+        "ghsl": "GHS-BUILT-H, 100 m raster",
+        "unresolved": "No height resolved"
+      },
+      "groups": [
+        "Classification",
+        "Height provenance",
+        "Urban canopy parameters",
+        "Confidence"
+      ]
+    }
+  }
+}
